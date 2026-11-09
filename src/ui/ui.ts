@@ -14,6 +14,7 @@ export interface AppApi { sim: Sim; director: Director; setSpeed(s: number): voi
   god(kind: string): void; sound: { setMuted(m: boolean): void; muted: boolean; play(k: string, v?: number): void }; project(x: number, y: number, z: number): { x: number; y: number; on: boolean }; camDist(): number; }
 
 function sim0(v: Villager, s: any) { const f = s.villagers.filter((u: Villager) => u.crush === v.id && u.partner !== v.id && u !== v); return f.length ? `<span class="it love" title="Only you can see this">💌 ${f.map((u: Villager) => u.first).join(' & ')} ${f.length > 1 ? 'are' : 'is'} sweet on them</span>` : ''; }
+const cleanLie = (t: string) => t.replace(/\s*\(It isn't true\.\)/gi, '').replace(/\.\s*,/g, ',').replace(/\s+/g, ' ').trim();
 export class UI {
   root: HTMLElement; feed!: HTMLElement; card!: HTMLElement; clock!: HTMLElement; overlay!: HTMLElement; toasts!: HTMLElement; caption!: HTMLElement; lb!: HTMLElement; modal!: HTMLElement;
   tags = new Map<string, HTMLElement>(); bubbles = new Map<string, { el: HTMLElement; until: number }>(); icons: { el: HTMLElement; id: string; t: number }[] = []; convo: { who: string; text: string; emoji: string; at: number }[] = [];
@@ -68,7 +69,7 @@ export class UI {
     const cat = this.cat(e), lie = this.isLie(e);
     const day = dayOf(e.t); if (this.feedDay && day !== this.feedDay) { const sep = h('div', 'daysep', `— Day ${day} —`); this.feed.prepend(sep); } this.feedDay = day;
     const el = h('div', `ev imp${Math.min(9, e.imp)} k-${e.kind} c-${cat}`); el.dataset.id = String(e.id); el.dataset.cat = cat;
-    const txt = lie ? e.text.replace(/\s*\(It isn't true\.\)\s*/i, ' ').trim() : e.text;
+    const txt = lie ? cleanLie(e.text) : e.text;
     el.innerHTML = `<span class="t">${fmtTime(e.t)}</span><span class="ic">${e.icon}</span><span class="tx">${this.linkify(txt)}${lie ? ' <span class="badge false" title="A fabricated rumour — not actually true">false rumour</span>' : ''}</span>`;
     el.querySelectorAll<HTMLElement>('.nm').forEach(a => a.onclick = (ev) => { ev.stopPropagation(); this.app.select(a.dataset.id!); });
     this.arcChip(el, e.id);
@@ -78,7 +79,7 @@ export class UI {
     const visibleInFeed = this.feedFilter === 'all' || this.feedFilter === cat;
     if (e.imp >= 7 && !visibleInFeed) { this.captionText(`${e.icon} ${this.linkify(txt)}`); }
   }
-  updateFeed(e: SimEvent) { const el = this.feed.querySelector<HTMLElement>(`[data-id="${e.id}"] .tx`); if (el) { const lie = this.isLie(e); const txt = lie ? e.text.replace(/\s*\(It isn't true\.\)\s*/i, ' ').trim() : e.text; el.innerHTML = `${this.linkify(txt)}${lie ? ' <span class="badge false" title="A fabricated rumour — not actually true">false rumour</span>' : ''}`; el.querySelectorAll<HTMLElement>('.nm').forEach(a => a.onclick = (ev) => { ev.stopPropagation(); this.app.select(a.dataset.id!); }); } }
+  updateFeed(e: SimEvent) { const el = this.feed.querySelector<HTMLElement>(`[data-id="${e.id}"] .tx`); if (el) { const lie = this.isLie(e); const txt = lie ? cleanLie(e.text) : e.text; el.innerHTML = `${this.linkify(txt)}${lie ? ' <span class="badge false" title="A fabricated rumour — not actually true">false rumour</span>' : ''}`; el.querySelectorAll<HTMLElement>('.nm').forEach(a => a.onclick = (ev) => { ev.stopPropagation(); this.app.select(a.dataset.id!); }); } }
   refilter() { this.feed.querySelectorAll<HTMLElement>('.ev').forEach(el => el.style.display = this.feedFilter === 'all' || el.dataset.cat === this.feedFilter ? '' : 'none'); }
   // small arc chip under a feed row once its story has shape (>= 2 beats): "📖 The Missing Geode · beat 3"
   arcChip(el: HTMLElement, eventId: number) {
@@ -131,7 +132,7 @@ export class UI {
     for (let i = 0; i < shown.length; i++) { const a = shown[i]; for (let j = 0; j < i; j++) { const b = shown[j]; if (Math.abs(a.x - b.x) < (a.w + b.w) / 2 + 4 && a.y > b.y - b.h - 6 && a.y < b.y + a.h) { a.y = b.y - b.h - 8; } }
       if (a.below) { if (a.y < HT) a.y = HT; } else if (a.y - a.h < HT) a.y = HT + a.h;
       a.el.style.transform = `translate(${a.x}px, ${a.y}px) translate(-50%, ${a.off})`; }
-    for (const ic of this.icons) { ic.t += dt; const v = s.byId.get(ic.id)!; const pos = v.avatar.root.position; const p = this.app.project(pos.x, v.avatar.height + .9 + ic.t * .9, pos.z); const ix = Math.max(16, Math.min(W - 16, p.x)), iy = Math.max(HT, p.y); ic.el.style.transform = `translate(${ix}px, ${iy}px) translate(-50%, -50%) scale(${Math.min(1, ic.t * 5)})`; ic.el.style.opacity = String(Math.max(0, 1 - ic.t / 2.2)); ic.el.style.display = p.on && !v.inside ? '' : 'none'; }
+    for (const ic of this.icons) { ic.t += dt; const v = s.byId.get(ic.id)!; const pos = v.avatar.root.position; const bub = this.bubbles.get(ic.id), talking = !!bub && bub.until > performance.now(); const p = this.app.project(pos.x, v.avatar.height + (talking ? 1.9 : .9) + ic.t * .9, pos.z); const ix = Math.max(16, Math.min(W - 16, p.x)), iy = Math.max(HT, p.y); ic.el.style.transform = `translate(${ix}px, ${iy}px) translate(-50%, -50%) scale(${Math.min(1, ic.t * 5)})`; ic.el.style.opacity = String(Math.max(0, 1 - ic.t / 2.2)); ic.el.style.display = p.on && !v.inside ? '' : 'none'; }
     this.icons = this.icons.filter(ic => { if (ic.t > 2.2) { ic.el.remove(); return false; } return true; });
     this.cardT -= dt; if (this.cardT <= 0) { this.cardT = .35; this.clock.innerHTML = `<b>Day ${s.day}</b> · ${fmtTime(s.clock)} ${s.rain > .4 ? '🌧️' : s.hour >= 20 || s.hour < 6 ? '🌙' : s.hour < 8 ? '🌅' : '☀️'}${s.festivalUntil > s.clock ? ' 🎪' : ''}${s.visitorUntil > s.clock ? ' 🧳' : ''}`;
       this.measureChrome();
