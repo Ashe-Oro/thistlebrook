@@ -144,6 +144,12 @@ export class Sim {
     // reflection (Smallville): when enough has happened, or at bedtime
     if (v.mem.impSinceReflect > 38 || (asleep && this.clock - v.mem.lastReflect > 600 && v.mem.impSinceReflect > 10)) this.brain.reflect(v, this);
     if (v.replan && !v.act?.locked) { this.brain.planDay(v, this); v.replan = false; }
+    // a new plan block (lunch, an event, evening, bedtime) pre-empts routine busywork so the village moves together
+    const blk = (this.brain as any).block?.(v, this), key = blk ? blk.from + blk.act : '';
+    if (key !== (v as any)._blk) { const first = (v as any)._blk === undefined; (v as any)._blk = key;
+      if (!first && blk && ['lunch', 'event', 'evening', 'sleep'].includes(blk.act) && v.act && !v.act.locked) { const a = v.act;
+        if (['work', 'idle', 'go'].includes(a.type)) { if (a.target?.claimed === v.id) a.target.claimed = null; v.avatar.onHit = null; v.act = null; v.queue = []; }
+        else if ((a.type === 'enter' && v.doing !== 'sleeping') || a.type === 'sit') { a.interrupt = true; v.queue = []; } } }
     if (this.clock < v.busyUntil) { v.anim = v.anim === 'walk' || v.anim === 'run' ? 'talk' : v.anim; return; }
     if (!v.act) { v.act = v.queue.shift() ?? null; if (!v.act) { this.brain.choose(v, this); v.act = v.queue.shift() ?? null; } if (v.act) { v.act.t = 0; v.doing = v.act.label; } }
     if (v.act) { const done = this.run(v, v.act, dt, gdt); if (done) { v.act = null; } }
@@ -183,7 +189,7 @@ export class Sim {
       case 'claim': {
         const g = this.gifts.find(x => x === a.gift); if (!g || g.claimedBy) { if (g?.claimedBy && g.claimedBy !== v.id) { v.emotions.sadness += .2; v.emotions.anger += .2; this.say(v, 'Aww, too slow!', '😤', 2); } return true; }
         a.run = true; if (!walk(g.x, g.z, .9)) return false;
-        g.claimedBy = v.id; g.obj.visible = false; v.emotions.joy = 1; v.emotions.surprise = .8; this.world.fx.coinBurst(g.x, .5, g.z, 10); this.world.fx.sparkle(g.x, .5, g.z, [1, .8, .4], 20);
+        g.claimedBy = v.id; g.obj.visible = false; v.emotions.joy = 1; v.emotions.surprise = .8; this.world.fx.sparkle(g.x, .5, g.z, [1, .8, .4], 20);
         const [ic, nm] = this.rng.pick([['🎶', 'a tinkling music box'], ['🔮', 'a glowing marble'], ['🪶', 'a golden feather'], ['⭐', 'a fallen star in a jar'], ['🧭', 'a compass that points home']]); const kid = `gift${this.eid}`;
         this.keepsakes.set(kid, { id: kid, name: nm, icon: ic, owner: v.id, holder: v.id });
         this.say(v, 'A gift from the heavens!', '🎁', 3); v.anim = 'cheer'; this.log(`${v.first} got to the mysterious gift first: ${nm}!`, 6, [v.id], 'god', ic, g.x, g.z);

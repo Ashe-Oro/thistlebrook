@@ -80,8 +80,12 @@ export class UtilityBrain implements Brain {
       case 'breakfast': { if (n.food < 85) { q.push(A('enter', 'having breakfast', { place: v.def.home, dur: 20, onExit: (x: Villager) => { x.needs.food = Math.min(100, x.needs.food + 50); } })); return; } if (this.social(v, sim, .1)) return; this.stroll(v, sim); return; }
       case 'lunch': {
         if (!(v as any)._lunch || (v as any)._lunch < sim.day) { (v as any)._lunch = sim.day; n.food = Math.min(100, n.food + 45); sim.icon(v, v.job === 'baker' ? '🍞' : '🥪'); }
-        if (R.chance(.55)) { const seat = sim.takeSeat(v, 'bench'); if (seat) { q.push(A('sit', 'lunch on a bench', { seat, dur: 25, anim2: 'talk' })); return; } }
-        if (this.social(v, sim, .25)) return; q.push(A('go', 'strolling', { ...this.near(sim, 'plaza', 4) })); q.push(A('idle', 'people-watching', { dur: 10 })); return;
+        if (R.chance(.45)) { const seat = sim.takeSeat(v, 'bench'); if (seat) { q.push(A('sit', 'lunch on a bench', { seat, dur: 25, anim2: 'talk' })); return; } }
+        if (R.chance(.5) && this.social(v, sim, .3)) return;
+        // picnic in the plaza: gather near the well where others are
+        const pals = sim.villagers.filter(u => u !== v && !u.inside && Math.hypot(u.x + 9, u.z - 5) < 9); const anchor = pals.length ? R.pick(pals) : null;
+        const [x, z] = sim.world.nav.nearestFree(anchor ? anchor.x + R.range(-1.6, 1.6) : -9 + R.range(-4, 4), anchor ? anchor.z + R.range(-1.6, 1.6) : 5 + R.range(-3, 4));
+        q.push(A('go', 'heading to lunch in the plaza', { x, z })); q.push(A('idle', 'lunch in the plaza', { dur: 18, anim: R.chance(.5) ? 'drink' : 'talk', face: anchor ? Math.atan2(anchor.x - x, anchor.z - z) : undefined })); return;
       }
       case 'work': { if (R.chance(.1 + v.traits.sociability * .1) && this.social(v, sim, n.social < 35 ? 0 : -.3)) return; this.work(v, sim); return; }
       case 'stroll': { if (this.letter(v, sim)) return; if (this.social(v, sim, .15)) return; this.stroll(v, sim); return; }

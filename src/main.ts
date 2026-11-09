@@ -43,6 +43,10 @@ async function boot() {
   await world.build((n, t) => setProg(n / t * .8, `Building the village… ${n}/${t}`));
   const anvil = makeAnvil(); const sm = world.places.get('smithy')!; anvil.position.set(sm.x + 2.0, 0, sm.z + 1.6); scene.add(anvil); world.nav.circle(sm.x + 2.0, sm.z + 1.6, .35);
   setProg(.85, 'Dressing the villagers…');
+  // Old Nell, the travelling storyteller (a visitor NPC, not a villager: she only appears with the Traveller god power)
+  nell = new Avatar({ id: 'nell', name: 'Old Nell', job: 'postmistress', goal: 'liked', home: 'home-spare', age: '70s', traits: VILLAGERS[0].traits, bio: '', palette: 'autumn', skin: '#e3b590', hair: '#d8d8d8', height: 1.58,
+    outfit: { fixed: { tops: 'tunic', bottoms: 'long-skirt', outerwear: 'satchel', headgear: 'feather-cap', hair: 'bun' }, pools: { shoes: ['boot'], accessories: ['glasses'] } }, catchphrases: [] } as any, 4242);
+  nell.root.visible = false; scene.add(nell.root);
   for (const def of VILLAGERS) { const av = new Avatar(def, def.id.length * 977 + def.name.charCodeAt(0)); scene.add(av.root); sim.addVillager(def, av); await new Promise(r => setTimeout(r, 0)); }
   sim.initRelations();
   if (params.has('seed')) sim.rng = new (sim.rng.constructor as any)(+params.get('seed')!);
@@ -68,7 +72,7 @@ function portrait(id: string) {
 const tmpV = new THREE.Vector3();
 const api: AppApi = {
   sim, director, get speed() { return speed; }, setSpeed(s) { speed = s; }, get selected() { return selected; },
-  select(id) { selected = id; follow = id; if (id) { const v = sim.byId.get(id)!; sound.play('pop'); if (mode === 'director') mode = 'free'; if (v) controls.autoRotate = false; } },
+  select(id) { selected = id; follow = id; if (id) { const v = sim.byId.get(id)!; if (v && camera.position.distanceTo(controls.target) > 24) { const dir = camera.position.clone().sub(controls.target).normalize(); controls.target.set(v.x, 1, v.z); camera.position.copy(controls.target).addScaledVector(dir, 15); } sound.play('pop'); if (mode === 'director') mode = 'free'; if (v) controls.autoRotate = false; } },
   portrait, get mode() { return mode; }, setMode(m) { mode = m; if (m === 'director') { selected = null; follow = null; } controls.autoRotate = false; },
   god(kind) { if (kind === 'gift') { const v = selected ? sim.byId.get(selected) : null; const g = dropGift(sim, v ? v.x + 3 : undefined, v ? v.z + 2 : undefined); focusPoint(g.x, g.z); } if (kind === 'rain') summonRain(sim); if (kind === 'traveller' || kind === 'merchant') { spawnTraveller(sim); focusPoint(-19, 5); } if (kind === 'festival') { startFestival(sim); focusPoint(-9, 5); } },
   sound, project(x, y, z) { tmpV.set(x, y, z).project(camera); return { x: (tmpV.x * .5 + .5) * innerWidth, y: (-tmpV.y * .5 + .5) * innerHeight, on: tmpV.z < 1 && Math.abs(tmpV.x) < 1.1 && Math.abs(tmpV.y) < 1.1 }; },
@@ -108,6 +112,7 @@ function syncAvatar(v: Villager, dt: number) {
 }
 const forced = new Map<string, { expr: string; until: number }>();
 
+let nell: Avatar; let nellT = 0;
 let last = performance.now(), fpsAvg = 60, simMsAvg = 0;
 function start() {
   ui = new UI(api, document.body);
@@ -123,6 +128,7 @@ function frame(now: number) {
   const t0 = performance.now(); if (speed > 0) stepSim(dt * speed); simMsAvg = simMsAvg * .9 + (performance.now() - t0) * .1;
   const adt = speed === 0 ? dt * .25 : dt * Math.min(speed, 2.5);
   for (const v of sim.villagers) syncAvatar(v, speed === 0 ? 0 : adt);
+  if (nell) { const on = sim.visitorUntil > sim.clock; nell.targetAlpha = on ? 1 : 0; if (on || nell.alpha > .05) { nellT += adt; nell.root.position.set(-18.9, 0, 2.2); nell.targetHeading = Math.PI / 2 + Math.sin(nellT * .4) * .5; const k = Math.floor(nellT / 2.5) % 4; nell.anim = (['talk', 'wave', 'talk', 'cheer'] as any)[k]; nell.setExpression(k === 3 ? 'grin' : 'happy'); nell.update(speed === 0 ? 0 : adt, .8); } }
   animateGifts(sim, dt);
   world.update(adt, dt * speed * MIN_PER_SEC, sim.clock, sky.night);
   // camera

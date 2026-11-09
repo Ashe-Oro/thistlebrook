@@ -14,16 +14,17 @@ const ui = on => run(`document.querySelector('.ui').style.display='${on ? '' : '
 
 // Day 1 morning — overview + plaza
 await ffTo(9.5); await run('terrarium.setSpeed(1); terrarium.look(-6,-2,62,.55,.85)'); await wait(3500); await shot('01_overview_day');
-await ffTo(11); await run('terrarium.look(-9,4,20,.45,.5)'); await wait(5000); await shot('02_plaza_midday');
-// Work close-ups: whoever is mid-swing
+await ffTo(12.3); await run('terrarium.look(-9,4,20,.45,.5)'); await wait(5000); await shot('02_plaza_lunch');
+// Work close-ups: whoever is mid-swing (occupations are routines in v1, nothing is produced)
+await ffTo(9.7);
 for (const [anim, name] of [['chop', '03_work_chop'], ['mine', '04_work_mine'], ['hammer', '05_work_forge']]) {
-  for (let i = 0; i < 12; i++) { const id = await run(`const v = terrarium.sim.villagers.find(v => v.anim === '${anim}'); return v ? v.id : null`); if (id) { await ui(false); await run(`terrarium.closeUp('${id}', 4.2, 1.2)`); await wait(1200); await shot(name); await ui(true); break; } await run('terrarium.fastForward(20)'); await wait(200); }
+  for (let i = 0; i < 12; i++) { if (i === 4) await run(`const S=terrarium.sim, job={chop:'woodcutter',mine:'miner',hammer:'blacksmith'}['${anim}'], v=S.villagers.find(v=>v.job===job); if (v && !v.inside) { v.act=null; v.queue=[]; S.brain.work(v,S); }`); const id = await run(`const v = terrarium.sim.villagers.find(v => v.anim === '${anim}'); return v ? v.id : null`); if (id) { await ui(false); await run(`terrarium.closeUp('${id}', 4.2, .75)`); await wait(1200); await shot(name); await ui(true); break; } await run('terrarium.fastForward(20)'); await wait(200); }
 }
 // Expressions: line six villagers up in the plaza and force faces
 const EX = [['mara', 'happy'], ['tom', 'angry'], ['jen', 'smirk'], ['ollie', 'sad'], ['wren', 'love'], ['pip', 'surprised']];
 await ui(false);
 for (const [id, e] of EX) {
-  await run(`const S=terrarium.sim, v=S.byId.get(arg[0]); S.leaveSeat(v); v.inside=null; v.avatar.targetAlpha=1; v.queue=[]; v.act={type:'idle',dur:1e9,t:0,label:'posing',anim:'idle'}; v.x=-9; v.z=6.5; v.heading=0; v.avatar.heading=0; terrarium.forceExpr(arg[0], arg[1]); for (const u of S.villagers) if (u!==v && Math.hypot(u.x+9,u.z-6.5)<4) { u.x+=5; } terrarium.closeUp(arg[0], 1.9, 0.35);`, [id, e]);
+  await run(`const S=terrarium.sim, v=S.byId.get(arg[0]); S.leaveSeat(v); v.inside=null; v.avatar.targetAlpha=1; v.queue=[]; v.act={type:'idle',dur:1e9,t:0,label:'posing',anim:'idle'}; v.x=-6; v.z=-3.4; v.heading=0; v.avatar.heading=0; terrarium.forceExpr(arg[0], arg[1]); for (const u of S.villagers) if (u!==v && Math.hypot(u.x+6,u.z+3.4)<4) { u.x+=5; } terrarium.closeUp(arg[0], 1.9, 0.35);`, [id, e]);
   await wait(900); await shot(`x_${id}`, { clip: { x: 560, y: 120, width: 480, height: 560 } });
   await run(`const v=terrarium.sim.byId.get(arg); v.act=null; v.x=-12;`, id);
 }
@@ -45,7 +46,7 @@ await run('terrarium.look(-6,-2,62,.55,.85)'); await wait(1500); await shot('08_
 await ffTo(24 + 6.3); await run('terrarium.ui().view("paper")'); await wait(900); await shot('09_gazette'); await run('terrarium.ui().closeModal()');
 // Day 3: relationships have history now
 await ffTo(48 + 13); await run('terrarium.setSpeed(1)');
-await run('terrarium.select("jen")'); await wait(2500); await shot('10_card_relationships');
+const pick = await run('const S=terrarium.sim; const v=S.villagers.find(v=>v.partner)||S.villagers.find(v=>v.crush)||S.villagers[2]; return v.id'); await run(`terrarium.select('${pick}')`); await wait(2500); await shot('10_card_relationships');
 await p.click('.card .tabs [data-t="mem"]'); await wait(500); await shot('11_card_mind');
 await p.click('.card .tabs [data-t="plan"]'); await wait(500); await shot('12_card_plan');
 await run('terrarium.select(null)');
@@ -53,7 +54,7 @@ await p.click('[data-f="drama"]'); await wait(400); await shot('13_feed_drama', 
 for (const [k, n] of [['web', '14_relationship_web'], ['recap', '15_recap'], ['villagers', '16_villagers']]) { await run(`terrarium.ui().view('${k}')`); await wait(1200); await shot(n); await run('terrarium.ui().closeModal()'); }
 // God powers
 await run('terrarium.god("festival")'); await run('terrarium.setSpeed(4)'); await wait(3500); await run('terrarium.setSpeed(1); terrarium.look(-9,5,22,.5,.55)'); await wait(3000); await shot('17_festival');
-await ffTo(48 + 18.5); await run('terrarium.god("merchant")'); await run('terrarium.setSpeed(4)'); await wait(3000); await run('terrarium.setSpeed(1); const pl=terrarium.sim.place("cart"); terrarium.look(pl.cx, pl.cz, 16, .7, .55)'); await wait(2500); await shot('18_merchant');
+await ffTo(48 + 18.5); await run('terrarium.god("traveller")'); await run('terrarium.setSpeed(4)'); await wait(3500); await run('terrarium.setSpeed(1); terrarium.look(-20.5, 6.5, 13, .9, .5)'); await wait(2500); await shot('18_storyteller');
 await ffTo(72 + 10); await run('terrarium.god("rain")'); await wait(4500); await run('terrarium.look(-9,0,30,.6,.6)'); await wait(2500); await shot('19_rain');
 // Scuffle: two villagers who dislike each other, staged next to each other
 await ffTo(72 + 14); await run(`const S=terrarium.sim; let best=null; for (const a of S.villagers) for (const c of S.villagers) if (a!==c && !a.inside && !c.inside && (!best || (a.opinion[c.id]??0) < (best[0].opinion[best[1].id]??0))) best=[a,c]; const [a,c]=best; c.x=a.x+1.2; c.z=a.z; S.startFight(a,c,a.first+' finally had it out with '+c.first); terrarium.look(a.x,a.z,9,.6,.45); return [a.id,c.id]`);

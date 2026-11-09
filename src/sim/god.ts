@@ -25,19 +25,19 @@ export function summonRain(sim: Sim) { sim.startRain(150, true); }
 // A travelling storyteller rolls in. Folk gather to hear her tales... and she has heard a few things about *them*.
 export async function spawnTraveller(sim: Sim) {
   if (sim.visitorUntil > sim.clock) return; sim.visitorUntil = sim.clock + 300; await sim.world.setMerchant(true);
-  sim.world.places.set('cart', { id: 'cart', kind: 'market', name: 'the storyteller\u2019s wagon', x: -19.3, z: 6.8, cx: -21, cz: 5, enterable: false, district: 'old-town', inside: new Set(), smokeUntil: 0 });
-  sim.log('A travelling storyteller\u2019s wagon rattled into the plaza. Tales from far away, and gossip from close by!', 6, [], 'traveller', '🧳', -21, 5);
+  sim.world.places.set('cart', { id: 'cart', kind: 'market', name: 'the storyteller\u2019s wagon', x: -18.9, z: 2.2, cx: -21.4, cz: 1.2, enterable: false, district: 'old-town', inside: new Set(), smokeUntil: 0 });
+  sim.log('A travelling storyteller\u2019s wagon rattled into the plaza. Tales from far away, and gossip from close by!', 6, [], 'traveller', '🧳', -19, 2);
   // the juiciest true secret in the village (an unconfessed crush), else a tall tale about someone
   const pining = sim.villagers.filter(v => v.crush && !v.partner); const pv = pining.length ? sim.rng.pick(pining) : null;
   const subject = pv ?? sim.rng.pick(sim.villagers); const crushOf = pv ? sim.byId.get(pv.crush!)! : null;
   const f = sim.fact('deed', crushOf ? `${subject.first} is sweet on ${crushOf.first}` : `${subject.first} was once ${sim.rng.pick(['chased out of the capital by a goose', 'engaged to a duke', 'a famous juggler'])}`, subject.id, subject.id, crushOf ? .1 : 0, crushOf ? 8 : 5, crushOf?.id);
   if (crushOf) (f as any).romance = true; (f as any).label = 'the storyteller\u2019s tale';
-  let told = false; const [cx, cz] = [-20.2, 7.4];
+  let told = false; const [cx, cz] = [-18.9, 2.2]; let slot = 0;
   for (const v of sim.villagers) {
     if (v.inside || v.doing === 'sleeping' || v.act?.locked || !(v.traits.sociability > .45 || sim.rng.chance(.4))) continue;
-    const a = sim.rng.range(-1.2, 1.2), r = 2.4 + sim.rng.range(0, 1.4); const [x, z] = sim.world.nav.nearestFree(cx + Math.sin(a) * r, cz + Math.cos(a) * r);
+    const a = (slot % 5 - 2) * .42 + sim.rng.range(-.08, .08), r = 2.3 + Math.floor(slot / 5) * 1.1; slot++; const [x, z] = sim.world.nav.nearestFree(cx + Math.cos(a) * r, cz + Math.sin(a) * r);
     v.act = null; sim.leaveSeat(v); v.thought = 'A storyteller! I love a good tale.'; sim.icon(v, '📜');
-    v.queue = [{ type: 'go', x, z, t: 0, label: 'hurrying to hear the storyteller' }, { type: 'idle', anim: 'idle', dur: 26, face: Math.atan2(cx - x, cz - z), t: 0, label: 'listening to tall tales', after: () => {
+    v.queue = [{ type: 'go', x, z, t: 0, label: 'hurrying to hear the storyteller' }, { type: 'idle', anim: 'idle', dur: 40, face: Math.atan2(cx - x, cz - z), t: 0, label: 'listening to tall tales', after: () => {
       const isSubject = v === subject; v.emotions.joy += .3; v.needs.social = Math.min(100, v.needs.social + 25);
       if (isSubject && crushOf) { v.emotions.surprise = 1; v.emotions.sadness += .3; sim.say(v, 'How does she know that?!', '😳', 3); v.mem.add(sim.clock, `The storyteller told everyone I\u2019m sweet on ${crushOf.first}!`, 9, [crushOf.id], -.5, 'feeling'); }
       else if (sim.learnFact(v, f)) { v.mem.add(sim.clock, `The storyteller says ${f.text}`, f.imp, [subject.id], f.valence, 'heard', f.id); sim.say(v, crushOf && v === crushOf ? 'Wait... me?!' : sim.rng.pick(['Ooooh!', 'No way!', 'Ha!']), crushOf ? '😮' : '😄', 2.5); if (v === crushOf) { v.emotions.surprise = 1; v.emotions.love += .4; v.opinion[subject.id] = Math.min(100, (v.opinion[subject.id] ?? 0) + 6); } }
@@ -45,7 +45,7 @@ export async function spawnTraveller(sim: Sim) {
     } } as any];
   }
 }
-export function tickTraveller(sim: Sim) { if (sim.visitorUntil && sim.clock > sim.visitorUntil) { sim.visitorUntil = 0; sim.world.setMerchant(false); sim.world.places.delete('cart'); sim.log('The storyteller packed up her wagon and rolled on, leaving a trail of whispers behind her.', 3, [], 'traveller', '👋', -21, 5); } }
+export function tickTraveller(sim: Sim) { if (sim.visitorUntil && sim.clock > sim.visitorUntil) { sim.visitorUntil = 0; sim.world.setMerchant(false); sim.world.places.delete('cart'); sim.log('The storyteller packed up her wagon and rolled on, leaving a trail of whispers behind her.', 3, [], 'traveller', '👋', -19, 2); } }
 export type { Villager };
 export async function startFestival(sim: Sim) {
   if (sim.festivalUntil > sim.clock) return; await sim.world.setFestival(true); sim.festivalUntil = sim.clock + 200;

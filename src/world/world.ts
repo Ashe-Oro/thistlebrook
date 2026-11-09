@@ -160,7 +160,7 @@ export class World {
     for (const b of this.bunting) b.visible = on;
   }
   async setMerchant(on: boolean) {
-    if (on && !this.merchantCart) { const o = await loadAsset('cozy/veh_horse_cart_01'); o.scale.setScalar(1.3); o.position.set(-21, 0, 5); o.rotation.y = .4; this.scene.add(o); this.merchantCart = o; const h = await loadAsset('farm/horse'); h.position.set(-21.6, 0, 8.4); h.rotation.y = .4; this.scene.add(h); (o as any).horse = h; }
+    if (on && !this.merchantCart) { const o = await loadAsset('cozy/veh_horse_cart_01'); o.scale.setScalar(1.3); o.position.set(-21.4, 0, 1.2); o.rotation.y = .25; this.scene.add(o); this.merchantCart = o; const h = await loadAsset('farm/horse'); h.position.set(-24.6, 0, 2.0); h.rotation.y = -1.32; this.scene.add(h); (o as any).horse = h; }
     if (this.merchantCart) { this.merchantCart.visible = on; (this.merchantCart as any).horse.visible = on; }
   }
   seatsFor(place: string) { return this.seats.filter(s => s.place === place); }
