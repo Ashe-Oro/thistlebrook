@@ -3,14 +3,18 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 const loader = new GLTFLoader().setDRACOLoader(new DRACOLoader().setDecoderPath('/draco/'));
 const cache = new Map<string, Promise<THREE.Object3D>>();
-const sharedMat = new Map<THREE.Material, THREE.Material>();
+const sharedMat = new Map<THREE.Material, THREE.Material>(); const byLook = new Map<string, THREE.Material>();
 // Packs ship one vertex-coloured material; swap to Lambert (cheap, matches flat look, good on phones).
 function prep(root: THREE.Object3D) {
   root.traverse((m: any) => {
     if (!m.isMesh) return;
     const src = m.material as THREE.MeshStandardMaterial;
     let mat = sharedMat.get(src);
-    if (!mat) { mat = new THREE.MeshLambertMaterial({ vertexColors: !!m.geometry.attributes.color, color: src.color ?? 0xffffff, map: src.map ?? null, flatShading: true, transparent: src.transparent, opacity: src.opacity }); sharedMat.set(src, mat); }
+    // dedupe by look, not by source object: identical materials across packs collapse to one, so static scenery can be merged
+    const look = `${!!m.geometry.attributes.color}|${src.color?.getHexString?.() ?? 'fff'}|${src.map?.uuid ?? ''}|${!!src.transparent}|${src.opacity ?? 1}`;
+    if (!mat) mat = byLook.get(look);
+    if (!mat) { mat = new THREE.MeshLambertMaterial({ vertexColors: !!m.geometry.attributes.color, color: src.color ?? 0xffffff, map: src.map ?? null, flatShading: true, transparent: src.transparent, opacity: src.opacity }); sharedMat.set(src, mat); byLook.set(look, mat); }
+    sharedMat.set(src, mat);
     m.material = mat; m.castShadow = true; m.receiveShadow = true;
   });
   return root;

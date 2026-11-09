@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { TOWN, scaleOf, type PlaceDef, type PlaceKind } from '../data/town';
 import { loadAsset, preload } from './loader';
 import { paintGround } from './groundpaint';
@@ -17,7 +18,7 @@ export class Tree {
 export class Rock { hp = 8; maxHp = 8; state: 'solid' | 'gone' | 'rising' = 'solid'; t = 0; shake = 0; claimed: string | null = null; regrowAt = 0; constructor(public obj: THREE.Object3D, public x: number, public z: number, public baseScale: number) {} get available() { return this.state === 'solid'; } }
 export class Plot {
   stage: 'empty' | 'growing' | 'ripe' = 'growing'; growth = .55 + Math.random() * .4; // v1: fields are scenery (no farming economy yet)
-  water = 0; claimed: string | null = null; crops: THREE.Object3D[] = []; wet!: THREE.Mesh; mats: THREE.MeshLambertMaterial[] = [];
+  water = 0; claimed: string | null = null; crops: THREE.Object3D[] = []; wet!: THREE.Mesh; mats: THREE.MeshLambertMaterial[] = []; parts: { im: THREE.InstancedMesh; local: THREE.Matrix4 }[] = [];
   constructor(public x: number, public z: number) {}
 }
 export class AppleTree { apples = 4; meshes: THREE.Mesh[] = []; claimed: string | null = null; t = 0; constructor(public obj: THREE.Object3D, public x: number, public z: number) {} }
@@ -28,7 +29,7 @@ export class World {
   animals: Animal[] = []; lamps: THREE.Sprite[] = []; lights: THREE.PointLight[] = []; campfireLight!: THREE.PointLight; forgeLight?: THREE.PointLight; private fireTime = 0; sail?: THREE.Object3D; bunting: THREE.Object3D[] = []; rng = new RNG(42);
   private scenery: THREE.Object3D[] = [];
   private moving = new Set<THREE.Object3D>();
-  private borderScenery: THREE.Object3D[] = [];
+  private cropM = new THREE.Matrix4(); private borderScenery: THREE.Object3D[] = []; private lotScenery: THREE.Object3D[] = [];
   feeder = new THREE.Vector3(35, 0, 10); stringLights?: THREE.Object3D; night = 0; festival = false; merchantCart?: THREE.Object3D;
   // Village pets. `crowd` is the live villager list (set each sim step) so the dog can trot after the nearest one.
   crowd: { x: number; z: number; inside: string | null }[] = [];
@@ -72,6 +73,28 @@ export class World {
         const group = batches.get(key) ?? []; group.push(o); batches.set(key, group);
       });
     }
+    // Town lots never move or toggle (bunting, string lights and the merchant cart live elsewhere), and the packs share
+    // a handful of vertex-coloured materials, so every lot part in a 30 m cell that shares a material is baked into
+    // one world-space geometry: houses, lamps, fences, benches and barrels become a few draws per cell.
+    const merges = new Map<string, THREE.Mesh[]>();
+    for (const root of this.lotScenery) {
+      if (!root.visible) continue;
+      root.updateWorldMatrix(true, true);
+      root.traverse(o => {
+        if (!(o instanceof THREE.Mesh) || o instanceof THREE.InstancedMesh || (o as any).isSkinnedMesh || !o.visible || Array.isArray(o.material) || o.material.transparent) return;
+        const g = o.geometry, sig = Object.keys(g.attributes).sort().join(',') + (g.index ? ':i' : ':n') + (g.morphAttributes && Object.keys(g.morphAttributes).length ? ':m' : '');
+        const key = `${Math.floor(root.position.x / 30)},${Math.floor(root.position.z / 30)}:${o.material.uuid}:${o.castShadow}:${o.receiveShadow}:${sig}`;
+        const group = merges.get(key) ?? []; group.push(o); merges.set(key, group);
+      });
+    }
+    for (const meshes of merges.values()) {
+      if (meshes.length < 2) continue;
+      const geos = meshes.map(m => { const g = m.geometry.clone(); g.applyMatrix4(m.matrixWorld); if (m.matrixWorld.determinant() < 0) { const idx = g.index; if (idx) for (let i = 0; i < idx.count; i += 3) { const t = idx.getX(i + 1); idx.setX(i + 1, idx.getX(i + 2)); idx.setX(i + 2, t); } } return g; });
+      const merged = mergeGeometries(geos, false); geos.forEach(g => g.dispose()); if (!merged) continue;
+      const first = meshes[0], mesh = new THREE.Mesh(merged, first.material); mesh.name = 'lots-merged';
+      mesh.castShadow = first.castShadow; mesh.receiveShadow = first.receiveShadow; mesh.matrixAutoUpdate = false; mesh.updateMatrix(); this.scene.add(mesh);
+      for (const m of meshes) m.removeFromParent();
+    }
     for (const meshes of batches.values()) {
       if (meshes.length < 3) continue;
       const first = meshes[0], batch = new THREE.InstancedMesh(first.geometry, first.material, meshes.length);
@@ -81,7 +104,7 @@ export class World {
       batch.updateMatrix(); batch.matrixAutoUpdate = false; this.scene.add(batch);
       for (const mesh of meshes) mesh.removeFromParent();
     }
-    this.scenery.length = 0; this.borderScenery.length = 0; this.moving.clear();
+    this.scenery.length = 0; this.borderScenery.length = 0; this.lotScenery.length = 0; this.moving.clear();
   }
 
   private shadows(root: THREE.Object3D, cast: boolean, receive = false) {
@@ -126,7 +149,7 @@ export class World {
     const detail = /flower_bed|grass|tuft|path_stone|road|string_lights/.test(l.a);
     this.shadows(o, !detail && Math.max(hx * 2, hz * 2, height) >= .6,
       !detail && (!!l.place || hx * hz >= 1.5));
-    this.scenery.push(o);
+    this.scenery.push(o); if (l.tag !== 'stringlights') this.lotScenery.push(o);
     if (l.solid !== false && !l.a.includes('road') && !l.a.includes('string_lights')) this.nav.rect(wcx, wcz, Math.max(.2, hx - (isProp ? .05 : .25)), Math.max(.2, hz - (isProp ? .05 : .25)), rot);
     if (l.tag === 'bench') this.seats.push({ x: l.x + .35 * c - .05, z: l.z + .1, y: .45, rot, place: 'bench', taken: null }, { x: l.x - .35 * c, z: l.z + .1, y: .45, rot, place: 'bench', taken: null });
     if (l.tag === 'logbench') { const fx = -25 - l.x, fz = 10 - l.z, r = Math.atan2(fx, fz); for (const off of [-.42, .42]) this.seats.push({ x: l.x + Math.cos(r) * off, z: l.z - Math.sin(r) * off, y: .42, rot: r, place: 'campfire', taken: null }); }
@@ -160,10 +183,11 @@ export class World {
       const p = new Plot(r.x, r.z);
       const wet = new THREE.Mesh(new THREE.PlaneGeometry(3.7, 3.7), new THREE.MeshBasicMaterial({ color: '#2a1c10', transparent: true, opacity: 0, depthWrite: false }));
       wet.rotation.x = -Math.PI / 2; wet.position.set(r.x, .62, r.z); wet.renderOrder = 1; this.scene.add(wet); this.scenery.push(wet); p.wet = wet;
+      // nine wheat clumps per plot, drawn as one instanced mesh per clump part (one shared tint per plot)
+      const tpl = await loadAsset('farm/wheat_cluster'); tpl.updateMatrixWorld(true); const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }); p.mats.push(mat);
+      tpl.traverse((m: any) => { if (!m.isMesh) return; const im = new THREE.InstancedMesh(m.geometry, mat, 9); im.castShadow = false; im.receiveShadow = false; im.frustumCulled = false; im.count = 0; this.scene.add(im); p.parts.push({ im, local: m.matrixWorld.clone() }); });
       for (let i = 0; i < 9; i++) {
-        const w = await loadAsset('farm/wheat_cluster'); const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
-        w.traverse((m: any) => { if (m.isMesh) m.material = mat; }); p.mats.push(mat);
-        w.position.set(r.x + (i % 3 - 1) * 1.15 + this.rng.range(-.15, .15), .35, r.z + (Math.floor(i / 3) - 1) * 1.15 + this.rng.range(-.15, .15)); w.rotation.y = this.rng.range(0, 6.28); w.visible = false; this.scene.add(w); this.scenery.push(w); this.moving.add(w); this.shadows(w, false); p.crops.push(w);
+        const w = new THREE.Object3D(); w.position.set(r.x + (i % 3 - 1) * 1.15 + this.rng.range(-.15, .15), .35, r.z + (Math.floor(i / 3) - 1) * 1.15 + this.rng.range(-.15, .15)); w.rotation.y = this.rng.range(0, 6.28); w.visible = false; p.crops.push(w);
       }
       this.plots.push(p);
     }
@@ -287,6 +311,7 @@ export class World {
       (p.wet.material as THREE.MeshBasicMaterial).opacity = clamp(p.water) * .35;
       const vis = p.stage !== 'empty', g = p.stage === 'ripe' ? 1 : p.growth;
       p.crops.forEach((c, i) => { c.visible = vis; if (vis) { const s = .2 + g * (1.05 + (i % 3) * .08); c.scale.set(s * 1.15, s, s * 1.15); c.position.y = .3 + Math.sin(t * .9 + i) * 0; c.rotation.z = Math.sin(t * 1.3 + i * .7 + p.x) * .05; } });
+      for (const pt of p.parts) { pt.im.count = vis ? p.crops.length : 0; if (!vis) continue; p.crops.forEach((c, i) => { c.updateMatrix(); this.cropM.multiplyMatrices(c.matrix, pt.local); pt.im.setMatrixAt(i, this.cropM); }); pt.im.instanceMatrix.needsUpdate = true; }
       const col = p.stage === 'ripe' ? new THREE.Color(1.05, 1, .85) : new THREE.Color().setRGB(.55 + .5 * g, 1, .45 + .4 * g);
       p.mats.forEach(m => m.color.copy(col));
     }
