@@ -32,6 +32,12 @@ export class Sky {
     this.stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: '#fff', size: 1.6, sizeAttenuation: false, transparent: true, opacity: 0, fog: false, depthWrite: false })); scene.add(this.stars);
     scene.fog = new THREE.Fog('#cfe6f5', 90, 230);
   }
+  // shadow frustum follows the camera's framing: tight (sharper, cheaper) when close, the whole village when pulled back
+  private span = 60;
+  setShadowSpan(camDist: number) {
+    const want = Math.min(60, Math.max(18, camDist * 1.6 + 8)); if (Math.abs(want - this.span) / this.span < .12) return; this.span = want;
+    const c = this.sun.shadow.camera; c.left = -want; c.right = want; c.top = want * .75; c.bottom = -want * .75; c.updateProjectionMatrix();
+  }
   // a strike: one bright flash and a fainter re-flicker; thunder follows
   strike() { this.flashQ.push(0, .09 + this.rnd() * .08); this.onThunder?.(.35 + this.rnd() * 1.4); }
   update(hour: number, rain: number, focus: THREE.Vector3, dt = 0) {

@@ -240,18 +240,20 @@ export class World {
     g.traverse(o => { if (o instanceof THREE.Mesh) o.castShadow = false; }); g.position.set(-9, 0, 8); this.scene.add(g);
     this.dog = { obj: g, legs, tail, x: -9, z: 8, tx: -9, tz: 8, t: 0, ph: 0, wag: 0, trot: false };
     // --- ducks: bob about on the Riverside mill pond ---
-    const pond = this.places.get('rivpond'); const pcx = pond?.cx ?? 2, pcz = pond?.cz ?? 27, pr = 1.7;
     const bodyM = M('#4f5a52'), headM = M('#1f6b3a'), beakM = M('#e0a53a');
-    for (let i = 0; i < 4; i++) {
+    for (const [pid, nD, dx, dz] of [['rivpond', 4, 2, 27], ['pond', 3, -36, 13]] as [string, number, number, number][]) {
+    const pond = this.places.get(pid) as any; const pcx = pond?.cx ?? dx, pcz = pond?.cz ?? dz, pr = 1.7;
+    for (let i = 0; i < nD; i++) {
       const d = new THREE.Group();
       const body = new THREE.Mesh(new THREE.SphereGeometry(.17, 7, 5), bodyM); body.scale.set(1, .7, 1.4); body.position.y = .08; d.add(body);
       const h = new THREE.Mesh(new THREE.SphereGeometry(.1, 6, 5), headM); h.position.set(0, .2, .18); d.add(h);
       d.add(box(.05, .04, .1, beakM, 0, .18, .28));
       const tl = box(.08, .05, .12, bodyM, 0, .12, -.2); tl.rotation.x = .5; d.add(tl);
       d.traverse(o => { if (o instanceof THREE.Mesh) o.castShadow = false; });
-      const a = i / 4 * 6.28, x = pcx + Math.cos(a) * pr * .6, z = pcz + Math.sin(a) * pr * .6;
+      const a = i / nD * 6.28, x = pcx + Math.cos(a) * pr * .6, z = pcz + Math.sin(a) * pr * .6;
       d.position.set(x, .22, z); this.scene.add(d);
       this.ducks.push({ obj: d, x, z, tx: x, tz: z, t: this.rng.range(0, 4), cx: pcx, cz: pcz, r: pr });
+    }
     }
   }
 

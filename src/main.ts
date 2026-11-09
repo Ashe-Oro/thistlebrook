@@ -15,6 +15,7 @@ import type { Villager, SimEvent } from './sim/types';
 import { makeAnvil } from './agents/props';
 import { saveGame, loadGame, clearSave, peekSave } from './core/save';
 import { arcs } from './sim/arcs';
+import { Ambient } from './world/ambient';
 import { fmtTime } from './core/util';
 
 const mobile = matchMedia('(pointer: coarse)').matches || innerWidth < 760;
@@ -49,6 +50,9 @@ sim.brain = brain;
 async function boot() {
   await world.build((n, t) => setProg(n / t * .8, `Building the village… ${n}/${t}`));
   const anvil = makeAnvil(); const sm = world.places.get('smithy')!; anvil.position.set(sm.x + 2.0, 0, sm.z + 1.6); scene.add(anvil); world.nav.circle(sm.x + 2.0, sm.z + 1.6, .35);
+  { const ponds = ['pond', 'rivpond'].map(id => world.places.get(id) as any).filter(Boolean).map(p => ({ x: p.cx ?? p.x, z: p.cz ?? p.z, r: 1.7 }));
+    ambient = new Ambient(scene, ponds, world.fx);
+    ambient.onRainbow = () => afterRain(); ambient.onSplash = (x, z) => sound.play('splash', Math.max(0, 1 - Math.hypot(x - controls.target.x, z - controls.target.z) / 25) * .5); }
   setProg(.85, 'Dressing the villagers…');
   // Old Nell, the travelling storyteller (a visitor NPC, not a villager: she only appears with the Traveller god power)
   nell = new Avatar({ id: 'nell', name: 'Old Nell', job: 'postmistress', goal: 'liked', home: 'home-spare', age: '70s', traits: VILLAGERS[0].traits, bio: '', palette: 'autumn', skin: '#e3b590', hair: '#d8d8d8', height: 1.58,
@@ -61,7 +65,7 @@ async function boot() {
   start();
 }
 
-let lastSpeed = 1; let speed = 1, mode: 'director' | 'free' = params.get('cam') === 'free' ? 'free' : 'director', selected: string | null = null; let acc = 0; let follow: string | null = null; let dirT = 0;
+let ambient: Ambient | null = null; let lastSpeed = 1; let speed = 1, mode: 'director' | 'free' = params.get('cam') === 'free' ? 'free' : 'director', selected: string | null = null; let acc = 0; let follow: string | null = null; let dirT = 0;
 const director = new Director(sim);
 const pcam = new THREE.PerspectiveCamera(15, 1, .3, 40); const portraits = new Map<string, HTMLCanvasElement>(); const pTime = new Map<string, number>();
 // Portraits: the villager is lifted to a 'studio' spot high above the town for one render (lit by the real sun and sky,
@@ -115,7 +119,7 @@ let focusTarget: THREE.Vector3 | null = null, focusDist = 0;
 function focusPoint(x: number, z: number, dist = 22) { focusTarget = new THREE.Vector3(x, 0, z); focusDist = dist; follow = null; }
 
 // click to select a villager (screen-space pick)
-renderer.domElement.addEventListener('pointerdown', e => { if (intro) { endIntro(); return; } (renderer.domElement as any)._down = [e.clientX, e.clientY]; if (mode === 'director') { mode = 'free'; } focusTarget = null; });
+renderer.domElement.addEventListener('pointerdown', e => { if (intro) { endIntro(); return; } if (montage) { endMontage(); return; } (renderer.domElement as any)._down = [e.clientX, e.clientY]; if (mode === 'director') { mode = 'free'; } focusTarget = null; });
 renderer.domElement.addEventListener('pointerup', e => {
   const d = (renderer.domElement as any)._down; if (!d || Math.hypot(e.clientX - d[0], e.clientY - d[1]) > 6) return;
   let best: Villager | null = null, bd = 46; for (const v of sim.villagers) { if (v.inside) continue; for (const yy of [.5, 1.1, 1.7]) { const p = api.project(v.x, yy, v.z); const dd = Math.hypot(p.x - e.clientX, p.y - e.clientY); if (p.on && dd < bd) { bd = dd; best = v; } } }
@@ -206,6 +210,44 @@ function mobileFrame() {
 }
 addEventListener('resize', () => { vOff = !vOff; mobileFrame(); });
 
+// ---- after the rain: a rainbow, a few villagers point it out, and (if the director has the camera) a low shot up at it ----
+function afterRain() {
+  const out = sim.villagers.filter(v => !v.inside); const lines = ['Look, a rainbow!', 'Would you look at that!', 'A rainbow! Make a wish.', 'Oh, how lovely.'];
+  out.slice(0, 3).forEach((v, i) => setTimeout(() => ui?.bubble(v.id, lines[i % lines.length], '🌈', 4), 400 + i * 700));
+  const cineShot = mode === 'director' && !selected && !beat && !intro && !montage && ui && !ui.quiet;
+  if (ui && !ui.quiet && !cineShot) ui.captionText('🌈 The rain has cleared, and a rainbow arches over Thistlebrook.');
+  if (cineShot) {
+    const cx = controls.target.x, cz = controls.target.z, dx = cx - camera.position.x, dz = cz - camera.position.z;
+    const e: any = { id: -1, t: sim.clock, text: 'The rain has cleared, and a rainbow arches over Thistlebrook.', imp: 5, actors: [], x: cx, z: cz, kind: 'rainbow', icon: '🌈', yaw: Math.atan2(-dx, -dz) };
+    if (startBeat(e, true) && beat) { const b = beat as any; b.yawOff = 0; b.dur = 7; }
+  }
+}
+// ---- dawn montage: "Previously in Thistlebrook…" — quick sepia cuts to yesterday's biggest moments, then the paper ----
+let montage: { shots: { x: number; z: number; icon: string; text: string; t: number }[]; i: number; t: number; per: number; yaw: number; then: (() => void) | null } | null = null;
+function pickShots(day: number) {
+  const evs = (sim.dayStats[day] ?? []).filter(e => e.imp >= 5 && !['headline', 'weather', 'reflect', 'work'].includes(e.kind) && !/Nobody knows/i.test(e.text) && Number.isFinite(e.x) && Number.isFinite(e.z)).sort((a, b) => b.imp - a.imp);
+  const at = arcs(sim), used = new Set<string>(), picked: SimEvent[] = [];
+  for (const e of evs) { const a = at.arcForEvent(e.id)?.arc.id ?? `${e.kind}:${e.actors.slice().sort().join()}`; if (used.has(a)) continue; if (picked.some(p => Math.hypot(p.x - e.x, p.z - e.z) < 4 && p.kind === e.kind)) continue; used.add(a); picked.push(e); if (picked.length >= 4) break; }
+  return picked.sort((a, b) => a.t - b.t).map(e => ({ x: e.x, z: e.z, icon: e.icon, t: e.t, text: e.text.includes("(It isn't true.)") ? e.text.replace(/\s*\(It isn't true\.\)/gi, '') + ' (a false rumour)' : e.text }));
+}
+function startMontage(day: number, then: (() => void) | null = null): boolean {
+  const shots = pickShots(day); if (shots.length < 2) return false;
+  if (beat) endBeat();
+  montage = { shots, i: -1, t: 0, per: 3.4, yaw: Math.atan2(camera.position.x - controls.target.x, camera.position.z - controls.target.z), then };
+  (cine.querySelector('b') as HTMLElement).textContent = 'Previously in Thistlebrook…'; cine.classList.add('on'); document.body.classList.add('montage');
+  follow = null; focusTarget = null; return true;
+}
+function endMontage() { if (!montage) return; const then = montage.then; montage = null; cine.classList.remove('on'); document.body.classList.remove('montage'); if (mode === 'director') dirT = 0; then?.(); }
+function montageCamera(dt: number) {
+  const m = montage!; m.t += dt; const idx = Math.floor(m.t / m.per);
+  if (idx >= m.shots.length) { endMontage(); return; }
+  const sh = m.shots[idx], u = (m.t % m.per) / m.per;
+  if (idx !== m.i) { m.i = idx; m.yaw += 1.9; (cine.querySelector('em') as HTMLElement).textContent = sh.icon; (cine.querySelector('span') as HTMLElement).textContent = `Yesterday, ${fmtTime(sh.t)}: ${sh.text}`; cine.classList.remove('cut'); void cine.offsetWidth; cine.classList.add('cut'); sound.play('pop', .25); }
+  if ((m as any).fixFor !== idx) { (m as any).fixFor = idx; bT.set(sh.x, 1, sh.z); (m as any).off = clearYaw(m.yaw, 15, 10.5); }
+  const yaw = m.yaw + (m as any).off + u * .35, dist = 16 - u * 3, h = 11 - u * 2;
+  controls.target.set(sh.x, 1, sh.z); camera.position.set(sh.x + Math.sin(yaw) * dist, h, sh.z + Math.cos(yaw) * dist); camera.lookAt(controls.target);
+}
+
 // ---- cinematic beats ---------------------------------------------------------------------------------
 // When something big happens while the director has the camera, cut to a framed, letterboxed shot of it:
 // a low two-shot across the action line (or a three-quarter on one subject), a slow push-in, a title card,
@@ -220,6 +262,7 @@ function beatTitle(e: SimEvent): string | null {
   if (e.kind === 'theft' && e.imp >= 7) return e.icon === '🫳' ? 'Caught Red-Handed' : 'Thief in the Night';
   if (e.kind === 'party' && e.imp >= 7) return 'Party of the Season';
   if (e.kind === 'festival') return 'Festival!';
+  if (e.kind === 'rainbow') return 'After the Rain';
   if (e.kind === 'theft' && e.imp >= 5) return 'Light Fingers';
   if ((e.kind === 'accuse' || /accused/.test(e.text)) && e.imp >= 5 && e.actors.length >= 2) return 'The Accusation';
   if (e.kind === 'argue' && e.imp >= 5 && e.actors.length >= 2) return 'Words Are Exchanged';
@@ -230,9 +273,9 @@ function beatTitle(e: SimEvent): string | null {
 }
 function startBeat(e: SimEvent, force = false) {
   const title = beatTitle(e); if (!title && !force) return false;
-  const nowR = performance.now(); if (!force && (beat || nowR < beatCool)) return false;
+  const nowR = performance.now(); if (!force && (beat || montage || nowR < beatCool)) return false;
   const ids = e.actors.filter(id => { const v = sim.byId.get(id); return v && !v.inside; }).slice(0, 2);
-  const fixed: Beat['fixed'] = e.kind === 'traveller' ? [NELL[0], NELL[1] + 1.2, 1.1, .45] : e.kind === 'festival' || (e.kind === 'party' && !ids.length) ? [e.x, e.z, 1.2, -.6] : undefined;
+  const fixed: Beat['fixed'] = e.kind === 'rainbow' ? [e.x, e.z, 9, (e as any).yaw] : e.kind === 'traveller' ? [NELL[0], NELL[1] + 1.2, 1.1, .45] : e.kind === 'festival' || (e.kind === 'party' && !ids.length) ? [e.x, e.z, 1.2, -.6] : undefined;
   if (!ids.length && !fixed) return false;
   const off = camera.position.clone().sub(controls.target);
   beat = { e, title: title ?? e.kind, icon: e.icon, t: 0, dur: e.kind === 'fight' ? 7.5 : 5.5, ids, slow: e.kind === 'fight' ? .45 : .8, side: 0, fixed, from: { p: camera.position.clone(), t: controls.target.clone() } };
@@ -257,7 +300,7 @@ function beatCamera(dt: number) {
   if (!beat) return; const b = beat; b.t += dt; if (b.t >= b.dur || mode !== 'director' || selected) { endBeat(); return; }
   const vs = b.ids.map(id => sim.byId.get(id)!).filter(v => v && !v.inside);
   let yaw: number, dist: number, h: number;
-  if (b.fixed) { bT.set(b.fixed[0], b.fixed[2], b.fixed[1]); yaw = b.fixed[3] + Math.sin(b.t * .25) * .15; dist = 10 - b.t * .45; h = 3.2; }
+  if (b.fixed) { bT.set(b.fixed[0], b.fixed[2], b.fixed[1]); yaw = b.fixed[3] + Math.sin(b.t * .25) * .15; dist = 10 - b.t * .45; h = b.e.kind === 'rainbow' ? 7.6 : 3.2; if (b.e.kind === 'rainbow') { yaw = b.fixed[3] + b.t * .015; dist = 16 + b.t * .5; } }
   else if (vs.length >= 2) { const [a, c] = vs; bT.set((a.x + c.x) / 2, 1.15, (a.z + c.z) / 2); const line = Math.atan2(c.x - a.x, c.z - a.z); let p = line + Math.PI / 2; if (Math.cos(p - b.side) < 0) p += Math.PI; yaw = p + .25 + b.t * .03; dist = Math.max(4.8, Math.hypot(c.x - a.x, c.z - a.z) * 1.5 + 5.4) - b.t * .22; h = 1.9; }
   else if (vs.length) { const a = vs[0]; bT.set(a.x, 1.2, a.z); yaw = a.avatar.heading + .55 + b.t * .04; dist = 5.2 - b.t * .2; h = 1.75; }
   else { endBeat(); return; }
@@ -295,7 +338,7 @@ function start() {
   setInterval(autosave, 20000); addEventListener('pagehide', autosave); document.addEventListener('visibilitychange', () => { if (document.hidden) autosave(); });
   sim.on('dawn', () => setTimeout(autosave, 50));
   sim.on('sound', (k: string, x: number, z: number) => sound.play(k, Math.max(0, 1 - Math.hypot(x - controls.target.x, z - controls.target.z) / 40)));
-  sim.on('dawn', () => { const p = director.papers[director.papers.length - 1]; if (p && ui.autoPaper && !params.has('nopaper')) { ui.showPaper(p); setTimeout(() => { if (ui.modal.querySelector('.paper')) ui.closeModal(); }, 20000); } });
+  sim.on('dawn', (day: number) => { const p = director.papers[director.papers.length - 1]; if (p && ui.autoPaper && !params.has('nopaper')) { const show = () => { ui.showPaper(p); setTimeout(() => { if (ui.modal.querySelector('.paper')) ui.closeModal(); }, 20000); }; if (!(mode === 'director' && !selected && !intro && !params.has('nomontage') && speed > 0 && speed <= 4 && startMontage(day, show))) show(); } });
   sim.on('event', (e: SimEvent) => { if (mode === 'director' && !selected && !intro && !ui.quiet && !params.has('nobeats')) startBeat(e); });
   sim.on('hit', () => { if (beat) shake = 1; sound.play('scuffle', .5); });
   sky.onThunder = d => setTimeout(() => sound.play('thunder', .9), d * 1000);
@@ -313,7 +356,7 @@ let cpuMsAvg = 0; // JS cost of a frame (sim + UI + draw submission) — what bo
 function frame(now: number) {
   requestAnimationFrame(frame);
   const cpu0 = performance.now(); let dt = Math.min(.1, (now - last) / 1000); last = now; perf.tick(now);
-  const slow = beat && beat.t < 3.2 ? beat.slow : 1;
+  const slow = montage ? .25 : beat && beat.t < 3.2 ? beat.slow : 1;
   const t0 = performance.now(); if (speed > 0) stepSim(dt * speed * slow); simMsAvg = simMsAvg * .9 + (performance.now() - t0) * .1;
   const adt = speed === 0 ? dt * .25 : dt * Math.min(speed, 2.5) * slow;
   for (const v of sim.villagers) syncAvatar(v, speed === 0 ? 0 : adt);
@@ -321,17 +364,19 @@ function frame(now: number) {
   animateGifts(sim, dt);
   world.update(adt, dt * speed * MIN_PER_SEC, sim.clock, sky.night);
   // camera
-  if (beat) { controls.autoRotate = false; }
+  if (beat || montage) { controls.autoRotate = false; }
   else if (mode === 'director' && !selected) { dirT -= dt; if (dirT <= 0) { dirT = 1; const pick = director.pick(sim.clock, follow); if (pick && pick.id !== follow) { follow = pick.id; } } controls.autoRotate = true; controls.autoRotateSpeed = .35; }
   else controls.autoRotate = false;
-  const want = beat || intro ? null : follow ? sim.byId.get(follow)!.avatar.root.position : focusTarget;
+  const want = beat || intro || montage ? null : follow ? sim.byId.get(follow)!.avatar.root.position : focusTarget;
   if (want) { const k = 1 - Math.pow(.04, dt), dx = (want.x - controls.target.x) * k, dz = (want.z - controls.target.z) * k, dy = ((follow ? 1 : 0) - controls.target.y) * k; controls.target.x += dx; controls.target.z += dz; controls.target.y += dy; camera.position.x += dx; camera.position.z += dz; camera.position.y += dy;
     const wantDist = mode === 'director' ? (follow ? (mobile ? 13 : 11.5) + Math.sin(now / 9000) * 1.5 : focusDist || 24) : (focusTarget && !follow ? focusDist : 0); if (wantDist) { const off = camera.position.clone().sub(controls.target); const d = off.length(); off.multiplyScalar(1 + (wantDist / d - 1) * k * .5); camera.position.copy(controls.target).add(off); } }
-  if (mode === 'director' && !beat && !intro && !selected) directorCare(dt);
+  if (mode === 'director' && !beat && !intro && !montage && !selected) directorCare(dt);
   mobileFrame();
-  if (intro) { introCamera(Math.min(.25, (now - (beatLast || now)) / 1000)); beatLast = now; }
+  if (montage) { montageCamera(Math.min(.25, dt)); }
+  else if (intro) { introCamera(Math.min(.25, (now - (beatLast || now)) / 1000)); beatLast = now; }
   else if (!beat) controls.update(); else beatCamera(Math.min(.25, (now - (beatLast || now)) / 1000)); beatLast = now;
-  sky.update(sim.hour, sim.rain, controls.target, dt * Math.max(speed, .0001)); renderer.toneMappingExposure = 1.05 + sky.golden * .1 + sky.flash * .45; world.fx.setRain(sim.rain > .12); world.fx.update(dt, controls.target);
+  sky.setShadowSpan(camera.position.distanceTo(controls.target)); sky.update(sim.hour, sim.rain, controls.target, dt * Math.max(speed, .0001)); renderer.toneMappingExposure = 1.05 + sky.golden * .1 + sky.flash * .45; world.fx.setRain(sim.rain > .12); world.fx.update(dt, controls.target);
+  ambient?.update(dt, dt * speed * slow * MIN_PER_SEC, sim.hour, sim.rain, sky.night, controls.target, camera.position);
   sound.ambient(sky.night, sim.rain, dt);
   ui.frame(dt);
   pBudget = 2; for (const id of [...pQueue].sort((a, b) => (b === selected ? 1 : 0) - (a === selected ? 1 : 0)).slice(0, 2)) portrait(id); pBudget = 2;
@@ -346,7 +391,7 @@ function frame(now: number) {
   fastForward(minutes: number, coarse = false) { ui.quiet = true; if (coarse) stepSimCoarse(minutes / MIN_PER_SEC); else { const n = Math.round(minutes / MIN_PER_SEC / SIM_H); for (let i = 0; i < n; i++) { sim.step(SIM_H); tickTraveller(sim); tickFestival(sim); } } ui.quiet = false; for (const v of sim.villagers) syncAvatar(v, .016); },
   look(x: number, z: number, dist = 30, yaw = .6, pitch = .9) { endIntro(); follow = null; focusTarget = null; mode = 'free'; controls.target.set(x, 0, z); camera.position.set(x + Math.sin(yaw) * Math.cos(pitch) * dist, Math.sin(pitch) * dist, z + Math.cos(yaw) * Math.cos(pitch) * dist); controls.update(); },
   closeUp(id: string, dist = 3.2, side = .3) { const v = sim.byId.get(id)!; follow = null; focusTarget = null; mode = 'free'; const hd = v.avatar.heading; const hy = v.avatar.height * .8; controls.target.set(v.x, hy, v.z); camera.position.set(v.x + Math.sin(hd + side) * dist, hy + .5, v.z + Math.cos(hd + side) * dist); controls.update(); },
-  beat(id?: number) { const e = id === undefined ? [...sim.events].reverse().find(x => beatTitle(x)) : sim.events.find(x => x.id === id); mode = 'director'; selected = null; return e ? startBeat(e, true) : false; }, get beatOn() { return !!beat; }, strike: () => sky.strike(),
+  beat(id?: number) { const e = id === undefined ? [...sim.events].reverse().find(x => beatTitle(x)) : sim.events.find(x => x.id === id); mode = 'director'; selected = null; return e ? startBeat(e, true) : false; }, get beatOn() { return !!beat; }, montage: (day?: number) => startMontage(day ?? Math.max(1, sim.day - 1)), get montageOn() { return !!montage; }, rainbow: () => { ambient?.force(controls.target, camera.position); afterRain(); }, ambient: () => ambient, strike: () => sky.strike(),
   forceExpr(id: string, expr: string) { forced.set(id, { expr, until: 0 }); }, clearExpr() { forced.clear(); },
   enableLLM(cfg: LLMConfig) { localStorage.setItem('terrarium.llm', JSON.stringify(cfg)); sim.brain = new LLMBrain(cfg); console.info('LLM brain enabled (plans + reflections).'); },
   disableLLM() { localStorage.removeItem('terrarium.llm'); sim.brain = new UtilityBrain(); },

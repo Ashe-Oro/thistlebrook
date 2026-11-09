@@ -191,3 +191,10 @@ body.intro .feedwrap, body.intro .lb, body.intro .card, body.intro .dock, body.i
   .card .need { display: none; } .card .doing { margin: 0 0 4px; font-size: 12.5px; }
 }
 @media (max-width: 700px), (pointer: coarse) { .paper .cols p { text-align: left; } .paper .dateline { letter-spacing: 1px; } }
+/* dawn montage: a warm "memory" grade and quick flash cuts */
+body.montage canvas { filter: sepia(.42) saturate(.85) contrast(1.06) brightness(1.03); transition: filter .6s; }
+body.montage .feedwrap, body.montage .lb, body.montage .card, body.montage .dock, body.montage .hint, body.montage .caption { opacity: 0 !important; pointer-events: none; transition: opacity .5s; }
+.cine.cut::after { content: ''; position: absolute; inset: 0; background: #fff8e8; animation: cutflash .45s ease-out forwards; }
+@keyframes cutflash { from { opacity: .55; } to { opacity: 0; } }
+.cine .ct span { white-space: normal; max-height: 2.7em; }
+@media (min-width: 701px) and (pointer: fine) { .hint { left: 12px; transform: none; } }
