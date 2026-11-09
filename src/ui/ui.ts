@@ -4,6 +4,8 @@ import type { Director, Paper } from '../sim/director';
 import { JOB_INFO, GOAL_LABEL } from '../data/villagers';
 import { fmtTime, dayOf } from '../core/util';
 import { drawWeb } from './web';
+import { arcs } from '../sim/arcs';
+import type { Arc } from '../sim/arcs';
 
 export const VCOLOR: Record<string, string> = { mara: '#e8875b', tom: '#6c8fd1', jen: '#c96bd6', ollie: '#d8b23b', pip: '#6dbb5a', rosa: '#d4574a', wren: '#5fc0c4', edgar: '#a98a62' };
 const h = (tag: string, cls = '', html = '') => { const e = document.createElement(tag); if (cls) e.className = cls; if (html) e.innerHTML = html; return e; };
@@ -20,6 +22,7 @@ export class UI {
   constructor(public app: AppApi, parent: HTMLElement) {
     this.root = h('div', 'ui'); parent.appendChild(this.root); this.build();
     const s = app.sim;
+    arcs(s); // create the arc tracker first so it ingests each event before the feed renders its chip
     s.on('event', (e: SimEvent) => this.addFeed(e)); s.on('eventUpdate', (e: SimEvent) => this.updateFeed(e));
     s.on('bubble', (v: Villager, text: string, emoji: string, dur: number) => this.bubble(v.id, text, emoji, dur));
     s.on('icon', (v: Villager, emoji: string) => this.icon(v.id, emoji));
@@ -68,6 +71,7 @@ export class UI {
     const txt = lie ? e.text.replace(/\s*\(It isn't true\.\)\s*/i, ' ').trim() : e.text;
     el.innerHTML = `<span class="t">${fmtTime(e.t)}</span><span class="ic">${e.icon}</span><span class="tx">${this.linkify(txt)}${lie ? ' <span class="badge false" title="A fabricated rumour — not actually true">false rumour</span>' : ''}</span>`;
     el.querySelectorAll<HTMLElement>('.nm').forEach(a => a.onclick = (ev) => { ev.stopPropagation(); this.app.select(a.dataset.id!); });
+    this.arcChip(el, e.id);
     if (this.feedFilter !== 'all' && this.feedFilter !== cat) el.style.display = 'none';
     this.feed.prepend(el); while (this.feed.children.length > 160) this.feed.lastChild!.remove();
     // only promote to the big caption when the event isn't already the visible top of the chronicle
@@ -76,6 +80,22 @@ export class UI {
   }
   updateFeed(e: SimEvent) { const el = this.feed.querySelector<HTMLElement>(`[data-id="${e.id}"] .tx`); if (el) { const lie = this.isLie(e); const txt = lie ? e.text.replace(/\s*\(It isn't true\.\)\s*/i, ' ').trim() : e.text; el.innerHTML = `${this.linkify(txt)}${lie ? ' <span class="badge false" title="A fabricated rumour — not actually true">false rumour</span>' : ''}`; el.querySelectorAll<HTMLElement>('.nm').forEach(a => a.onclick = (ev) => { ev.stopPropagation(); this.app.select(a.dataset.id!); }); } }
   refilter() { this.feed.querySelectorAll<HTMLElement>('.ev').forEach(el => el.style.display = this.feedFilter === 'all' || el.dataset.cat === this.feedFilter ? '' : 'none'); }
+  // small arc chip under a feed row once its story has shape (>= 2 beats): "📖 The Missing Geode · beat 3"
+  arcChip(el: HTMLElement, eventId: number) {
+    const hit = arcs(this.app.sim).arcForEvent(eventId); if (!hit || hit.arc.beats.length < 2) return;
+    const chip = h('a', 'arcchip', `📖 ${esc(hit.arc.title)} · beat ${hit.beatNo}`); chip.title = 'Open this story';
+    chip.onclick = (ev) => { ev.stopPropagation(); this.showArc(hit.arc.id); };
+    el.appendChild(chip);
+  }
+  showArc(arcId: string) {
+    const s = this.app.sim, at = arcs(s), arc = at.arcs.find(a => a.id === arcId); if (!arc) return;
+    this.modal.classList.remove('hidden');
+    this.modal.innerHTML = `<div class="sheet arcview"><button class="x">✕</button><div class="archd"><span class="status ${arc.status}">${arc.status}</span><h2>📖 ${esc(arc.title)}</h2></div>
+      <div class="cast">${[...arc.actors].filter(a => s.byId.get(a)).map(a => `<span class="nm" data-id="${a}" style="--c:${VCOLOR[a]}">${s.byId.get(a)!.first}</span>`).join('')}</div>
+      <div class="arctl">${arc.beats.map((b, i) => `<div class="beat"><span class="dot">${b.icon}</span><div class="bbody"><div class="bhd"><span class="bno">Beat ${i + 1}</span><span class="blabel">${esc(b.beat)}</span><span class="t">${fmtTime(b.t)}</span></div><div class="btx">${this.linkify(b.text.replace(/\s*\(It isn't true\.\)\s*/i, ' ').trim())}</div></div></div>`).join('')}</div></div>`;
+    this.modal.querySelectorAll<HTMLElement>('.nm').forEach(a => a.onclick = () => { this.closeModal(); this.app.select(a.dataset.id!); });
+    this.modal.querySelector('.x')?.addEventListener('click', () => this.closeModal());
+  }
   captionTO: any; captionText(html: string) { this.caption.innerHTML = html; this.caption.classList.add('show'); clearTimeout(this.captionTO); this.captionTO = setTimeout(() => this.caption.classList.remove('show'), 6000); }
   toastQ: [string, string][] = []; quiet = false;
   toast(title: string, desc: string) { if (this.quiet) return; if (this.toasts.children.length >= 2) { if (this.toastQ.length < 6) this.toastQ.push([title, desc]); return; } const t = h('div', 'toast', `<b>${title}</b><span>${this.linkify(desc)}</span>`); this.toasts.appendChild(t); this.app.sound.play('toast'); setTimeout(() => t.classList.add('out'), 4200); setTimeout(() => { t.remove(); const n = this.toastQ.shift(); if (n) this.toast(n[0], n[1]); }, 5000); }
@@ -185,16 +205,25 @@ export class UI {
   showPaper(p: Paper) {
     this.modal.classList.remove('hidden'); this.app.sound.play('paper');
     this.modal.innerHTML = `<div class="sheet paper"><button class="x">✕</button><div class="mast">The Thistlebrook Gazette</div><div class="dateline">Day ${p.day + 1} · Village morning edition · Weather: ${p.weather}</div><h1>${this.linkify(p.headline)}</h1>
+      ${p.lead ? `<p class="lead">${this.linkify(p.lead)}</p>` : ''}
       <div class="cols"><div>${p.stories.map(x => `<p>${x.icon} ${this.linkify(x.text)}</p>`).join('') || '<p>All quiet on the village front.</p>'}</div><div class="side"><h3>Standings</h3><p>❤️ Best-loved: <b>${p.leaders.popular}</b></p><p>👑 Most influential: <b>${p.leaders.power}</b></p><p>😈 Most mischievous: <b>${p.leaders.mischief}</b></p>${p.couples ? `<p>💞 Sweethearts: <b>${p.couples}</b></p>` : ''}${p.quote ? `<h3>Overheard</h3><p class="q">“${esc(p.quote.text)}”<br>— ${p.quote.who}</p>` : ''}</div></div></div>`;
     this.modal.querySelector('.x')?.addEventListener('click', () => this.closeModal());
   }
   showRecap() {
     const s = this.app.sim; const days = Object.keys(s.dayStats).map(Number).sort((a, b) => a - b);
-    this.modal.innerHTML = `<div class="sheet recap"><button class="x">✕</button><h2>📈 The story so far</h2><canvas width="760" height="220"></canvas><div class="legend">${s.villagers.map(v => `<span><i style="background:${VCOLOR[v.id]}"></i>${v.first}</span>`).join('')}</div>
+    const at = arcs(s), top = at.top(4, 2);
+    const statusLabel: Record<Arc['status'], string> = { brewing: 'brewing', open: 'ongoing', resolved: 'resolved' };
+    const stories = top.length ? `<div class="stories">${top.map(a => `<div class="storyc" data-arc="${a.id}"><div class="shd"><span class="status ${a.status}">${statusLabel[a.status]}</span><b>📖 ${esc(a.title)}</b></div><div class="mini">${a.beats.map(b => `<span class="mb" title="${esc(b.beat)} · ${fmtTime(b.t)}">${b.icon}</span>`).join('<span class="arr">→</span>')}</div><div class="latest">${this.linkify(a.beats[a.beats.length - 1].text.replace(/\s*\(It isn't true\.\)\s*/i, ' ').trim())}</div></div>`).join('')}</div>` : '<p class="muted">No stories have taken shape yet — give the village time.</p>';
+    this.modal.innerHTML = `<div class="sheet recap"><button class="x">✕</button><h2>📖 This week’s stories</h2>${stories}
+      <h2>📈 The story so far</h2><canvas width="760" height="220"></canvas><div class="legend">${s.villagers.map(v => `<span><i style="background:${VCOLOR[v.id]}"></i>${v.first}</span>`).join('')}</div>
       <div class="timeline">${days.map(d => `<div class="day"><h3>Day ${d}</h3>${(s.dayStats[d] ?? []).filter(e => e.imp >= 5).slice(0, 8).map(e => `<p><span class="t">${fmtTime(e.t)}</span> ${e.icon} ${this.linkify(e.text)}</p>`).join('') || '<p class="muted">A quiet day.</p>'}</div>`).join('')}</div></div>`;
+    this.modal.querySelectorAll<HTMLElement>('.storyc').forEach(el => el.onclick = () => this.showArc(el.dataset.arc!));
     const c = this.modal.querySelector('canvas')!, g = c.getContext('2d')!, H = s.history; if (H.length > 1) { const max = Math.max(1, ...H.flatMap(x => Object.values(x.pop).map(Math.abs))); g.fillStyle = '#fbf4e4'; g.fillRect(0, 0, c.width, c.height); g.strokeStyle = '#d9cdb3'; g.font = '12px sans-serif'; g.fillStyle = '#8a7a5a';
+      const xOf = (t: number) => { let i = H.findIndex(x => x.t >= t); if (i < 0) i = H.length - 1; return 30 + i / (H.length - 1) * (c.width - 40); };
       for (const d of days) { const i = H.findIndex(x => x.t >= (d - 1) * 1440 + 360); if (i < 0) continue; const x = 30 + i / (H.length - 1) * (c.width - 40); g.beginPath(); g.moveTo(x, 10); g.lineTo(x, c.height - 20); g.stroke(); g.fillText(`Day ${d}`, x + 4, c.height - 6); }
       for (const v of s.villagers) { g.strokeStyle = VCOLOR[v.id]; g.lineWidth = 2.5; g.beginPath(); H.forEach((x, i) => { const px = 30 + i / (H.length - 1) * (c.width - 40), py = (c.height - 20) / 2 + 2 - (x.pop[v.id] / max) * ((c.height - 40) / 2); i ? g.lineTo(px, py) : g.moveTo(px, py); }); g.stroke(); }
+      // markers: a small flag at each beat of the top stories, so graph swings line up with events
+      for (const a of top) for (const b of a.beats) { const x = xOf(b.t); g.fillStyle = '#b07d3a'; g.beginPath(); g.moveTo(x, 8); g.lineTo(x - 3, 2); g.lineTo(x + 3, 2); g.closePath(); g.fill(); g.strokeStyle = '#d9cdb3'; g.setLineDash([2, 3]); g.beginPath(); g.moveTo(x, 8); g.lineTo(x, c.height - 20); g.stroke(); g.setLineDash([]); }
       g.fillStyle = '#8a7a5a'; g.fillText('How liked (village average opinion)', 4, 14); g.strokeStyle = '#cbbd9c'; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(30, (c.height - 20) / 2 + 2); g.lineTo(c.width - 10, (c.height - 20) / 2 + 2); g.stroke(); g.setLineDash([]); }
     this.modal.querySelector('.x')?.addEventListener('click', () => this.closeModal());
   }

@@ -102,3 +102,26 @@ button:hover { background: #fff; transform: translateY(-1px); } button.on { back
 .card .it.hot em { color: #b4532f; font-style: normal; font-weight: 600; }
 .card .it.miss { background: #f3ecdf; color: #8a6d4a; border-style: dashed; }
 .card .it.love { background: #fde4ef; border-color: #f0a8c8; color: #9b3a68; }
+
+/* ---- Story arcs ---- */
+.arcchip { grid-column: 3 / -1; justify-self: start; margin-top: 3px; font-size: 10.5px; font-weight: 600; color: #7a5a2c; background: #f6ead0; border: 1px solid #e0c899; border-radius: 10px; padding: 1px 8px; cursor: pointer; text-decoration: none; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.arcchip:hover { background: #fff2d6; border-color: var(--accent); color: var(--accent); }
+.status { display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; padding: 1px 7px; border-radius: 9px; vertical-align: middle; margin-right: 8px; }
+.status.brewing { background: #efe4cb; color: #8a6d3a; } .status.open { background: #ffe6c2; color: #b06a1e; } .status.resolved { background: #dcecda; color: #4a7a44; }
+
+.arcview { width: 560px; max-width: 94vw; } .arcview .archd { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; } .arcview .archd h2 { margin: 0; }
+.arcview .cast { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 14px; } .arcview .cast .nm { background: #fff; border: 1px solid var(--edge); border-radius: 12px; padding: 1px 9px; }
+.arctl { position: relative; padding-left: 6px; } .arctl .beat { display: grid; grid-template-columns: 30px 1fr; gap: 8px; padding: 0 0 12px; position: relative; }
+.arctl .beat::before { content: ''; position: absolute; left: 14px; top: 22px; bottom: -2px; width: 2px; background: var(--edge); } .arctl .beat:last-child::before { display: none; }
+.arctl .beat .dot { width: 28px; height: 28px; border-radius: 50%; background: var(--paper2); border: 1px solid var(--edge); display: flex; align-items: center; justify-content: center; font-size: 15px; z-index: 1; }
+.arctl .bhd { display: flex; align-items: baseline; gap: 8px; } .arctl .bno { font: 700 11px var(--serif); color: var(--accent); } .arctl .blabel { font-weight: 700; font-size: 12px; color: #6d5a3c; } .arctl .bhd .t { color: #9b8762; font-size: 11px; margin-left: auto; } .arctl .btx { font-size: 13px; margin-top: 1px; }
+
+.paper .lead { font-style: italic; font-size: 14.5px; line-height: 1.5; border-left: 3px solid var(--accent); padding: 2px 0 2px 12px; margin: 0 0 14px; color: #4a3a26; }
+
+.recap .stories { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 4px 0 16px; }
+.recap .storyc { background: var(--paper2); border: 1px solid var(--edge); border-radius: 12px; padding: 9px 12px; cursor: pointer; transition: transform .12s, box-shadow .2s; }
+.recap .storyc:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(40, 25, 10, .18); }
+.recap .storyc .shd { display: flex; align-items: center; margin-bottom: 5px; } .recap .storyc .shd b { font: 700 14px var(--serif); }
+.recap .mini { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; margin-bottom: 5px; } .recap .mb { font-size: 15px; } .recap .arr { color: #b9a479; font-size: 11px; margin: 0 1px; }
+.recap .latest { font-size: 12px; color: #6d5a3c; }
+@media (max-width: 640px) { .recap .stories { grid-template-columns: 1fr; } }
