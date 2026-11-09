@@ -57,23 +57,22 @@ async function boot() {
 let speed = 1, mode: 'director' | 'free' = params.get('cam') === 'free' ? 'free' : 'director', selected: string | null = null; let acc = 0; let follow: string | null = null; let dirT = 0;
 const director = new Director(sim);
 const pcam = new THREE.PerspectiveCamera(15, 1, .3, 40); const portraits = new Map<string, HTMLCanvasElement>(); const pTime = new Map<string, number>();
-// Portraits are shot in a tiny studio scene (cream backdrop, key + fill), so a villager indoors, at night or
-// behind a lamp post still gets a clean, recognisable headshot.
-const pscene = new THREE.Scene(); pscene.background = new THREE.Color('#efe3c8');
-{ pscene.add(new THREE.HemisphereLight('#ffffff', '#b8a07a', 1.7)); const key = new THREE.DirectionalLight('#fff1dc', 2.4); key.position.set(1.6, 2.6, 2.4); pscene.add(key); const fill = new THREE.DirectionalLight('#dfe9ff', .9); fill.position.set(-2, 1.2, 1.5); pscene.add(fill); }
-const pSave = new THREE.Vector3();
+// Portraits: the villager is lifted to a 'studio' spot high above the town for one render (lit by the real sun and sky,
+// framed against the sky dome), so indoor, night-time or occluded villagers still get a clean headshot.
+const pSave = new THREE.Vector3(); const PBG = new THREE.Color('#efe3c8');
+const pKey = new THREE.DirectionalLight('#fff1dc', 0); scene.add(pKey, pKey.target);
 function portrait(id: string) {
   let c = portraits.get(id); if (!c) { c = document.createElement('canvas'); c.width = c.height = 192; c.className = 'portrait'; portraits.set(id, c); }
   const v = sim.byId.get(id)!; const now = performance.now(); if (now - (pTime.get(id) ?? 0) < 400) return c; pTime.set(id, now);
-  const r = v.avatar.root as THREE.Object3D, parent = r.parent, rotY = r.rotation.y, wasVis = r.visible, oldA = v.avatar.alpha; pSave.copy(r.position);
-  ((window as any)._pmain ? scene : pscene).add(r); r.position.set(0, 0, 0); r.rotation.y = 0; r.visible = true; for (const m of v.avatar.mats) { m.opacity = 1; m.transparent = false; } r.updateMatrixWorld(true);
+  const r = v.avatar.root as THREE.Object3D, rotY = r.rotation.y, wasVis = r.visible, oldA = v.avatar.alpha; pSave.copy(r.position);
+  const st = controls.target; r.position.set(st.x, 80, st.z); r.rotation.y = 0; r.visible = true; const tf = v.avatar.mats.map((m: THREE.Material) => [m.transparent, m.opacity, m.depthWrite] as const); if (oldA < 1) for (const m of v.avatar.mats) { m.opacity = 1; m.transparent = m.name === 'face'; m.depthWrite = m.name !== 'face'; } r.updateMatrixWorld(true);
   const head = new THREE.Vector3(); v.avatar.bones.Head.getWorldPosition(head); head.y += .12;
-  pcam.position.set(Math.sin(.35) * 2.4, head.y + .12, Math.cos(.35) * 2.4); pcam.lookAt(head.x, head.y - .02, head.z); pcam.updateMatrixWorld();
+  pcam.position.set(head.x + Math.sin(.35) * 2.7, head.y + .14, head.z + Math.cos(.35) * 2.7); pcam.lookAt(head.x, head.y + .02, head.z); pcam.updateMatrixWorld();
   // drawn straight into a corner of the main canvas and copied out in the same task (the next main render paints over it);
   // render targets lose the face decal's blending, which left every portrait with a black face
   const pr = renderer.getPixelRatio(), cs = 192 / pr, H = renderer.domElement.height;
-  renderer.setScissorTest(true); renderer.setScissor(0, 0, cs, cs); renderer.setViewport(0, 0, cs, cs); const ol = (r as any).getObjectByName('CharacterOutline'); if (ol) ol.visible = false; renderer.render((window as any)._pmain ? scene : pscene, pcam); if (ol) ol.visible = true;
-  (parent ?? scene).add(r); r.position.copy(pSave); r.rotation.y = rotY; r.visible = wasVis; if (oldA < 1) for (const m of v.avatar.mats) { m.opacity = oldA; m.transparent = true; } r.updateMatrixWorld(true);
+  renderer.setScissorTest(true); renderer.setScissor(0, 0, cs, cs); renderer.setViewport(0, 0, cs, cs); const ol = (r as any).getObjectByName('CharacterOutline'); if (ol) ol.visible = false; const bg = scene.background; scene.background = PBG; sky.dome.visible = false; sky.stars.visible = false; pKey.position.set(head.x + 1.6, head.y + 2.4, head.z + 2.6); pKey.target.position.copy(head); pKey.target.updateMatrixWorld(); pKey.intensity = 1.2 + sky.night * 1.6; renderer.render(scene, pcam); pKey.intensity = 0; scene.background = bg; sky.dome.visible = true; sky.stars.visible = sky.night > .01; if (ol) ol.visible = true;
+  r.position.copy(pSave); r.rotation.y = rotY; r.visible = wasVis; v.avatar.mats.forEach((m: THREE.Material, i: number) => { m.transparent = tf[i][0]; m.opacity = tf[i][1]; m.depthWrite = tf[i][2]; }); r.updateMatrixWorld(true);
   c.getContext('2d')!.drawImage(renderer.domElement, 0, H - 192, 192, 192, 0, 0, 192, 192);
   renderer.setScissorTest(false); renderer.setViewport(0, 0, renderer.domElement.width / pr, renderer.domElement.height / pr);
   return c;
@@ -111,7 +110,7 @@ function exprFor(v: Villager): string {
 const WORK_TOOLS: Record<string, string> = { chop: 'axe', mine: 'pickaxe', hammer: 'hammer', hoe: 'hoe', water: 'can', feed: 'basket', drink: 'mug' };
 function syncAvatar(v: Villager, dt: number) {
   const av = v.avatar; av.root.position.set(v.x, 0, v.z); av.targetHeading = v.heading; av.anim = v.anim as any;
-  av.targetAlpha = v.inside ? 0 : 1; av.sitH = v.anim === 'sit' && v.seat ? v.seat.y + .04 : .5;
+  av.targetAlpha = v.inside ? 0 : 1; av.seated = !!v.seat && v.anim !== 'walk' && v.anim !== 'run' && Math.hypot(v.x - v.seat.x, v.z - v.seat.z) < .35; av.sitH = (v.anim === 'sit' || av.seated) && v.seat ? v.seat.y + .04 : .5;
   const tool = WORK_TOOLS[v.anim] ?? ''; if (av.toolKind !== tool && !(window as any).__noTool) av.setTool(tool);
   const busyHands = ['chop', 'mine', 'hammer', 'hoe', 'water', 'feed', 'sit', 'fight', 'dance', 'cheer', 'pickup'].includes(v.anim);
   av.setCarry(busyHands ? '' : sim.carryFor(v));

@@ -74,7 +74,7 @@ export class Avatar {
     const changed = A !== this.previousAnim; this.previousAnim = A;
     // heading ease
     const dh = Math.atan2(Math.sin(this.targetHeading - this.heading), Math.cos(this.targetHeading - this.heading)); this.heading += dh * Math.min(1, dt * 9); this.root.rotation.y = this.heading;
-    if (Math.abs(this.targetAlpha - this.alpha) > .001) { this.alpha += (this.targetAlpha - this.alpha) * Math.min(1, dt * 5); const a = this.alpha; this.root.visible = a > .03; for (const m of this.mats) { m.transparent = a < .99; m.opacity = a; m.depthWrite = a > .5; } }
+    if (Math.abs(this.targetAlpha - this.alpha) > .001) { this.alpha += (this.targetAlpha - this.alpha) * Math.min(1, dt * 5); const a = this.alpha; this.root.visible = a > .03; for (const m of this.mats) { const face = m.name === 'face'; m.transparent = a < .99 || face; m.opacity = a; m.depthWrite = a > .5 && !face; } }
     for (const [b, q] of this.bind) b.quaternion.copy(q);
     let hipY = 0, spineX = 0, headX = 0, headY = 0, hipRot = 0;
     const breathe = Math.sin(p * 2.2) * .02;
