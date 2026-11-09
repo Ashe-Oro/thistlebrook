@@ -3,6 +3,7 @@ import type { Villager, Action } from './types';
 import { JOB_INFO } from '../data/villagers';
 import type { Fact } from '../agents/memory';
 import { clamp } from '../core/util';
+import { say, smalltalk, pr } from './lines';
 
 const COLORS = ['#e05a47', '#3f7fd6', '#e0b13a', '#8a4fc9', '#2fa37a', '#e57fb0'];
 const ALLIANCE_NAMES = ['the Lantern Pact', 'the Copper Circle', 'the Hearth Guild', 'the Oak Accord', 'the Thistle League', 'the Ember Society'];
@@ -33,21 +34,21 @@ export function pendingInvite(v: Villager, t: Villager, sim: Sim): Fact | null {
 export function resolveSocial(sim: Sim, v: Villager, t: Villager, a: Action): number {
   const R = sim.rng; v.lastSocial[t.id] = sim.clock; t.lastSocial[v.id] = sim.clock;
   const soc = (x: Villager, n: number) => x.needs.social = Math.min(100, x.needs.social + n);
-  const hi = R.pick([`Morning, ${t.first}!`, `Hey ${t.first}!`, `${t.first}! Got a minute?`, `Fine day, ${t.first}.`]);
+  const hi = say(sim, v, 'greeting', { t: t.first });
   switch (a.kind ?? a.type) {
     case 'chat': {
       soc(v, 30); soc(t, 25); const compat = 1 - Math.abs(v.traits.sociability - t.traits.sociability) - Math.abs(v.traits.kindness - t.traits.kindness) * .5;
       const grumpy = (v.needs.food < 30 || v.needs.energy < 25 ? v.traits.temper : 0) + (t.needs.food < 30 || t.needs.energy < 25 ? t.traits.temper : 0); const d = Math.round(compat * 6 + R.range(-3, 3) - grumpy * 8); bump(sim, v, t, d); bump(sim, t, v, d);
       const topics: Line[][] = [
-        [[v, hi, '👋'], [t, R.pick(['Busy day!', 'Can\u2019t complain.', 'Did you see the sky this morning?']), '🙂'], [v, R.pick(v.def.catchphrases), '💬'], [t, d > 2 ? 'Ha! Exactly.' : 'Hmm, if you say so.', d > 2 ? '😄' : '😐']],
-        [[v, hi, '👋'], [t, R.pick(['The bread smelled amazing today.', 'The hens were extra loud today.', 'My back is killing me.', 'Heard any news?']), '💬'], [v, R.pick(['Tell me about it.', 'Same here!', 'Really?']), '😮'], [t, R.pick(t.def.catchphrases), '😄']],
+        [[v, hi, '👋'], [t, smalltalk(sim, t), '🙂'], [v, R.pick(v.def.catchphrases), '💬'], [t, d > 2 ? say(sim, t, 'agree') : say(sim, t, 'disagree'), d > 2 ? '😄' : '😐']],
+        [[v, hi, '👋'], [t, smalltalk(sim, t), '💬'], [v, say(sim, v, 'chatReact'), '😮'], [t, R.pick(t.def.catchphrases), '😄']],
       ];
       const lines = R.pick(topics);
       // share a bit of gossip if they have any (Smallville: conversations spread information)
       const g = pickGossip(v, t, sim); let extra = 0;
       if (g && R.chance(.35 + v.traits.sociability * .4)) { extra = tellGossip(sim, v, t, g, lines); }
       const inv = pendingInvite(v, t, sim); if (inv) extra += tellInvite(sim, v, t, inv, lines);
-      if (d < -3) { lines[lines.length - 1] = [t, R.pick(['Not now, I\u2019m not in the mood.', 'Do you ever stop talking?', 'Ugh. Whatever.']), '😒']; v.emotions.anger += .25; }
+      if (d < -3) { lines[lines.length - 1] = [t, say(sim, t, 'snap'), '😒']; v.emotions.anger += .25; }
       if (!g && !inv && d >= 2 && R.chance(.25)) sim.log(`${v.first} and ${t.first} had a friendly chat${R.chance(.5) ? ' by ' + nearPlace(sim, v) : ''}.`, 1, [v.id, t.id], 'talk', '💬');
       if (d < -3) { sim.log(`${t.first} snapped at ${v.first} — someone got out of bed on the wrong side.`, 3, [t.id, v.id], 'talk', '😒'); v.mem.add(sim.clock, `${t.first} snapped at me`, 4, [t.id], -.5); } else if (d < -1) { sim.log(`${v.first} and ${t.first}'s chat turned awkward.`, 2, [v.id, t.id], 'talk', '😬'); }
       v.mem.add(sim.clock, `Chatted with ${t.first}`, 2, [t.id], d / 10); t.mem.add(sim.clock, `Chatted with ${v.first}`, 2, [v.id], d / 10);
@@ -62,13 +63,13 @@ export function resolveSocial(sim: Sim, v: Villager, t: Villager, a: Action): nu
       const f = sim.fact('deed', romantic ? `${v.first} gave ${t.first} ${what} and blushed` : `${v.first} gave ${t.first} ${what}`, v.id, v.id, romantic ? .2 : .5, romantic ? 6 : 2, t.id); if (romantic) (f as any).romance = true;
       sim.witness(`${v.first} gave ${t.first} ${what}`, 4, [v.id, t.id], { [t.id]: .8, [v.id]: .4, '*': .2 }, t.x, t.z, f, 10);
       if (v.stats.gifts >= 5) sim.achieve(v, 'generous', 'Generous Soul', `${v.first} has given 5 gifts`);
-      return convo(sim, [[v, romantic ? R.pick(['I, um, made this for you.', 'This made me think of you.', 'For you. Only you.']) : R.pick([`For you, ${t.first}!`, 'I thought you could use this.', 'A little something!']), icon], [t, R.pick(['Oh! You shouldn\u2019t have!', 'That\u2019s so kind!', 'You\u2019re a treasure.']), romantic ? '😳' : '🥰'], [v, romantic ? '...' : 'Anytime.', '😊']]);
+      return convo(sim, [[v, say(sim, v, romantic ? 'giftGiveRomantic' : 'giftGiveNormal', { t: t.first }), icon], [t, say(sim, t, romantic ? 'giftReceiveRomantic' : 'giftReceiveNormal', { v: v.first }), romantic ? '😳' : '🥰'], [v, romantic ? '...' : 'Anytime.', '😊']]);
     }
     case 'flirt': {
       soc(v, 20); soc(t, 15); const recept = op(t, v) + (t.crush === v.id ? 30 : 0) + t.traits.sociability * 20 - (t.partner && t.partner !== v.id ? 60 : 0) + R.range(-15, 15);
-      const lines: Line[] = [[v, R.pick([`You look nice today, ${t.first}.`, 'Walk with me a while?', `I saved you the good seat, ${t.first}.`, 'Your laugh is the best sound in the village.']), '💗']];
-      if (recept > 30) { bump(sim, t, v, 7); bump(sim, v, t, 4); t.emotions.love = Math.min(1, t.emotions.love + .5); v.emotions.love = Math.min(1, v.emotions.love + .6); sim.icon(v, '💗'); sim.icon(t, '😊'); lines.push([t, R.pick(['Oh, stop it...', 'You\u2019re sweet.', 'I\u2019d like that.']), '😊']); if (op(t, v) > 55 && !t.crush && !t.partner && !t.family.includes(v.id) && t.def.age !== 'teen') t.crush = v.id; }
-      else { bump(sim, v, t, -2); v.emotions.sadness += .2; lines.push([t, R.pick(['Uh... thanks?', 'I should get back to work.', 'Mm-hm.']), '😅']); }
+      const lines: Line[] = [[v, say(sim, v, 'flirt', { t: t.first }), '💗']];
+      if (recept > 30) { bump(sim, t, v, 7); bump(sim, v, t, 4); t.emotions.love = Math.min(1, t.emotions.love + .5); v.emotions.love = Math.min(1, v.emotions.love + .6); sim.icon(v, '💗'); sim.icon(t, '😊'); lines.push([t, say(sim, t, 'flirtWarm'), '😊']); if (op(t, v) > 55 && !t.crush && !t.partner && !t.family.includes(v.id) && t.def.age !== 'teen') t.crush = v.id; }
+      else { bump(sim, v, t, -2); v.emotions.sadness += .2; lines.push([t, say(sim, t, 'flirtAwkward'), '😅']); }
       const f = sim.fact('deed', `${v.first} has been sweet-talking ${t.first}`, v.id, v.id, .1, 5, t.id); (f as any).romance = true; v.mem.learn(f); sim.witness(`${v.first} flirted with ${t.first}`, 4, [v.id, t.id], { [v.id]: .4, [t.id]: recept > 30 ? .5 : -.1 }, v.x, v.z, f, 9);
       if (recept > 30 && R.chance(.45)) sim.log(`${v.first} was flirting with ${t.first} ${R.pick(['by the well', 'in plain sight', 'again', 'and fooling nobody'])}.`, 3, [v.id, t.id], 'romance', '💗');
       else if (recept <= 30 && R.chance(.5)) sim.log(`${v.first} tried a sweet line on ${t.first}. It did not land.`, 3, [v.id, t.id], 'romance', '😅');
@@ -79,16 +80,16 @@ export function resolveSocial(sim: Sim, v: Villager, t: Villager, a: Action): nu
       if (yes) {
         if (v.partner) { const ex = sim.byId.get(v.partner); if (ex) sim.breakUp(v, ex); }
         sim.couple(v, t); bump(sim, v, t, 15); bump(sim, t, v, 15); v.emotions.love = t.emotions.love = 1; v.emotions.joy = t.emotions.joy = 1; sim.icon(v, '💞'); sim.icon(t, '💞'); sim.world.fx.sparkle(t.x, 1.8, t.z, [1, .5, .7], 26);
-        sim.log(`${v.first} confessed their feelings to ${t.first}, and ${t.first} said yes! Thistlebrook has new sweethearts.`, 9, [v.id, t.id], 'romance', '💞'); sim.achieve(null, `couple-${[v.id, t.id].sort().join('-')}`, 'Sweethearts', `${v.first} & ${t.first}`);
+        sim.log(`${v.first} confessed ${pr(v).pos} feelings to ${t.first}, and ${t.first} said yes! Thistlebrook has new sweethearts.`, 9, [v.id, t.id], 'romance', '💞'); sim.achieve(null, `couple-${[v.id, t.id].sort().join('-')}`, 'Sweethearts', `${v.first} & ${t.first}`);
         const f = sim.fact('news', `${v.first} and ${t.first} are sweethearts now`, v.id, v.id, .4, 8, t.id); (f as any).romance = true; sim.witness(`${v.first} and ${t.first} became sweethearts`, 8, [v.id, t.id], { [v.id]: 1, [t.id]: 1, '*': .2 }, v.x, v.z, f, 14);
-        return convo(sim, [[v, `${t.first}... I can\u2019t keep it in any longer. I like you. A lot.`, '💗'], [t, 'You... really? Because I feel the same.', '🥹'], [v, 'Really?!', '😳'], [t, 'Really.', '💞']], 5);
+        return convo(sim, [[v, say(sim, v, 'confess', { t: t.first }), '💗'], [t, say(sim, t, 'confessYes'), '🥹'], [v, 'Really?!', '😳'], [t, 'Really.', '💞']], 5);
       }
       v.crush = null; v.heartbreak = sim.clock + 1440; v.emotions.sadness = 1; v.emotions.love = 0; bump(sim, v, t, -8); sim.icon(v, '💔');
       v.mem.add(sim.clock, `I told ${t.first} how I feel. ${t.first} said no.`, 9, [t.id], -.6, 'feeling');
-      sim.log(`${v.first} poured their heart out to ${t.first}, who let them down gently. ${v.first} walked home alone.`, 8, [v.id, t.id], 'romance', '💔'); sim.achieve(v, 'heartbreak', 'Heartbreak', `${v.first} was turned down`);
+      sim.log(`${v.first} poured ${pr(v).pos} heart out to ${t.first}, who let ${pr(v).obj} down gently. ${v.first} walked home alone.`, 8, [v.id, t.id], 'romance', '💔'); sim.achieve(v, 'heartbreak', 'Heartbreak', `${v.first} was turned down`);
       const f = sim.fact('deed', `${v.first} confessed to ${t.first} and got turned down`, v.id, v.id, -.2, 7, t.id); t.mem.learn(f);
       a.after = () => { v.queue.unshift({ type: 'enter', place: v.def.home, dur: 60, t: 0, label: 'moping at home' }); };
-      return convo(sim, [[v, `${t.first}, I... I think I\u2019m in love with you.`, '💗'], [t, R.pick(['Oh. Oh no. I\u2019m so sorry...', 'You\u2019re dear to me, but not like that.', 'I... don\u2019t feel the same way.']), '😟'], [v, 'Right. Of course. Forget I said anything.', '💔']], 5);
+      return convo(sim, [[v, say(sim, v, 'confess', { t: t.first }), '💗'], [t, say(sim, t, 'confessNo'), '😟'], [v, say(sim, v, 'confessHeartbroken', { t: t.first }), '💔']], 5);
     }
     case 'deliver': { // Jen hands over a letter; she may already know what's in it
       const L = a.letter; sim.letters = sim.letters.filter(x => x !== L); const from = sim.byId.get(L.from);
@@ -102,16 +103,16 @@ export function resolveSocial(sim: Sim, v: Villager, t: Villager, a: Action): nu
     case 'accuse': { // a victim confronts whoever they *suspect* took their keepsake (they may be wrong)
       const k = sim.keepsakes.get(v.id)!; const guilty = k.holder === t.id; ((v as any)._accused ??= {})[t.id] = sim.clock; const thing = k.name.replace(/^(his|her) /, 'my '), theirs = k.name;
       v.emotions.anger = Math.min(1, v.emotions.anger + .4); sim.icon(v, '💢');
-      if (guilty && t.traits.kindness + R.range(0, .5) > .75) { k.holder = v.id; bump(sim, v, t, -10); t.emotions.sadness += .4; sim.log(`${v.first} confronted ${t.first} about the missing ${k.name.replace(/^(his|her) /, '')}. ${t.first} went red and handed it back.`, 7, [v.id, t.id], 'theft', k.icon); const f = sim.fact('deed', `${t.first} had ${v.first}'s ${k.name.replace(/^(his|her) /, '')} all along`, t.id, t.id, -.7, 7, v.id); (f as any).label = 'the theft'; sim.witness(`${t.first} returned what they took from ${v.first}`, 6, [v.id, t.id], { [v.id]: -.6, '*': -.3 }, v.x, v.z, f, 10); return convo(sim, [[v, `Where is ${thing}?`, '😠'], [t, '...', '😳'], [t, 'Fine. Here. I\u2019m sorry.', '😞']]); }
-      if (guilty) { bump(sim, v, t, -12); bump(sim, t, v, -6); sim.log(`${v.first} accused ${t.first} of taking ${theirs}. ${t.first} denied everything with a perfectly straight face.`, 6, [v.id, t.id], 'theft', '🤥'); return convo(sim, [[v, `You took ${thing}. Admit it.`, '😠'], [t, 'Me? I would never!', '😇'], [v, 'Hmph.', '🤨']]); }
+      if (guilty && t.traits.kindness + R.range(0, .5) > .75) { k.holder = v.id; bump(sim, v, t, -10); t.emotions.sadness += .4; sim.log(`${v.first} confronted ${t.first} about the missing ${k.name.replace(/^(his|her) /, '')}. ${t.first} went red and handed it back.`, 7, [v.id, t.id], 'theft', k.icon); const f = sim.fact('deed', `${t.first} had ${v.first}'s ${k.name.replace(/^(his|her) /, '')} all along`, t.id, t.id, -.7, 7, v.id); (f as any).label = 'the theft'; sim.witness(`${t.first} returned what they took from ${v.first}`, 6, [v.id, t.id], { [v.id]: -.6, '*': -.3 }, v.x, v.z, f, 10); return convo(sim, [[v, say(sim, v, 'accuseDemand', { thing, t: t.first }), '😠'], [t, '...', '😳'], [t, say(sim, t, 'accuseGuiltyConfess'), '😞']]); }
+      if (guilty) { bump(sim, v, t, -12); bump(sim, t, v, -6); sim.log(`${v.first} accused ${t.first} of taking ${theirs}. ${t.first} denied everything with a perfectly straight face.`, 6, [v.id, t.id], 'theft', '🤥'); return convo(sim, [[v, say(sim, v, 'accuseDemand', { thing, t: t.first }), '😠'], [t, say(sim, t, 'accuseGuiltyDeny', { t: t.first }), '😇'], [v, say(sim, v, 'accuseGuiltyReply'), '🤨']]); }
       bump(sim, t, v, -22); bump(sim, v, t, -4); t.emotions.anger = Math.min(1, t.emotions.anger + .6); sim.icon(t, '😤');
       t.mem.add(sim.clock, `${v.first} accused me of stealing. I did nothing!`, 8, [v.id], -.8, 'feeling');
       const f = sim.fact('deed', `${v.first} falsely accused ${t.first} of theft`, v.id, v.id, -.4, 6, t.id); (f as any).label = 'the false accusation'; t.mem.learn(f); sim.witness(`${v.first} accused ${t.first} of stealing`, 5, [v.id, t.id], { [t.id]: -.8, '*': -.1 }, v.x, v.z, f, 10);
       sim.log(`${v.first} accused ${t.first} of taking ${theirs}, but ${t.first} had nothing to do with it. ${t.first} is furious.`, 7, [v.id, t.id], 'theft', '😤');
-      return convo(sim, [[v, `Give back ${thing}, ${t.first}!`, '😠'], [t, 'What?! I never touched it!', '😡'], [v, 'Then who did?', '😟']]);
+      return convo(sim, [[v, say(sim, v, 'accuseDemand', { thing, t: t.first }), '😠'], [t, say(sim, t, 'accuseInnocent'), '😡'], [v, say(sim, v, 'accuseInnocentReply'), '😟']]);
     }
     case 'gossip': {
-      const f = a.fact as Fact; const lines: Line[] = [[v, R.pick([`Psst, ${t.first}...`, 'Can you keep a secret?', 'You didn\u2019t hear this from me...']), '🤫']];
+      const f = a.fact as Fact; const lines: Line[] = [[v, say(sim, v, 'gossipOpener', { t: t.first }), '🤫']];
       const ex = tellGossip(sim, v, t, f, lines); soc(v, 15); soc(t, 15); bump(sim, t, v, 2); return convo(sim, lines) + ex;
     }
     case 'invite': {
@@ -132,20 +133,20 @@ export function resolveSocial(sim: Sim, v: Villager, t: Villager, a: Action): nu
     case 'reconcile': {
       const gift = v.traits.kindness > .5 || R.chance(.4); const back = sim.keepsakes.get(t.id); const returning = back && back.holder === v.id; if (returning) back!.holder = t.id;
       const accept = t.traits.kindness * 60 + op(t, v) + (gift ? 25 : 0) + R.range(0, 30) > 25;
-      if (!accept) { bump(sim, t, v, 3); sim.log(`${v.first} tried to apologise to ${t.first}, who wasn't ready to forgive.`, 5, [v.id, t.id], 'reconcile', '💔'); t.emotions.anger += .2; return convo(sim, [[v, 'I\u2019m sorry. Truly.', '🙏'], [t, 'Sorry doesn\u2019t cut it.', '😤']]); }
+      if (!accept) { bump(sim, t, v, 3); sim.log(`${v.first} tried to apologise to ${t.first}, who wasn't ready to forgive.`, 5, [v.id, t.id], 'reconcile', '💔'); t.emotions.anger += .2; return convo(sim, [[v, say(sim, v, 'apology', { t: t.first }), '🙏'], [t, say(sim, t, 'reconcileRefuse'), '😤']]); }
       t.opinion[v.id] = Math.max(op(t, v) + 35, 10); v.opinion[t.id] = Math.max(op(v, t) + 30, 15); t.emotions.anger = 0; v.emotions.anger = 0; t.emotions.joy += .3; sim.icon(v, '🕊️'); sim.icon(t, '🕊️'); v.stats.makeups++;
       const wronged = [...v.mem.known.values()].some(f => f.actor === t.id && f.valence < 0 && (f.target === v.id || f.about === v.id));
       const guilty = [...t.mem.known.values()].some(f => f.actor === v.id && f.valence < 0);
-      if (returning) sim.log(`${v.first} came clean to ${t.first} and handed back ${back!.name.replace(/^(his|her) /, '')}. ${t.first} forgave them.`, 7, [v.id, t.id], 'reconcile', back!.icon);
+      if (returning) sim.log(`${v.first} came clean to ${t.first} and handed back ${back!.name.replace(/^(his|her) /, '')}. ${t.first} forgave ${pr(v).obj}.`, 7, [v.id, t.id], 'reconcile', back!.icon);
       else sim.log(wronged ? `${v.first} offered ${t.first} an olive branch${gift ? ' and a gift' : ''}. They made up.` : guilty ? `${v.first} apologised to ${t.first}${gift ? ' with a peace offering' : ''}. They made up.` : `${v.first} cleared the air with ${t.first}${gift ? ' over a shared snack' : ''}. They're on good terms again.`, 6, [v.id, t.id], 'reconcile', '🕊️'); sim.achieve(null, `made-up-${v.id}-${t.id}`, 'Water Under the Bridge', `${v.first} and ${t.first} reconciled`);
       const f = sim.fact('deed', `${v.first} and ${t.first} buried the hatchet`, v.id, v.id, .5, 5, t.id); sim.witness(`${v.first} made peace with ${t.first}`, 5, [v.id, t.id], { [v.id]: .6, [t.id]: .6, '*': .2 }, v.x, v.z, f, 10);
-      return convo(sim, [[v, 'I\u2019m sorry about before.', '🙏'], [t, '...Alright. Water under the bridge.', '🙂'], [v, 'Friends?', '🤝'], [t, 'Friends.', '😊']]);
+      return convo(sim, [[v, say(sim, v, 'apology', { t: t.first }), '🙏'], [t, say(sim, t, 'reconcileAccept'), '🙂'], [v, 'Friends?', '🤝'], [t, 'Friends.', '😊']]);
     }
     case 'argue': {
       if (a.factId) ((v as any)._confronted ??= new Set()).add(a.factId);
       bump(sim, v, t, -6); bump(sim, t, v, -8); v.emotions.anger = Math.min(1, v.emotions.anger + .4); t.emotions.anger = Math.min(1, t.emotions.anger + .5); sim.icon(v, '💢'); sim.icon(t, '💢');
       const grudge = a.why ?? 'old grudges';
-      const lines: Line[] = [[v, R.pick(['We need to talk.', `You\u2019ve got some nerve, ${t.first}.`, 'I know what you did.']), '😠'], [t, R.pick(['Oh, here we go.', 'What now?', 'Leave me alone.']), '🙄'], [v, R.pick(['Everyone knows about it!', 'You\u2019re a menace!', 'Stay away from my family.']), '💢'], [t, R.pick(['Say that again!', 'You want trouble?', 'Liar!']), '😡']];
+      const lines: Line[] = [[v, say(sim, v, 'argueOpener', { t: t.first }), '😠'], [t, say(sim, t, 'argueRetort'), '🙄'], [v, say(sim, v, 'fightTaunt'), '💢'], [t, say(sim, t, 'fightTaunt'), '😡']];
       const escalate = v.traits.temper + t.traits.temper + v.emotions.anger * .5 + R.range(0, .6) > 1.75 && v.traits.bravery > .35;
       if (escalate) { a.after = () => { sim.startFight(v, t, `An argument between ${v.first} and ${t.first} over ${grudge} boiled over`); }; }
       else sim.log(`${v.first} confronted ${t.first} over ${grudge}. Voices were raised.`, 5, [v.id, t.id], 'argue', '💢');
@@ -155,10 +156,10 @@ export function resolveSocial(sim: Sim, v: Villager, t: Villager, a: Action): nu
     case 'rumour': {
       const about = sim.byId.get(a.about)!; const lies = [`${about.first} cheats at cards`, `${about.first} badmouths everyone behind their backs`, `${about.first} kicked a chicken`, `${about.first} reads other people's letters`, `${about.first} laughed at ${t.first} behind their back`, `${about.first} faked being sick to skip the barn raising`, `${about.first} snores loud enough to wake the hens`, `${about.first} has a secret sweetheart in the next village`];
       (v as any)._lastRumour = sim.clock; v.stats.rumours++; const f = sim.fact('deed', R.pick(lies), about.id, about.id, -.6, 6); (f as any).fake = true; f.origin = v.id; v.mem.learn(f); ((v as any)._rumoured ??= {})[about.id + t.id] = 1;
-      const lines: Line[] = [[v, R.pick([`Between you and me, ${t.first}...`, 'Don\u2019t repeat this, but...', 'I probably shouldn\u2019t say...']), '🤫']];
+      const lines: Line[] = [[v, say(sim, v, 'rumourOpener', { t: t.first }), '🤫']];
       const believed = t.traits.honesty < .8 || op(t, v) > 20 || R.chance(.5);
-      if (believed) { sim.learnFact(t, f, v); bump(sim, t, about, -Math.round(10 * trust(t, v))); t.mem.add(sim.clock, `${v.first} told me ${f.text}`, 5, [about.id, v.id], -.5, 'heard', f.id); lines.push([v, `${f.text}.`, '🐍'], [t, R.pick(['I had no idea!', 'Hmm. That explains a lot.', 'Really?!']), '😮']); sim.log(`${v.first} whispered to ${t.first} that ${f.text}. (It isn't true.)`, 5, [v.id, t.id, about.id], 'gossip', '🐍'); }
-      else { bump(sim, t, v, -8); lines.push([v, `${f.text}.`, '🐍'], [t, 'I don\u2019t believe that for a second.', '🤨']); sim.log(`${v.first} tried to spread a rumour about ${about.first}, but ${t.first} wasn't buying it.`, 5, [v.id, t.id, about.id], 'gossip', '🤨'); }
+      if (believed) { sim.learnFact(t, f, v); bump(sim, t, about, -Math.round(10 * trust(t, v))); t.mem.add(sim.clock, `${v.first} told me ${f.text}`, 5, [about.id, v.id], -.5, 'heard', f.id); lines.push([v, `${f.text}.`, '🐍'], [t, say(sim, t, 'rumourBelieved'), '😮']); sim.log(`${v.first} whispered to ${t.first} that ${f.text}. (It isn't true.)`, 5, [v.id, t.id, about.id], 'gossip', '🐍'); }
+      else { bump(sim, t, v, -8); lines.push([v, `${f.text}.`, '🐍'], [t, say(sim, t, 'rumourDisbelieved'), '🤨']); sim.log(`${v.first} tried to spread a rumour about ${about.first}, but ${t.first} wasn't buying it.`, 5, [v.id, t.id, about.id], 'gossip', '🤨'); }
       sim.achieve(v, 'rumour', 'Silver Tongue', `${v.first} started a rumour`);
       return convo(sim, lines);
     }
@@ -174,7 +175,7 @@ export function resolveSocial(sim: Sim, v: Villager, t: Villager, a: Action): nu
         const who = seen ? t : witnesses[0];
         t.mem.add(sim.clock, `${v.first} snatched ${k.name.replace(/^(his|her) /, 'my ')}!`, 9, [v.id], -1, 'obs', f.id); t.mem.learn(f); for (const w of witnesses) { w.mem.add(sim.clock, `Saw ${v.first} pinch ${thing}`, 8, [v.id, t.id], -.8, 'obs', f.id); w.mem.learn(f); bump(sim, w, v, -15); }
         bump(sim, t, v, -35); t.emotions.anger = 1; t.emotions.surprise = 1;
-        sim.say(who, seen ? 'Hey! Give that BACK!' : `${t.first}! ${v.first} just took your ${k.name.replace(/^(his|her) /, '')}!`, '😱', 3); sim.say(v, 'Uh oh...', '😬', 2);
+        sim.say(who, seen ? say(sim, who, 'theftShoutSelf') : say(sim, who, 'theftShoutOther', { t: t.first, v: v.first, what: k.name.replace(/^(his|her) /, '') }), '😱', 3); sim.say(v, say(sim, v, 'theftOops'), '😬', 2);
         sim.log(`${v.first} snatched ${thing}, but ${seen ? t.first + ' noticed' : witnesses[0].first + ' saw it'}! A chase is on!`, 8, [v.id, t.id, ...witnesses.map(w => w.id)], 'theft', '🏃');
         a.after = () => { v.act = null; v.queue = [{ type: 'flee', place: v.def.home, t: 0, label: 'fleeing!', run: true, loot: k.id } as any]; v.queue.push({ type: 'enter', place: v.def.home, dur: 30, t: 0, label: 'hiding at home' }); };
         if (t.traits.bravery > .3 && !t.inside) { t.busyUntil = 0; sim.leaveSeat(t); t.act = { type: 'chase', target: v.id, t: -1.2, label: `chasing ${v.first}!`, loot: k.id }; t.queue = []; }
@@ -206,7 +207,7 @@ export function tellGossip(sim: Sim, v: Villager, t: Villager, f: Fact, lines: L
   if (about && about !== t) bump(sim, t, about, Math.round(f.valence * f.imp * 2.2 * tr));
   if (about && f.target && f.target !== t.id && f.valence < 0) { const victim = sim.byId.get(f.target); if (victim) bump(sim, t, victim, 2); }
   t.mem.add(sim.clock, `${v.first} told me: ${f.text}`, Math.max(2, f.imp - 1), [f.about, v.id], f.valence * tr, 'heard', f.id);
-  lines.push([v, `Did you hear? ${f.text}!`, f.valence < 0 ? '🤫' : '✨'], [t, f.valence < 0 ? R2(sim, ['No way!', 'I knew it!', 'Unbelievable.']) : R2(sim, ['How lovely!', 'Good for them.']), f.valence < 0 ? '😱' : '😊']);
+  lines.push([v, `Did you hear? ${f.text}!`, f.valence < 0 ? '🤫' : '✨'], [t, f.valence < 0 ? say(sim, t, 'gossipReactNeg') : say(sim, t, 'gossipReactPos'), f.valence < 0 ? '😱' : '😊']);
   (v as any)._lastGossip = sim.clock; const hopN = (f as any).hops as number;
   sim.log(`${v.first} told ${t.first} that ${lowerFirst(f.text)}.`, hopN <= 3 ? (f.valence < 0 ? 4 : 3) : 1, [v.id, t.id, f.about], 'gossip', '🗣️');
   const reach = sim.villagers.filter(x => x.mem.known.has(f.id)).length;
@@ -217,12 +218,11 @@ export function tellInvite(sim: Sim, v: Villager, t: Villager, f: Fact, lines: L
   if (!f.event || !sim.learnFact(t, f, v)) return 0; const host = sim.byId.get(f.event.host)!;
   const like = op(t, host); const keen = like > 20;
   t.mem.add(sim.clock, `${host.first === v.first ? v.first : v.first + ' says ' + host.first} is hosting ${f.event.title} tonight`, 5, [host.id], .3, 'heard', f.id);
-  lines.push(host === v ? [v, `Come to my ${f.event.title.replace(/^(a|an|the) /, '')} tonight at ${sim.place(f.event.place).name}!`, '💌'] : [v, `${host.first}'s throwing ${f.event.title} tonight!`, '💌'], [t, keen ? 'I\u2019ll be there!' : like > -25 ? 'Maybe I\u2019ll stop by.' : 'Hmph. We\u2019ll see.', keen ? '🥳' : '🤔']);
+  lines.push(host === v ? [v, `Come to my ${f.event.title.replace(/^(a|an|the) /, '')} tonight at ${sim.place(f.event.place).name}!`, '💌'] : [v, `${host.first}'s throwing ${f.event.title} tonight!`, '💌'], [t, keen ? say(sim, t, 'inviteAccept') : like > -25 ? say(sim, t, 'inviteMaybe') : say(sim, t, 'inviteRefuse'), keen ? '🥳' : '🤔']);
   sim.log(host === v ? `${v.first} invited ${t.first} to ${f.event.title}.` : `${v.first} passed ${host.first}'s invitation on to ${t.first}.`, 3, [v.id, t.id, host.id], 'invite', '💌');
   if (host === v) bump(sim, t, v, 3); return 5;
 }
 function lowerFirst(s: string) { return s; }
-function R2(sim: Sim, a: string[]) { return sim.rng.pick(a); }
 
 // Edgar-style eavesdropping: anyone close by and idle can pick up a piece of the gossip
 export function maybeOverhear(sim: Sim, a: Villager, b: Villager) {
