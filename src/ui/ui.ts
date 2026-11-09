@@ -8,6 +8,7 @@ import { arcs } from '../sim/arcs';
 import type { Arc } from '../sim/arcs';
 
 export const VCOLOR: Record<string, string> = { mara: '#e8875b', tom: '#6c8fd1', jen: '#c96bd6', ollie: '#d8b23b', pip: '#6dbb5a', rosa: '#d4574a', wren: '#5fc0c4', edgar: '#a98a62' };
+const setHTML = (el: Element, html: string) => { if ((el as any)._html !== html) { (el as any)._html = html; el.innerHTML = html; } };
 const h = (tag: string, cls = '', html = '') => { const e = document.createElement(tag); if (cls) e.className = cls; if (html) e.innerHTML = html; return e; };
 const esc = (s: string) => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' } as any)[c]);
 export interface AppApi { sim: Sim; director: Director; setSpeed(s: number): void; speed: number; select(id: string | null): void; selected: string | null; portrait(id: string): HTMLCanvasElement; setMode(m: 'director' | 'free'): void; mode: string;
@@ -107,6 +108,11 @@ export class UI {
   }
   icon(id: string, emoji: string) { const el = h('div', 'icon', emoji); this.overlay.appendChild(el); this.icons.push({ el, id, t: 0 }); if (this.icons.length > 40) { this.icons.shift()!.el.remove(); } }
 
+  // Measured element sizes are cached per (text, class) so the per-frame layout pass never reads offsetWidth after a write (layout thrash).
+  private szCache = new WeakMap<HTMLElement, { k: string; w: number; h: number }>();
+  private sz(el: HTMLElement) { const k = el.className + '|' + el.textContent; let c = this.szCache.get(el); if (!c || c.k !== k || !c.w) { c = { k, w: el.offsetWidth, h: el.offsetHeight }; this.szCache.set(el, c); } return c; }
+  private setDisp(el: HTMLElement, show: boolean) { const d = show ? '' : 'none'; if (el.style.display !== d) el.style.display = d; }
+
   frame(dt: number) {
     const s = this.app.sim, now = performance.now();
     while (this.convo.length && this.convo[0].at <= s.clock) { const c = this.convo.shift()!; const v = s.byId.get(c.who); if (v && !v.inside) this.bubble(c.who, c.text, c.emoji, 3); }
@@ -115,27 +121,27 @@ export class UI {
     for (const v of s.villagers) {
       const pos = v.avatar.root.position, hh = v.avatar.height, tag = this.tags.get(v.id)!, p = this.app.project(pos.x, hh + .55, pos.z);
       const vis = p.on && !v.inside && v.avatar.alpha > .3;
-      tag.style.display = vis && (close || this.app.selected === v.id) ? '' : 'none'; tag.classList.toggle('sel', this.app.selected === v.id);
+      this.setDisp(tag, vis && (close || this.app.selected === v.id)); const isSel = this.app.selected === v.id; if (tag.classList.contains('sel') !== isSel) tag.classList.toggle('sel', isSel);
       const tagHidden = tag.style.display === 'none';
-      if (vis && !tagHidden) { const tw = tag.offsetWidth, th = tag.offsetHeight; const tx = Math.max(tw / 2 + 4, Math.min(W - tw / 2 - 4, p.x)), ty = Math.max(HT + th, p.y); tag.style.transform = `translate(${tx}px, ${ty}px) translate(-50%, -100%)`; }
+      if (vis && !tagHidden) { const { w: tw, h: th } = this.sz(tag); const tx = Math.max(tw / 2 + 4, Math.min(W - tw / 2 - 4, p.x)), ty = Math.max(HT + th, p.y); tag.style.transform = `translate(${tx}px, ${ty}px) translate(-50%, -100%)`; }
       const b = this.bubbles.get(v.id);
-      if (b) { const show = vis && now < b.until; b.el.style.display = show ? '' : 'none';
-        if (show) { const q = this.app.project(pos.x, hh + 1.0, pos.z), bw = b.el.offsetWidth, bh = b.el.offsetHeight;
+      if (b) { const show = vis && now < b.until; this.setDisp(b.el, show);
+        if (show) { const q = this.app.project(pos.x, hh + 1.0, pos.z), { w: bw, h: bh } = this.sz(b.el);
           let bx = q.x, by = q.y - (tagHidden ? 0 : 18), below = false;
           if (by - bh < HT) { below = true; by = q.y + 16; } // flip bubble below the head if it would clip the topbar
           bx = Math.max(bw / 2 + 4, Math.min(W - bw / 2 - 4, bx));
-          b.el.classList.toggle('below', below); b.el.style.transform = `translate(${bx}px, ${by}px) translate(-50%, ${below ? '0%' : '-100%'})`; } }
+          if (b.el.classList.contains('below') !== below) b.el.classList.toggle('below', below); b.el.style.transform = `translate(${bx}px, ${by}px) translate(-50%, ${below ? '0%' : '-100%'})`; } }
     }
     // keep simultaneous speech bubbles from stacking on top of each other, then clamp clear of the safe inset
     const shown: { el: HTMLElement; x: number; y: number; w: number; h: number; off: string; below: boolean }[] = [];
-    for (const [, b] of this.bubbles) { if (b.el.style.display === 'none') continue; const m = /translate\(([-\d.]+)px, ([-\d.]+)px\) translate\(-50%, ([^)]+)\)/.exec(b.el.style.transform); if (!m) continue; shown.push({ el: b.el, x: +m[1], y: +m[2], w: b.el.offsetWidth, h: b.el.offsetHeight, off: m[3], below: m[3].trim() === '0%' }); }
+    for (const [, b] of this.bubbles) { if (b.el.style.display === 'none') continue; const m = /translate\(([-\d.]+)px, ([-\d.]+)px\) translate\(-50%, ([^)]+)\)/.exec(b.el.style.transform); if (!m) continue; const z = this.sz(b.el); shown.push({ el: b.el, x: +m[1], y: +m[2], w: z.w, h: z.h, off: m[3], below: m[3].trim() === '0%' }); }
     shown.sort((a, b) => b.y - a.y);
     for (let i = 0; i < shown.length; i++) { const a = shown[i]; for (let j = 0; j < i; j++) { const b = shown[j]; if (Math.abs(a.x - b.x) < (a.w + b.w) / 2 + 4 && a.y > b.y - b.h - 6 && a.y < b.y + a.h) { a.y = b.y - b.h - 8; } }
       if (a.below) { if (a.y < HT) a.y = HT; } else if (a.y - a.h < HT) a.y = HT + a.h;
       a.el.style.transform = `translate(${a.x}px, ${a.y}px) translate(-50%, ${a.off})`; }
-    for (const ic of this.icons) { ic.t += dt; const v = s.byId.get(ic.id)!; const pos = v.avatar.root.position; const bub = this.bubbles.get(ic.id), talking = !!bub && bub.until > performance.now(); const p = this.app.project(pos.x, v.avatar.height + (talking ? 1.9 : .9) + ic.t * .9, pos.z); const ix = Math.max(16, Math.min(W - 16, p.x)), iy = Math.max(HT, p.y); ic.el.style.transform = `translate(${ix}px, ${iy}px) translate(-50%, -50%) scale(${Math.min(1, ic.t * 5)})`; ic.el.style.opacity = String(Math.max(0, 1 - ic.t / 2.2)); ic.el.style.display = p.on && !v.inside ? '' : 'none'; }
+    for (const ic of this.icons) { ic.t += dt; const v = s.byId.get(ic.id)!; const pos = v.avatar.root.position; const bub = this.bubbles.get(ic.id), talking = !!bub && bub.until > performance.now(); const p = this.app.project(pos.x, v.avatar.height + (talking ? 1.9 : .9) + ic.t * .9, pos.z); const ix = Math.max(16, Math.min(W - 16, p.x)), iy = Math.max(HT, p.y); ic.el.style.transform = `translate(${ix}px, ${iy}px) translate(-50%, -50%) scale(${Math.min(1, ic.t * 5)})`; ic.el.style.opacity = String(Math.max(0, 1 - ic.t / 2.2)); this.setDisp(ic.el, p.on && !v.inside); }
     this.icons = this.icons.filter(ic => { if (ic.t > 2.2) { ic.el.remove(); return false; } return true; });
-    this.cardT -= dt; if (this.cardT <= 0) { this.cardT = .35; this.clock.innerHTML = `<b>Day ${s.day}</b> · ${fmtTime(s.clock)} ${s.rain > .4 ? '🌧️' : s.hour >= 20 || s.hour < 6 ? '🌙' : s.hour < 8 ? '🌅' : '☀️'}${s.festivalUntil > s.clock ? ' 🎪' : ''}${s.visitorUntil > s.clock ? ' 🧳' : ''}`;
+    this.cardT -= dt; if (this.cardT <= 0) { this.cardT = .35; setHTML(this.clock, `<b>Day ${s.day}</b> · ${fmtTime(s.clock)} ${s.rain > .4 ? '🌧️' : s.hour >= 20 || s.hour < 6 ? '🌙' : s.hour < 8 ? '🌅' : '☀️'}${s.festivalUntil > s.clock ? ' 🎪' : ''}${s.visitorUntil > s.clock ? ' 🧳' : ''}`);
       this.measureChrome();
       this.root.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach(b => b.classList.toggle('on', +b.dataset.speed! === this.app.speed)); (this.root.querySelector('#mode') as HTMLElement).textContent = this.app.mode === 'director' ? '🎬 Director' : '🕹️ Free cam';
       this.renderCard(); this.renderLB(); }
@@ -143,8 +149,8 @@ export class UI {
   // measure real topbar/dock heights so overlays and panels never assume a fixed chrome size
   measureChrome() {
     const tb = this.root.querySelector<HTMLElement>('.topbar'), dk = this.root.querySelector<HTMLElement>('.dock');
-    if (tb) { const r = tb.getBoundingClientRect(); this.safeTop = r.bottom + 8; this.root.style.setProperty('--top-h', `${Math.round(r.height)}px`); }
-    if (dk) this.root.style.setProperty('--dock-h', `${Math.round(dk.offsetHeight)}px`);
+    if (tb) { const r = tb.getBoundingClientRect(); this.safeTop = r.bottom + 8; const th = `${Math.round(r.height)}px`; if (this.root.style.getPropertyValue('--top-h') !== th) this.root.style.setProperty('--top-h', th); }
+    if (dk) { const dh = `${Math.round(dk.offsetHeight)}px`; if (this.root.style.getPropertyValue('--dock-h') !== dh) this.root.style.setProperty('--dock-h', dh); }
   }
   renderLB() {
     const s = this.app.sim, rows = this.app.director.ranked(this.lbKind), max = Math.max(1, ...rows.map(r => Math.abs(r.score)));
@@ -154,7 +160,7 @@ export class UI {
     let past: Record<string, number> | null = null;
     if (hk && s.history.length) { const tgt = s.clock - 1440; let pick = s.history[0]; for (const snap of s.history) { if (snap.t <= tgt) pick = snap; } past = (pick as any)[hk]; }
     const trend = (id: string, cur: number) => { if (!past || past[id] === undefined) return ''; const d = cur - past[id]; return d > 2 ? '<span class="tr up" title="rising since yesterday">↑</span>' : d < -2 ? '<span class="tr dn" title="falling since yesterday">↓</span>' : '<span class="tr fl" title="steady">·</span>'; };
-    this.lb.innerHTML = `<div class="ph"><b>🏆 Leaderboard</b><div class="ff">${(['popularity', 'power', 'mischief'] as const).map(k => `<button data-k="${k}" class="${k === this.lbKind ? 'on' : ''}">${k === 'mischief' ? '😈 Mischief' : k === 'popularity' ? '❤️ Liked' : '👑 Influence'}</button>`).join('')}</div></div>` +
+    setHTML(this.lb, `<div class="ph"><b>🏆 Leaderboard</b><div class="ff">${(['popularity', 'power', 'mischief'] as const).map(k => `<button data-k="${k}" class="${k === this.lbKind ? 'on' : ''}">${k === 'mischief' ? '😈 Mischief' : k === 'popularity' ? '❤️ Liked' : '👑 Influence'}</button>`).join('')}</div></div>`) +
       `<div class="lbleg">${esc(legend[this.lbKind])}</div>` +
       rows.map((r, i) => { const neg = r.score < 0, w = Math.max(2, Math.abs(r.score) / max * 50); return `<div class="row" data-id="${r.v.id}"><span class="rk">${['🥇', '🥈', '🥉'][i] ?? i + 1}</span><span class="dot" style="background:${VCOLOR[r.v.id]}"></span><span class="n">${r.v.first}</span><span class="bar signed"><i class="${neg ? 'neg' : 'pos'}" style="${neg ? 'right:50%' : 'left:50%'};width:${w}%;background:${neg ? '#d1574b' : VCOLOR[r.v.id]}"></i></span><span class="sc">${r.score}${trend(r.v.id, r.score)}</span></div>`; }).join('');
     this.lb.querySelectorAll<HTMLElement>('[data-k]').forEach(b => b.onclick = () => { this.lbKind = b.dataset.k as any; this.renderLB(); });
@@ -165,8 +171,8 @@ export class UI {
   // cheaply refresh the volatile header fields without tearing down the whole card (avoids flicker / focus loss)
   updateCardLive(v: Villager, s: Sim) {
     const md = this.card.querySelector('.md'); if (md) md.textContent = this.mood(v);
-    const th = this.card.querySelector('.thought'); if (th) th.innerHTML = `💭 ${esc(v.thought)}`;
-    const dg = this.card.querySelector('.doing'); if (dg) dg.innerHTML = `▶ ${esc(v.doing)}${v.inside ? ` <span class="muted">(inside ${s.place(v.inside).name})</span>` : ''}`;
+    const th = this.card.querySelector('.thought'); if (th) setHTML(th, `💭 ${esc(v.thought)}`);
+    const dg = this.card.querySelector('.doing'); if (dg) setHTML(dg, `▶ ${esc(v.doing)}${v.inside ? ` <span class="muted">(inside ${s.place(v.inside).name})</span>` : ''}`);
     const bars = this.card.querySelectorAll<HTMLElement>('.need i'); if (bars.length >= 3) { bars[0].style.width = `${v.needs.food}%`; bars[1].style.width = `${v.needs.energy}%`; bars[2].style.width = `${v.needs.social}%`; }
   }
   renderCard() {

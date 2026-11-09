@@ -20,10 +20,12 @@ const app = document.getElementById('app')!;
 const loading = document.createElement('div'); loading.className = 'loading'; loading.innerHTML = `<div class="lc"><div class="lg">🌿</div><h1>Thistlebrook</h1><p>a digital terrarium</p><div class="pb"><i></i></div><small>Waking the village…</small></div>`; document.body.appendChild(loading);
 const setProg = (f: number, msg?: string) => { (loading.querySelector('.pb i') as HTMLElement).style.width = `${Math.round(f * 100)}%`; if (msg) loading.querySelector('small')!.textContent = msg; };
 
-const AA = params0().get('aa') !== '0' && !mobile;
+// Quality tier: software rasterisers (SwiftShader/llvmpipe, i.e. no GPU) are fill-bound, so drop MSAA and allow a lower render scale there.
+const SOFT = (() => { try { const gl = document.createElement('canvas').getContext('webgl2') as WebGL2RenderingContext | null; if (!gl) return false; const ext = gl.getExtension('WEBGL_debug_renderer_info'); const r = String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER)); gl.getExtension('WEBGL_lose_context')?.loseContext(); return /swiftshader|llvmpipe|softpipe|software/i.test(r); } catch { return false; } })();
+const AA = params0().get('aa') === '1' || (params0().get('aa') !== '0' && !mobile && (!SOFT || params0().has('capture')));
 const renderer = new THREE.WebGLRenderer({ antialias: AA, powerPreference: 'high-performance', preserveDrawingBuffer: new URLSearchParams(location.search).has('capture') });
 renderer.setPixelRatio(Math.min(devicePixelRatio, mobile ? 1.25 : 1.75)); renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = new URLSearchParams(location.search).get('shadow') === 'pcf' ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap; renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
 app.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, .3, 420);
@@ -32,7 +34,7 @@ const controls = new OrbitControls(camera, renderer.domElement); controls.target
 controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE } as any; controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
 addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
 
-const world = new World(scene); const sky = new Sky(scene, mobile);
+const world = new World(scene); const sky = new Sky(scene, mobile || (SOFT && !params0().has('capture')));
 const sim = new Sim(world); const sound = new Sound();
 const params = new URLSearchParams(location.search);
 // ?seed=N makes a whole run reproducible (the sim's own RNG plus any Math.random flavour rolls).
@@ -129,7 +131,7 @@ let last = performance.now(), simMsAvg = 0;
 // Levers, cheapest first: villager LOD (no ink outline / real shadow when far, culled off-screen, blob shadow instead),
 // shadow map refreshed every other frame, then dynamic resolution between 0.6x and the device ratio.
 const perf = (() => {
-  const q = params0(), dynRes = q.get('dynres') !== '0', maxPR = Math.min(devicePixelRatio, mobile ? 1.25 : 1.75), minPR = Math.min(maxPR, mobile ? .6 : .65);
+  const q = params0(), dynRes = q.get('dynres') !== '0', maxPR = Math.min(devicePixelRatio, mobile ? 1.25 : 1.75), minPR = Math.min(maxPR, SOFT && !q.has('capture') ? .5 : mobile ? .6 : .65);
   let pr = maxPR, frames = 0, t0 = performance.now(), fps = 60, n = 0, lastAdjust = 0;
   const frus = new THREE.Frustum(), pm = new THREE.Matrix4(), sph = new THREE.Sphere(), tmp = new THREE.Vector3();
   const shadowEvery = q.get('shadowEvery') ? +q.get('shadowEvery')! : 2; renderer.shadowMap.autoUpdate = false; renderer.shadowMap.needsUpdate = true;
@@ -163,9 +165,10 @@ function start() {
   requestAnimationFrame(frame);
 }
 function stepSim(dtWorld: number) { const n = Math.min(400, Math.ceil(dtWorld / (1 / 30))); const h = dtWorld / n; for (let i = 0; i < n; i++) { sim.step(h); } tickTraveller(sim); tickFestival(sim); }
+let cpuMsAvg = 0; // JS cost of a frame (sim + UI + draw submission) — what bounds fps on a real GPU
 function frame(now: number) {
   requestAnimationFrame(frame);
-  let dt = Math.min(.1, (now - last) / 1000); last = now; perf.tick(now);
+  const cpu0 = performance.now(); let dt = Math.min(.1, (now - last) / 1000); last = now; perf.tick(now);
   const t0 = performance.now(); if (speed > 0) stepSim(dt * speed); simMsAvg = simMsAvg * .9 + (performance.now() - t0) * .1;
   const adt = speed === 0 ? dt * .25 : dt * Math.min(speed, 2.5);
   for (const v of sim.villagers) syncAvatar(v, speed === 0 ? 0 : adt);
@@ -183,12 +186,12 @@ function frame(now: number) {
   sound.ambient(sky.night, sim.rain, dt);
   ui.frame(dt);
   perf.beforeRender();
-  renderer.render(scene, camera);
+  renderer.render(scene, camera); cpuMsAvg += ((performance.now() - cpu0) - cpuMsAvg) * .1;
 }
 
 // ---- hooks for headless verification & power users -------------------------------------------------
 (window as any).terrarium = {
-  sim, director, world, camera, controls, renderer, get fps() { return perf.fps; }, get pixelRatio() { return perf.pr; }, get simMs() { return simMsAvg; },
+  sim, director, world, camera, controls, renderer, scene, get fps() { return perf.fps; }, get pixelRatio() { return perf.pr; }, quality: { soft: SOFT, aa: AA }, get simMs() { return simMsAvg; }, get cpuMs() { return cpuMsAvg; },
   setSpeed: (s: number) => (speed = s), select: (id: string | null) => api.select(id), setMode: (m: any) => api.setMode(m), god: (k: string) => api.god(k), ui: () => ui,
   fastForward(minutes: number) { ui.quiet = true; stepSim(minutes / MIN_PER_SEC); ui.quiet = false; for (const v of sim.villagers) syncAvatar(v, .016); },
   look(x: number, z: number, dist = 30, yaw = .6, pitch = .9) { follow = null; focusTarget = null; mode = 'free'; controls.target.set(x, 0, z); camera.position.set(x + Math.sin(yaw) * Math.cos(pitch) * dist, Math.sin(pitch) * dist, z + Math.cos(yaw) * Math.cos(pitch) * dist); controls.update(); },

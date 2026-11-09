@@ -5,7 +5,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1d2a1f; fon
 button { font: inherit; cursor: pointer; border: 1px solid var(--edge); background: var(--paper); color: var(--ink); border-radius: 8px; padding: 4px 9px; transition: transform .12s, background .2s; }
 button:hover { background: #fff; transform: translateY(-1px); } button.on { background: var(--accent); color: #fff; border-color: #a85d2a; }
 .ui { --top-h: 50px; --dock-h: 60px; }
-.panelish, .topbar, .feedwrap, .card, .lb, .dock { background: rgba(251, 244, 228, .94); border: 1px solid var(--edge); border-radius: 14px; box-shadow: var(--shadow); backdrop-filter: blur(6px); }
+.panelish, .topbar, .feedwrap, .card, .lb, .dock { background: rgba(251, 244, 228, .94); border: 1px solid var(--edge); border-radius: 14px; box-shadow: var(--shadow); }
 .topbar { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 12px); left: 12px; right: 12px; display: flex; align-items: center; gap: 16px; padding: 8px 14px; z-index: 5; max-width: calc(100% - 24px); }
 .brand { display: flex; gap: 8px; align-items: center; } .brand .logo { font-size: 24px; } .brand b { font: 700 19px var(--serif); display: block; letter-spacing: .3px; } .brand small { color: #8a7656; font-style: italic; }
 .clock { font: 15px var(--serif); padding: 4px 12px; background: var(--paper2); border-radius: 20px; white-space: nowrap; }
