@@ -6,7 +6,7 @@ const FS = `varying vec4 vCol; uniform float uSoft; void main(){ vec2 c = gl_Poi
 
 interface P { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; max: number; size: number; grow: number; r: number; g: number; b: number; a: number; grav: number; drag: number; wobble: number; fade: number }
 class Pool {
-  ps: P[] = []; geo = new THREE.BufferGeometry(); pos: Float32Array; col: Float32Array; size: Float32Array; points: THREE.Points; max: number;
+  ps: P[] = []; private free: P[] = []; private cursor = 0; geo = new THREE.BufferGeometry(); pos: Float32Array; col: Float32Array; size: Float32Array; points: THREE.Points; max: number;
   constructor(scene: THREE.Scene, max: number, additive: boolean, soft: number) {
     this.max = max; this.pos = new Float32Array(max * 3); this.col = new Float32Array(max * 4); this.size = new Float32Array(max);
     this.geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
@@ -16,13 +16,15 @@ class Pool {
     this.points = new THREE.Points(this.geo, mat); this.points.frustumCulled = false; this.points.renderOrder = additive ? 3 : 2; scene.add(this.points);
   }
   emit(p: Partial<P> & { x: number; y: number; z: number }) {
-    if (this.ps.length >= this.max) this.ps.shift();
-    this.ps.push({ vx: 0, vy: 0, vz: 0, life: 0, max: 1, size: .3, grow: 0, r: 1, g: 1, b: 1, a: 1, grav: 0, drag: 0, wobble: 0, fade: 1, ...p });
+    const recycled = this.ps.length >= this.max ? this.ps[this.cursor++ % this.max] : this.free.pop();
+    const particle = Object.assign(recycled ?? {} as P, { vx: 0, vy: 0, vz: 0, life: 0, max: 1, size: .3, grow: 0, r: 1, g: 1, b: 1, a: 1, grav: 0, drag: 0, wobble: 0, fade: 1 }, p);
+    if (this.ps.length < this.max) this.ps.push(particle);
   }
   update(dt: number, t: number) {
+    if (!this.ps.length) return;
     let n = 0;
     for (let k = 0; k < this.ps.length; k++) {
-      const p = this.ps[k]; p.life += dt; if (p.life >= p.max) continue;
+      const p = this.ps[k]; p.life += dt; if (p.life >= p.max) { this.free.push(p); continue; }
       p.vy -= p.grav * dt; const d = Math.exp(-p.drag * dt); p.vx *= d; p.vy *= d; p.vz *= d;
       p.x += (p.vx + (p.wobble ? Math.sin(t * 2 + k) * p.wobble : 0)) * dt; p.y += p.vy * dt; p.z += (p.vz + (p.wobble ? Math.cos(t * 1.7 + k) * p.wobble : 0)) * dt;
       if (p.y < 0.02 && p.grav > 0) { p.y = 0.02; p.vy *= -0.3; p.vx *= 0.6; p.vz *= 0.6; }
@@ -39,15 +41,43 @@ class Pool {
 
 export class FX {
   normal: Pool; glow: Pool; coins: THREE.InstancedMesh; coinState: { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; spin: number }[] = [];
-  rain: THREE.LineSegments; rainOn = 0; rainTarget = 0; t = 0; dummy = new THREE.Object3D();
+  rain: THREE.Mesh; private splashes: THREE.Mesh;
+  private weather = { time: { value: 0 }, strength: { value: 0 } }; rainOn = 0; rainTarget = 0; t = 0; dummy = new THREE.Object3D();
   constructor(public scene: THREE.Scene) {
     this.normal = new Pool(scene, 2500, false, 0.6); this.glow = new Pool(scene, 1500, true, 1);
     const cg = new THREE.CylinderGeometry(.09, .09, .025, 10); cg.rotateX(Math.PI / 2);
     this.coins = new THREE.InstancedMesh(cg, new THREE.MeshLambertMaterial({ color: '#f5c542', emissive: '#7a5300' }), 120); this.coins.count = 0; this.coins.frustumCulled = false; scene.add(this.coins);
-    const N = 900, rg = new THREE.BufferGeometry(), rp = new Float32Array(N * 6);
-    for (let i = 0; i < N; i++) { const x = (Math.random() - .5) * 70, y = Math.random() * 25, z = (Math.random() - .5) * 60; rp.set([x, y, z, x - .05, y - .7, z + .02], i * 6); }
-    rg.setAttribute('position', new THREE.BufferAttribute(rp, 3));
-    this.rain = new THREE.LineSegments(rg, new THREE.LineBasicMaterial({ color: '#cfe3ff', transparent: true, opacity: 0 })); this.rain.frustumCulled = false; scene.add(this.rain);
+    // Two instanced draws, with motion and ripple lifetimes evaluated on the GPU.
+    const geometry = (count: number) => {
+      const g = new THREE.InstancedBufferGeometry(), quad = new THREE.PlaneGeometry(1, 1);
+      g.index = quad.index; g.attributes.position = quad.attributes.position; g.attributes.uv = quad.attributes.uv;
+      const seeds = new Float32Array(count * 3);
+      for (let i = 0; i < seeds.length; i++) seeds[i] = Math.random();
+      g.setAttribute('seed', new THREE.InstancedBufferAttribute(seeds, 3)); g.instanceCount = count;
+      return g;
+    };
+    const material = (splash: boolean) => new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false, side: THREE.DoubleSide, uniforms: this.weather,
+      vertexShader: `attribute vec3 seed; uniform float time; varying vec2 vUv; varying float fade;
+      void main(){
+        vUv = uv;
+        float age = fract(seed.y + time * ${splash ? '1.8' : '.85'});
+        vec3 center = vec3((seed.x-.5)*76., ${splash ? '.035' : '(1.-age)*28.'}, (seed.z-.5)*76.);
+        ${splash ? 'float radius = .08 + age * .38; center.xz += position.xy * radius * 2.; fade = (1.-age)*(1.-age); gl_Position = projectionMatrix * modelViewMatrix * vec4(center,1.);' : `center.x += (1.-age)*2.4;
+        vec4 mv = modelViewMatrix * vec4(center,1.);
+        vec3 streak = mat3(modelViewMatrix) * vec3(.12,1.1,.04);
+        mv.xyz += streak * position.y; mv.x += position.x * .085;
+        fade = smoothstep(0.,.08,age)*(1.-smoothstep(.85,1.,age));
+        gl_Position = projectionMatrix * mv;`}
+      }`,
+      fragmentShader: `uniform float strength; varying vec2 vUv; varying float fade;
+      void main(){ ${splash ? 'float d = length(vUv-.5); float a = (1.-smoothstep(.44,.5,d))*smoothstep(.33,.4,d);' : 'float a = (1.-abs(vUv.x-.5)*2.) * sin(vUv.y*3.14159);'}
+      gl_FragColor = vec4(.72,.85,1.,a*fade*strength*${splash ? '.45' : '.78'}); }`
+    });
+    this.rain = new THREE.Mesh(geometry(1100), material(false));
+    this.splashes = new THREE.Mesh(geometry(180), material(true));
+    this.rain.frustumCulled = this.splashes.frustumCulled = false;
+    scene.add(this.rain, this.splashes);
   }
   smoke(x: number, y: number, z: number, dark = false) { const c = dark ? .45 : .88; this.normal.emit({ x: x + (Math.random() - .5) * .2, y, z: z + (Math.random() - .5) * .2, vx: .25 + Math.random() * .2, vy: .7 + Math.random() * .3, vz: (Math.random() - .5) * .2, max: 4 + Math.random() * 2, size: .7, grow: 3.5, r: c, g: c, b: c * 1.02, a: .55, drag: .3 }); }
   dust(x: number, z: number, n = 14, big = 1) { for (let i = 0; i < n; i++) { const a = Math.random() * 6.28, s = (.8 + Math.random() * 1.6) * big; this.normal.emit({ x: x + Math.cos(a) * .3, y: .2 + Math.random() * .8, z: z + Math.sin(a) * .3, vx: Math.cos(a) * s, vy: .4 + Math.random() * .6, vz: Math.sin(a) * s, max: 1.1 + Math.random() * .8, size: .9 * big, grow: 2.2, r: .82, g: .74, b: .6, a: .75, drag: 2.2 }); } }
@@ -66,13 +96,12 @@ export class FX {
     this.t += dt; this.normal.update(dt, this.t); this.glow.update(dt, this.t);
     let n = 0;
     for (const c of this.coinState) { c.life += dt; if (c.life > 1.6) continue; c.vy -= 11 * dt; c.x += c.vx * dt; c.y += c.vy * dt; c.z += c.vz * dt; if (c.y < .05) { c.y = .05; c.vy *= -.4; } this.dummy.position.set(c.x, c.y, c.z); this.dummy.rotation.set(0, c.spin + c.life * 12, 0); const s = c.life > 1.3 ? (1.6 - c.life) / .3 : 1; this.dummy.scale.setScalar(s); this.dummy.updateMatrix(); this.coins.setMatrixAt(n++, this.dummy.matrix); }
-    this.coinState = this.coinState.filter(c => c.life <= 1.6); this.coins.count = n; this.coins.instanceMatrix.needsUpdate = true;
+    let alive = 0; for (const c of this.coinState) if (c.life <= 1.6) this.coinState[alive++] = c; this.coinState.length = alive; this.coins.count = n; if (n) this.coins.instanceMatrix.needsUpdate = true;
     this.rainOn += (this.rainTarget - this.rainOn) * Math.min(1, dt * .5);
-    const rm = this.rain.material as THREE.LineBasicMaterial; rm.opacity = this.rainOn * .45; this.rain.visible = this.rainOn > .02;
-    if (this.rain.visible) {
-      const p = this.rain.geometry.attributes.position as THREE.BufferAttribute, a = p.array as Float32Array;
-      for (let i = 0; i < a.length; i += 6) { a[i + 1] -= 22 * dt; a[i + 4] -= 22 * dt; if (a[i + 4] < 0) { const x = camTarget.x + (Math.random() - .5) * 70, z = camTarget.z + (Math.random() - .5) * 60, y = 20 + Math.random() * 6; a[i] = x; a[i + 1] = y; a[i + 2] = z; a[i + 3] = x - .05; a[i + 4] = y - .7; a[i + 5] = z + .02; if (Math.random() < .03) this.normal.emit({ x, y: .05, z, max: .35, size: .25, grow: 2, r: .8, g: .9, b: 1, a: .4 }); } }
-      p.needsUpdate = true;
-    }
+    this.weather.time.value = this.t; this.weather.strength.value = this.rainOn;
+    this.rain.visible = this.splashes.visible = this.rainOn > .02;
+    // Snap the weather volume so small camera pans do not drag every drop.
+    const x = Math.floor(camTarget.x / 8) * 8, z = Math.floor(camTarget.z / 8) * 8;
+    this.rain.position.set(x, 0, z); this.splashes.position.set(x, 0, z);
   }
 }
