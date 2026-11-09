@@ -43,6 +43,7 @@ export class UI {
     this.feed = h('div', 'feed'); fw.appendChild(this.feed); r.appendChild(fw);
     fw.querySelectorAll<HTMLButtonElement>('[data-f]').forEach(b => b.onclick = () => { this.feedFilter = b.dataset.f!; fw.querySelectorAll('[data-f]').forEach(x => x.classList.toggle('on', x === b)); this.refilter(); });
     const ftog = fw.querySelector<HTMLButtonElement>('.feedtog')!; ftog.onclick = () => { const col = fw.classList.toggle('collapsed'); ftog.textContent = col ? '▸' : '▾'; ftog.title = col ? 'Expand chronicle' : 'Collapse chronicle'; };
+    if (matchMedia('(max-width: 700px), (pointer: coarse)').matches) ftog.click(); // phones start with the chronicle folded to a one-line strip
     this.card = h('div', 'card hidden'); r.appendChild(this.card);
     this.lb = h('div', 'lb'); r.appendChild(this.lb);
     const dock = h('div', 'dock'); dock.innerHTML = `<div class="grp"><span class="lbl">God powers</span><button data-g="gift">🎁<i>Drop gift</i></button><button data-g="rain">🌧️<i>Rain</i></button><button data-g="traveller">🧳<i>Traveller</i></button><button data-g="festival">🎪<i>Festival</i></button></div>
