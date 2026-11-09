@@ -5,7 +5,7 @@ const srv = await start(5181);
 const b = await chromium.launch({ executablePath: '/usr/bin/google-chrome', args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const p = await b.newPage({ viewport: { width: W, height: H } }); const errs = [];
 p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); }); p.on('pageerror', e => errs.push('pageerror: ' + e.message)); p.on('response', r => { if (r.status() >= 400) errs.push('HTTP ' + r.status() + ' ' + r.url()); });
-await p.goto('http://localhost:5181/?nopaper&capture&seed=' + (process.env.SEED || 7)); await p.waitForFunction(() => window.terrarium && document.querySelector('.loading.done'), null, { timeout: 120000 });
+await p.goto('http://localhost:5181/?nopaper&capture&dynres=0&seed=' + (process.env.SEED || 7)); await p.waitForFunction(() => window.terrarium && document.querySelector('.loading.done'), null, { timeout: 120000 });
 await p.waitForTimeout(800);
 for (const [code, shot, wait] of steps) {
   if (code) { const r = await p.evaluate(async c => { const F = Object.getPrototypeOf(async function () {}).constructor; return await new F(c)(); }, code).catch(e => 'EVAL ERR ' + e.message); if (r !== undefined) console.log(typeof r === 'string' ? r : JSON.stringify(r)); }

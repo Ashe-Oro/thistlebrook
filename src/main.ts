@@ -15,11 +15,13 @@ import type { Villager } from './sim/types';
 import { makeAnvil } from './agents/props';
 
 const mobile = matchMedia('(pointer: coarse)').matches || innerWidth < 760;
+function params0() { return new URLSearchParams(location.search); }
 const app = document.getElementById('app')!;
 const loading = document.createElement('div'); loading.className = 'loading'; loading.innerHTML = `<div class="lc"><div class="lg">🌿</div><h1>Thistlebrook</h1><p>a digital terrarium</p><div class="pb"><i></i></div><small>Waking the village…</small></div>`; document.body.appendChild(loading);
 const setProg = (f: number, msg?: string) => { (loading.querySelector('.pb i') as HTMLElement).style.width = `${Math.round(f * 100)}%`; if (msg) loading.querySelector('small')!.textContent = msg; };
 
-const renderer = new THREE.WebGLRenderer({ antialias: !mobile, powerPreference: 'high-performance', preserveDrawingBuffer: new URLSearchParams(location.search).has('capture') });
+const AA = params0().get('aa') !== '0' && !mobile;
+const renderer = new THREE.WebGLRenderer({ antialias: AA, powerPreference: 'high-performance', preserveDrawingBuffer: new URLSearchParams(location.search).has('capture') });
 renderer.setPixelRatio(Math.min(devicePixelRatio, mobile ? 1.25 : 1.75)); renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
 app.appendChild(renderer.domElement);
@@ -121,7 +123,38 @@ function syncAvatar(v: Villager, dt: number) {
 const forced = new Map<string, { expr: string; until: number }>();
 
 let nell: Avatar; let nellT = 0;
-let last = performance.now(), fpsAvg = 60, simMsAvg = 0;
+let last = performance.now(), simMsAvg = 0;
+// ---- performance governor ---------------------------------------------------------------------------
+// fps = frames actually drawn per wall-clock second (the old EMA of 1/dt overstated it badly).
+// Levers, cheapest first: villager LOD (no ink outline / real shadow when far, culled off-screen, blob shadow instead),
+// shadow map refreshed every other frame, then dynamic resolution between 0.6x and the device ratio.
+const perf = (() => {
+  const q = params0(), dynRes = q.get('dynres') !== '0', maxPR = Math.min(devicePixelRatio, mobile ? 1.25 : 1.75), minPR = Math.min(maxPR, mobile ? .6 : .65);
+  let pr = maxPR, frames = 0, t0 = performance.now(), fps = 60, n = 0, lastAdjust = 0;
+  const frus = new THREE.Frustum(), pm = new THREE.Matrix4(), sph = new THREE.Sphere(), tmp = new THREE.Vector3();
+  const shadowEvery = q.get('shadowEvery') ? +q.get('shadowEvery')! : 2; renderer.shadowMap.autoUpdate = false; renderer.shadowMap.needsUpdate = true;
+  const blobG = new THREE.CircleGeometry(.42, 18).rotateX(-Math.PI / 2), blobM = new THREE.MeshBasicMaterial({ color: '#1d1a12', transparent: true, opacity: .32, depthWrite: false });
+  const blobs = new Map<any, THREE.Mesh>();
+  return {
+    get fps() { return fps; }, get pr() { return pr; },
+    tick(now: number) { frames++; if (now - t0 >= 1000) { fps = frames * 1000 / (now - t0); frames = 0; t0 = now;
+        if (dynRes && now - lastAdjust > 1500) { const want = fps < 50 ? pr - .1 : fps > 58 ? pr + .05 : pr; const np = Math.max(minPR, Math.min(maxPR, want)); if (Math.abs(np - pr) > .01) { pr = np; renderer.setPixelRatio(pr); renderer.setSize(innerWidth, innerHeight); lastAdjust = now; } } } },
+    beforeRender() {
+      n++; if (n % shadowEvery === 0) renderer.shadowMap.needsUpdate = true;
+      camera.updateMatrixWorld(); pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); frus.setFromProjectionMatrix(pm);
+      const avs: any[] = sim.villagers.map(v => v.avatar); if (nell) avs.push(nell);
+      for (const av of avs) {
+        const r = av.root as THREE.Object3D; sph.center.set(r.position.x, r.position.y + av.height * .5, r.position.z); sph.radius = av.height * .75;
+        const onScreen = frus.intersectsSphere(sph); av.body.visible = onScreen;
+        const d = tmp.copy(sph.center).distanceTo(camera.position), near = d < 26;
+        if (av._lod !== near) { av._lod = near; av.body.traverse((m: any) => { if (m.isMesh) { if (m.name === 'CharacterOutline') m.visible = d < 34 || near; m.castShadow = near; } }); }
+        const ol = av._ol ??= av.body.getObjectByName('CharacterOutline'); if (ol) ol.visible = d < 34;
+        let b = blobs.get(av); if (!b) { b = new THREE.Mesh(blobG, blobM); b.renderOrder = 1; scene.add(b); blobs.set(av, b); }
+        b.visible = r.visible && onScreen && !near; b.position.set(r.position.x, .03, r.position.z);
+      }
+    },
+  };
+})();
 function start() {
   ui = new UI(api, document.body);
   sim.on('sound', (k: string, x: number, z: number) => sound.play(k, Math.max(0, 1 - Math.hypot(x - controls.target.x, z - controls.target.z) / 40)));
@@ -132,7 +165,7 @@ function start() {
 function stepSim(dtWorld: number) { const n = Math.min(400, Math.ceil(dtWorld / (1 / 30))); const h = dtWorld / n; for (let i = 0; i < n; i++) { sim.step(h); } tickTraveller(sim); tickFestival(sim); }
 function frame(now: number) {
   requestAnimationFrame(frame);
-  let dt = Math.min(.1, (now - last) / 1000); last = now; fpsAvg = fpsAvg * .95 + (1 / Math.max(dt, 1e-3)) * .05;
+  let dt = Math.min(.1, (now - last) / 1000); last = now; perf.tick(now);
   const t0 = performance.now(); if (speed > 0) stepSim(dt * speed); simMsAvg = simMsAvg * .9 + (performance.now() - t0) * .1;
   const adt = speed === 0 ? dt * .25 : dt * Math.min(speed, 2.5);
   for (const v of sim.villagers) syncAvatar(v, speed === 0 ? 0 : adt);
@@ -149,12 +182,13 @@ function frame(now: number) {
   sky.update(sim.hour, sim.rain, controls.target); world.fx.setRain(sim.rain > .35); world.fx.update(dt, controls.target);
   sound.ambient(sky.night, sim.rain, dt);
   ui.frame(dt);
+  perf.beforeRender();
   renderer.render(scene, camera);
 }
 
 // ---- hooks for headless verification & power users -------------------------------------------------
 (window as any).terrarium = {
-  sim, director, world, camera, controls, renderer, get fps() { return fpsAvg; }, get simMs() { return simMsAvg; },
+  sim, director, world, camera, controls, renderer, get fps() { return perf.fps; }, get pixelRatio() { return perf.pr; }, get simMs() { return simMsAvg; },
   setSpeed: (s: number) => (speed = s), select: (id: string | null) => api.select(id), setMode: (m: any) => api.setMode(m), god: (k: string) => api.god(k), ui: () => ui,
   fastForward(minutes: number) { ui.quiet = true; stepSim(minutes / MIN_PER_SEC); ui.quiet = false; for (const v of sim.villagers) syncAvatar(v, .016); },
   look(x: number, z: number, dist = 30, yaw = .6, pitch = .9) { follow = null; focusTarget = null; mode = 'free'; controls.target.set(x, 0, z); camera.position.set(x + Math.sin(yaw) * Math.cos(pitch) * dist, Math.sin(pitch) * dist, z + Math.cos(yaw) * Math.cos(pitch) * dist); controls.update(); },
