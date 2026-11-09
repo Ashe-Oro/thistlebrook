@@ -243,8 +243,8 @@ function montageCamera(dt: number) {
   if (idx >= m.shots.length) { endMontage(); return; }
   const sh = m.shots[idx], u = (m.t % m.per) / m.per;
   if (idx !== m.i) { m.i = idx; m.yaw += 1.9; (cine.querySelector('em') as HTMLElement).textContent = sh.icon; (cine.querySelector('span') as HTMLElement).textContent = `Yesterday, ${fmtTime(sh.t)}: ${sh.text}`; cine.classList.remove('cut'); void cine.offsetWidth; cine.classList.add('cut'); sound.play('pop', .25); }
-  if ((m as any).fixFor !== idx) { (m as any).fixFor = idx; bT.set(sh.x, 1, sh.z); (m as any).off = clearYaw(m.yaw, 15, 10.5); }
-  const yaw = m.yaw + (m as any).off + u * .35, dist = 16 - u * 3, h = 11 - u * 2;
+  if ((m as any).fixFor !== idx) { (m as any).fixFor = idx; bT.set(sh.x, 1, sh.z); (m as any).off = clearYaw(m.yaw, 11, 13); }
+  const yaw = m.yaw + (m as any).off + u * .35, dist = 11.5 - u * 2.5, h = 13.5 - u * 2.5;
   controls.target.set(sh.x, 1, sh.z); camera.position.set(sh.x + Math.sin(yaw) * dist, h, sh.z + Math.cos(yaw) * dist); camera.lookAt(controls.target);
 }
 

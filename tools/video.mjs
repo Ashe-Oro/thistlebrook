@@ -76,7 +76,7 @@ await cap('Crushes, confessions, heartbreak', 'romance grows out of opinions, me
 // 7 · god powers: rain + traveller
 await run("terrarium.god('rain'); terrarium.setSpeed(2); terrarium.fastForward(25); terrarium.setMode('free'); glide(-9,4,34,24,.5,.75,.5,.4,5600)");
 await cap('Play god', 'make it rain · drop a gift · throw a festival · summon the storyteller'); await wait(1900); await run('terrarium.strike()'); await wait(1600); await run('terrarium.strike()'); await beat(1900);
-await run("halt(); const S=terrarium.sim; S.rainUntil = S.clock; S.rain = 0; terrarium.setSpeed(1); terrarium.setMode('director'); terrarium.rainbow()"); await wait(400); await cap('…and when a shower clears, a rainbow', 'birds wheel overhead, fish leap in the ponds'); await beat(6000);
+await run("halt(); const S=terrarium.sim; S.rainUntil = S.clock; S.rain = 0; S.nextWeather = S.clock + 600; terrarium.setSpeed(1); terrarium.setMode('director'); terrarium.rainbow()"); await wait(400); await cap('…and when a shower clears, a rainbow', 'birds wheel overhead, fish leap in the ponds'); await beat(6000);
 await run("terrarium.setMode('director'); terrarium.god('traveller')"); await wait(900);
 await run("terrarium.ui().quiet = true; terrarium.fastForward(12); terrarium.ui().quiet = false; if (!terrarium.beatOn) terrarium.beat();"); await wait(5600);
 // 8 · night party
