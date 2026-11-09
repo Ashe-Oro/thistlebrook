@@ -65,6 +65,12 @@ await cap('Click anyone to read their mind', 'portrait, mood, plan, current thou
 // 5b · a brawl, cut by the in-game director (letterbox, push-in, slow-mo, hit shake: all live, not post)
 await ffTo(13.2); await run(`halt(); const S=terrarium.sim; const a=S.byId.get('tom'), c=S.byId.get('pip'); for (const v of [a,c]) { S.leaveSeat(v); v.inside=null; v.avatar.targetAlpha=1; v.busyUntil=0; v.queue=[]; v.act=null; } a.x=-6; a.z=6.2; c.x=-4.9; c.z=6.6; terrarium.setSpeed(1); terrarium.setMode('director'); terrarium.look(-5.5,6.4,16,.7,.5); terrarium.setMode('director'); S.startFight(a,c,'Tom finally lost his temper with Pip'); if(!terrarium.beatOn) terrarium.beat();`);
 await wait(8600);
+// 7 · god powers: rain + traveller
+await run("terrarium.god('rain'); terrarium.setSpeed(2); terrarium.fastForward(25); terrarium.setMode('free'); glide(-9,4,34,24,.5,.75,.5,.4,5600)");
+await cap('Play god', 'make it rain · drop a gift · throw a festival · summon the storyteller'); await wait(1900); await run('terrarium.strike()'); await wait(1600); await run('terrarium.strike()'); await beat(1900);
+await run("halt(); const S=terrarium.sim; S.rainUntil = S.clock; S.rain = 0; S.nextWeather = S.clock + 600; terrarium.setSpeed(1); terrarium.setMode('director'); terrarium.rainbow()"); await wait(400); await cap('…and when a shower clears, a rainbow', 'birds wheel overhead, fish leap in the ponds'); await beat(6000);
+await run("terrarium.setMode('director'); terrarium.god('traveller')"); await wait(900);
+await run("terrarium.ui().quiet = true; terrarium.fastForward(12); terrarium.ui().quiet = false; if (!terrarium.beatOn) terrarium.beat();"); await wait(5600);
 // 6 · evening: a confession by the pond
 await ffTo(18.4); await run(`const S=terrarium.sim, pair=[]; for (const v of S.villagers) for (const u of S.villagers) if (v!==u && !v.partner && !u.partner && !v.family.includes(u.id) && v.def.age!=='teen' && u.def.age!=='teen' && !pair.length && v.crush===u.id) pair.push(v.id,u.id); if(!pair.length){ const a=S.byId.get('ollie'), b=S.byId.get('jen'); pair.push(a.id,b.id); } window._pair=pair; return pair`).then(async ([a, bb]) => {
   await run(`const S=terrarium.sim, a=S.byId.get('${a}'), b=S.byId.get('${bb}'); if(a.partner){const x=S.byId.get(a.partner); S.breakUp(a,x);} if(b.partner){const x=S.byId.get(b.partner); S.breakUp(b,x);} a.crush=b.id; b.crush=a.id; a.opinion[b.id]=85; b.opinion[a.id]=82; for (const v of S.villagers) if (v!==a&&v!==b&&Math.hypot(v.x+3,v.z-12)<5) v.x+=6;`);
@@ -73,12 +79,6 @@ await ffTo(18.4); await run(`const S=terrarium.sim, pair=[]; for (const v of S.v
   await run("terrarium.setSpeed(1); terrarium.select(null); terrarium.setMode('free'); glide(-3.2,13.5,9,6.5,.9,.6,.3,.22,7000)");
 });
 await cap('Crushes, confessions, heartbreak', 'romance grows out of opinions, memories and nerve'); await beat(6500);
-// 7 · god powers: rain + traveller
-await run("terrarium.god('rain'); terrarium.setSpeed(2); terrarium.fastForward(25); terrarium.setMode('free'); glide(-9,4,34,24,.5,.75,.5,.4,5600)");
-await cap('Play god', 'make it rain · drop a gift · throw a festival · summon the storyteller'); await wait(1900); await run('terrarium.strike()'); await wait(1600); await run('terrarium.strike()'); await beat(1900);
-await run("halt(); const S=terrarium.sim; S.rainUntil = S.clock; S.rain = 0; S.nextWeather = S.clock + 600; terrarium.setSpeed(1); terrarium.setMode('director'); terrarium.rainbow()"); await wait(400); await cap('…and when a shower clears, a rainbow', 'birds wheel overhead, fish leap in the ponds'); await beat(6000);
-await run("terrarium.setMode('director'); terrarium.god('traveller')"); await wait(900);
-await run("terrarium.ui().quiet = true; terrarium.fastForward(12); terrarium.ui().quiet = false; if (!terrarium.beatOn) terrarium.beat();"); await wait(5600);
 // 8 · night party
 await ffTo(20.7); await run(`terrarium.setSpeed(1); const S=terrarium.sim, p=S.parties.find(p=>!p.done&&p.at<=S.clock+30)||S.parties[S.parties.length-1]; const pl=S.place(p?p.place:'campfire'); glide(pl.cx, pl.cz+.5, 18, 11, .2, .7, .55, .4, 6000); return p&&p.title`);
 await cap('Invitations spread by word of mouth', 'and parties happen when enough people actually show up'); await beat(5200); await panels(true);
