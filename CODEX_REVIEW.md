@@ -1,161 +1,89 @@
-> **Round 2 status (Nov 9, 2026, 4:31 PM ET):** the round-2 Codex critique could not run. `codex exec` returned "You've hit your usage limit … try again at Nov 11th, 2026 5:14 AM" (it also logged an expired auth token). The round-1 Codex review below is unchanged. Round 2's perf and wow work followed CLAUDE_REVIEW.md (round 2) plus our own profiling (tools/perf.mjs).
-
-Thistlebrook already has an appealing miniature-village identity: the architecture, parchment UI, and campfire lighting make it inviting to watch. Its strongest emerging story—Jen’s thefts, damaged reputation, and unreturned affection—is more compelling in the chronicle than in the world, where framing, broken portraits, and ambiguous reactions hide the causes and consequences. Prioritize reliable character presentation, readable event staging, and causal storytelling before adding more systems; this was a read-only review, `licensed/` was excluded, and `verify-report.json` was absent.
-
-## Top 15 suggestions
-
-Ranked by expected impact relative to implementation effort. **S** = localized change, **M** = coordinated changes, **L** = substantial system work.
-
-### 1. Give portraits a dedicated rendering scene
-
-**What’s wrong:** In `10_card_relationships.png`, Jen’s portrait shows rainy scenery; in `14_relationship_web.png`, most portraits show roads or lamps. This breaks recognition across the card, relationship web, and cast browser. `src/main.ts:60–69` renders the entire world through a camera beside the live avatar, allowing buildings and props to obstruct it.
-
-**Concrete fix:** Replace that render with an isolated portrait scene containing a presentation copy of the character, a neutral background, and fixed key/fill lights. Frame from head bounds, update transforms before rendering, and cache by outfit/expression. Indoor characters must remain recognizable.
-
-**Effort:** M
-
-### 2. Separate presentation randomness from simulation randomness
-
-**What’s wrong:** `src/sim/director.ts:40–41` consumes `sim.rng` inside a sort comparator; newspaper generation also consumes it at `:20`, `:32`, and `:46`. Watching in Director mode or opening a newspaper can therefore change subsequent agent decisions. Random comparator evaluations also make camera ranking inconsistent.
-
-**Concrete fix:** Give the director and editorial layer separate seeded RNGs. Compute each candidate’s camera score once before sorting. Move simulation-relevant party rolls off shared `Math.random`, which rendering also consumes.
-
-**Effort:** S
-
-### 3. Make the mobile interface a collapsible viewer
-
-**What’s wrong:** `22_mobile.png` loses much of the screen to the header, chronicle, and dock; the dock cuts off Gazette and later controls. Horizontal scrolling exists, but its discoverability is poor, and the fixed feed offset assumes a particular dock height.
-
-**Concrete fix:** In `public/style.css:78–81` and `src/ui/ui.ts:37–46`, use a compact header, a collapsed “Latest event” strip, and a bottom sheet for Chronicle/Cast/Views. Put powers behind one expandable button. Use measured header/dock heights and safe-area insets instead of fixed offsets.
-
-**Effort:** M
-
-### 4. Stop announcing outcomes before scenes finish
-
-**What’s wrong:** `20_scuffle.png` announces Rosa’s victory while the fight is still happening. `src/sim/sim.ts:267–270` logs the winner and applies the loser’s dizzy state at fight start. Likewise, `src/sim/social.ts:89` says Tom “walked home alone” before his dialogue and homeward action finish.
-
-**Concrete fix:** Split dramatic events into start, resolution, and aftermath. Emit “Rosa confronted Jen” at initiation; publish the winner and apply dizziness when the fight ends. Narrate departure when the character actually departs.
-
-**Effort:** S
-
-### 5. Frame both participants and avoid foreground obstructions
-
-**What’s wrong:** A lamp dominates `20_scuffle.png`, directly obscuring the fight. In `02_plaza_lunch.png`, Tom is pushed into the lower edge. The camera follows one position with a preserved viewing direction and fixed distance (`src/main.ts:135–139`), regardless of the event’s participants or UI footprint.
-
-**Concrete fix:** Add an event shot target using participant bounds and the available screen rectangle. Test several yaw angles with raycasts against buildings and tall props; choose the least obstructed composition. Hold that shot through the interaction and briefly through its aftermath.
-
-**Effort:** M
-
-### 6. Show the cause and relationship consequence of drama
-
-**What’s wrong:** `13_feed_drama.png` contains theft, accusation, confrontation, pursuit, and fighting, but viewers must reconstruct their connections manually. The data often already carries the cause: `factId` and `why` in `src/sim/brain.ts:208`, and facts in `src/sim/social.ts:103–112`.
-
-**Concrete fix:** Carry a stable incident ID through theft → discovery → accusation → confrontation → resolution. Add expandable context such as “Because Jen took Edgar’s book” and “Rosa’s opinion of Jen −20.” Let the event row focus the scene; keep name clicks for character inspection.
-
-**Effort:** M
-
-### 7. Make the Drama filter match viewer expectations
-
-**What’s wrong:** `13_feed_drama.png` includes ordinary weather entries, while fabricated rumors and their spread fall under Social. `src/ui/ui.ts:54` classifies solely by broad event kind, hiding some of the game’s central drama from its own filter.
-
-**Concrete fix:** Add explicit event tags for conflict, romance, deception, gathering, and weather. Include lies, exposure, and consequential gossip in Drama; keep routine rain in All. Distinguish “false rumor” from “confirmed deed” with compact badges rather than repeated parenthetical prose.
-
-**Effort:** S
-
-### 8. Turn the gazette and recap into story summaries
-
-**What’s wrong:** `09_gazette.png` headlines Jen’s theft but devotes its body to alliances and a gathering, omitting the headline’s explanation. `15_recap.png` spends its limited slots on early invitations and rumor reach, omitting later payoffs because `src/ui/ui.ts:149` takes the first eight qualifying events.
-
-**Concrete fix:** In `src/sim/director.ts:15–17`, reserve the lead paragraph for the headline incident, then choose distinct secondary stories. For recap, select complete incident arcs before sorting them chronologically. Add a numbered opinion axis and incident markers to connect graph changes with events.
-
-**Effort:** M
-
-### 9. Distinguish affection from romance
-
-**What’s wrong:** Ordinary gifts add `.5` love and display hearts (`src/sim/social.ts:57–65`). Combined with the heart-eye expression in `06_expressions.png`, friendship, gratitude, and attraction share the same visual language. Viewers cannot reliably infer romantic intent.
-
-**Concrete fix:** Make ordinary gifts primarily increase joy and gratitude; reserve strong love, pink hearts, and bashful poses for attraction. Add unmistakable body cues: a tentative lean for flirting, recoil for rejection, slumped shoulders for heartbreak, and guarded posture for suspicion.
-
-**Effort:** S
-
-### 10. Preserve seated poses during conversation
-
-**What’s wrong:** `src/sim/sim.ts:176` switches seated characters to full-body `talk`; party seating does the same at `:311`. `src/agents/avatar.ts:113–114` gives only `sit` the seated hip and leg pose. Characters can consequently rise out of their seats while still occupying them.
-
-**Concrete fix:** Separate the lower-body seating pose from upper-body gestures. Retain seated hips and legs while blending talking arms, head turns, drinking, or laughter. Apply this consistently to benches and campfire seats.
-
-**Effort:** S
-
-### 11. Make rain immediately recognizable
-
-**What’s wrong:** `19_rain.png` looks sunny and dry ten simulated minutes after a “summoned storm”; the header still shows sunshine. Some delay is intentional: simulation rain ramps over game time (`src/sim/sim.ts:132`), then particle rain ramps again over wall time (`src/world/fx.ts:100`).
-
-**Concrete fix:** Trigger an immediate cloud-shadow and audio transition when a storm starts, then fade in drops. Drive the weather icon from an explicit incoming/raining/clearing state. Add subtle ground darkening and stronger rain-dependent sunlight suppression in `src/world/sky.ts:36–45`.
-
-**Effort:** S
-
-### 12. Make sheltering a visible behavioral response
-
-**What’s wrong:** “Everyone ran for cover” is asserted unconditionally (`src/sim/sim.ts:134`), but rain only sets `replan`; existing actions generally continue. Shelter selection is probabilistic and excludes events (`src/sim/brain.ts:70–72`), so the narrated urgency exceeds the behavior.
-
-**Concrete fix:** Narrate “Villagers are seeking shelter,” then interrupt eligible outdoor routines with a shelter action. Keep personality exceptions visible—one stubborn worker stays out—and provide a readable destination cue. Give outdoor parties an explicit shelter, relocation, or cancellation rule.
-
-**Effort:** M
-
-### 13. Keep suspicion separate from knowledge
-
-**What’s wrong:** The theft sequence has good story potential, but `src/sim/social.ts:174–177` tells the victim exactly who stole the item whenever any witness sees it, even if the victim did not. Confrontation dialogue then largely uses generic taunts (`src/sim/social.ts:149`), wasting the remembered incident.
-
-**Concrete fix:** Give observations only to actual witnesses; transfer knowledge to the victim through a warning. Store source, confidence, and evidence per listener. Pass the grievance into dialogue: “Mara saw you take Edgar’s book” communicates much more than “You’re a menace.”
-
-**Effort:** M
-
-### 14. Show directional relationships
-
-**What’s wrong:** `14_relationship_web.png` says “Who likes whom,” but `src/ui/web.ts:8` averages both opinions. Admiration and rejection can cancel into a neutral or invisible edge—the exact asymmetry needed to understand Tom/Mara and Jen/Ollie.
-
-**Concrete fix:** On selecting a node, show outgoing and incoming feelings separately, with arrowheads and values. Keep mutual relationships as the quiet default, but give crushes and partnerships distinct symbols. Show the latest cause of a change on edge selection.
-
-**Effort:** M
-
-### 15. Give gatherings differentiated social beats
-
-**What’s wrong:** `07_party_night.png` has the strongest atmosphere, but attendance mostly cycles through fixed poses, generic banter, and small opinion gains (`src/sim/sim.ts:311–317`). The system gathers personalities together without fully using their conflicting histories.
-
-**Concrete fix:** Add a few contextual party beats: the host welcomes a late arrival, a crush chooses a nearby seat, an enemy refuses a toast, or someone leaves after gossip. Score these from existing relationships and memories, with cooldowns and quiet intervals. Preserve peaceful gatherings as a valid outcome.
-
-**Effort:** M
-
-## Bugs spotted
-
-- **Party attendance can repeatedly cancel its own approach.** `src/sim/sim.ts:285–288` checks active `attend` actions but not queued ones, then resets accepted guests every tick. Interruption of an indoor `enter` action also skips cleanup of `v.inside` and `place.inside`. Introduce an attendance commitment and a centralized action-cancellation path that cleans up occupancy and reservations.
-
-- **The pursuer’s fight action can be discarded immediately.** In `src/sim/sim.ts:183`, `caught()` can replace the pursuer’s action with `fight`, but the old chase returns `true`; `:155` then clears `v.act`. Clear a completed action only if it is still the action that was executed.
-
-- **Failed navigation becomes obstacle-crossing movement.** `src/sim/sim.ts:92` substitutes a straight line when A* fails. Return a failure result and retry a reachable destination instead of walking through blocked geometry.
-
-- **Overlapping conversations can execute out of order.** `src/ui/ui.ts:25` appends dialogue schedules, while `:77` processes only the queue head. A later-appended conversation’s early lines can wait behind another conversation’s future lines. Maintain a time-sorted queue.
-
-- **Gossip hop count is shared across branches.** `src/sim/social.ts:198` mutates the shared fact’s `hops`; `src/agents/memory.ts:15` stores the same fact object for every listener. Separate transfers inflate one global count and incorrectly suppress later event importance. Store provenance per listener or transmission.
-
-- **Work effects have two strike drivers.** `src/sim/sim.ts:210` invokes `onHit`, while `src/agents/avatar.ts:91` and `:100` also invoke it from animation phase crossings. This permits duplicate or speed-dependent effects and audio. Make one clock authoritative.
-
-- **Routine schedules overlap beyond midnight.** `src/sim/brain.ts:25` adds the tavernkeeper’s sleep through hour 33, then `:35` appends another sleep block from 24–30. Generate one non-overlapping schedule, including explicit overnight carryover.
-
-- **Live card refresh replaces interactive DOM every 350 ms.** `src/ui/ui.ts:94–96` calls `renderCard()`, which rebuilds its contents at `:119–128`. This can disrupt focus and ongoing interaction. Preserve the shell and update changed values.
-
-- **Relationship graph is a stale snapshot.** `src/ui/ui.ts:134` draws it only when opened while the simulation continues. Refresh it on relevant changes or label/pause the snapshot.
-
-## Quick polish list
-
-- **Reduce ground contrast:** `02_plaza_lunch.png` is dominated by pale cobbles. Lower their highlight contrast in `src/world/groundpaint.ts:19–23` so characters lead the eye.
-- **Improve character lighting:** `07_party_night.png` has appealing warm light, but several faces read nearly black. Add restrained face fill and review avatar shadow reception in `src/agents/avatar.ts:29`.
-- **Use a consistent identity accent:** Outfit colors and UI identity colors differ enough to slow recognition. Add a small consistent trim or badge without recoloring whole costumes.
-- **Respect UI safe regions:** Clamp bubbles below the header and outside panels in `src/ui/ui.ts:81–91`; `20_scuffle.png` has speech clipped at the top.
-- **Label negative leaderboard bars:** `src/ui/ui.ts:101` draws absolute magnitude in the same direction. Use a zero-centered bar and show recent change.
-- **Explain influence:** Expose the contributors from `src/sim/sim.ts:86`, such as allies, admirers, and fear, through a compact score breakdown.
-- **Add day separators to Chronicle:** Repeated clock times across days make `13_feed_drama.png` harder to follow (`src/ui/ui.ts:58`).
-- **Keep the newspaper readable:** Replace the unconditional nine-second dismissal in `src/main.ts:120` with user dismissal or a reading-aware timer.
-- **Make festival anticipation explicit:** `17_festival.png` shows bunting over an almost empty plaza. Display “Guests arriving” and attendee count before promising a celebration.
-- **Ground dialogue in current conditions:** Gate greetings and weather lines in `src/sim/lines.ts:36–46` by time and weather; avoid claims about tree felling when v1 keeps trees standing.
-- **Remove accidental economy cues:** “One copper” in `src/ui/ui.ts:142` implies a transaction in a deliberately economy-free game. “Village morning edition” fits the intended scope.
+<!-- Round 3 Codex critique of master ea5c5f3 (codex exec, read-only sandbox, 2026-11-09 18:59 EST). The round-2 review is in git history. -->
+
+# Thistlebrook — round-2 critique
+
+Static source review against README.md and QA_STATUS.md. No files modified, no network used, and no access to `licensed/`. Findings below are code-derived; performance estimates are unmeasured.
+
+## 1. Correctness bugs
+
+| Priority | Location | Problem → concrete fix |
+|---|---|---|
+| **P0** | `src/core/save.ts:66` | **Failed saves alter the running village.** Any storage exception—including disabled storage—halves memories and story logs, up to three times. This changes subsequent reflections and decisions. Thin a detached save snapshot; never mutate live state during serialization. Distinguish quota errors from other failures. |
+| **P0** | `src/core/save.ts:82` | **Resume strands indoor villagers.** Actions are cleared while `v.inside` and `doing` survive. Only completing an `enter` action clears `inside`; a subsequent outdoor action can leave someone permanently invisible and excluded from social interactions. Restore declarative actions, or normalize indoor state and rebuild place occupancy before replanning. |
+| **P1** | `src/core/save.ts:81` | **Resume silently cancels active interventions.** Gifts disappear; visitor/festival timers reset, while festival parties and attendance survive. Restore these set pieces from simulation state and regenerate their visuals. |
+| **P1** | `src/core/save.ts:77` | **Invalid saves can partially overwrite live villagers.** `decode()` mutates them before version validation; later failure returns `false` without rollback. Decode into detached records, validate version/schema/references, then commit atomically. |
+| **P1** | `src/main.ts:391` | **`fastForward(0)` and negative inputs still advance one tick.** Every call rounds upward and ignores `simAcc`, so splitting a duration into calls changes elapsed simulation time. Reject invalid/negative inputs, make zero a no-op, and share the accumulator. Restore `ui.quiet` with `try/finally`. |
+| **P1** | `src/main.ts:341` | **Fast-forward can launch dawn presentation.** `quiet` suppresses toasts and beats but does not guard the dawn montage/paper listener. Advancing several days synchronously can overwrite montage callbacks and create competing paper timers. Gate dawn presentation during fast-forward; optionally show one final recap afterward. |
+| **P1** | `src/main.ts:294` | **Camera obstruction tests include decorative geometry.** Whole-scene raycasts treat fish, birds, transparent effects, and meshes under invisible parents as blockers; checking only `object.visible` misses ancestor visibility. Use an explicit obstruction layer containing buildings, trees, and solid props. |
+| **P1** | `src/main.ts:201` | **Director clearance tests a different camera position.** `off.length()` is a spherical distance, but `clearYaw()` treats it as horizontal distance and adds height separately. Test with `Math.hypot(off.x, off.z)` and the actual camera height. |
+| **P1** | `src/main.ts:307` | **Beat clearance becomes stale.** `yawOff` is computed once while subjects, yaw, and camera distance continue moving. Recheck periodically against the proposed camera position. If every candidate is blocked, raise/pull back instead of returning indistinguishable offset `0`. |
+| **P1** | `src/ui/ui.ts:226` | **Open cards stop updating their substantive contents.** The early return refreshes mood, thought, action, and needs only. Relationships, inventory, romance, plan, memories, and Story remain frozen until switching tabs or villagers. Refresh affected sections using state revisions. |
+| **P1** | `src/ui/ui.ts:108` | **Updated gossip keeps its old filter category.** A viral row can acquire a false-rumour badge through `eventUpdate` but retain `data-cat="social"`, disappearing from Drama. Recompute category, importance class, minor status, and filtering on updates. |
+| **P2** | `src/ui/ui.ts:95` | **Folded rows retain the first event’s identity.** Time/count change, but `data-id` and arc chip still identify the original event. Later updates target the wrong occurrence or no row. Track represented event IDs explicitly and refresh the chip/count consistently. |
+| **P2** | `src/ui/ui.ts:105` | **Important captions disappear on collapsed mobile feeds.** “Visible” checks the filter only, ignoring chronicle collapse and cinematic hiding. Check actual panel visibility before suppressing captions. |
+| **P2** | `src/ui/ui.ts:130` | **Toast “refresh” does not refresh lifetime.** A duplicate arriving just before 4.2 seconds updates text and immediately fades. Store and reset both dismissal timers. |
+| **P1** | `src/sim/director.ts:22` | **The Gazette can still headline a forbidden event.** `?? evs[0]` restores a secret crush or fabricated rumour when no eligible event exists. Fall back to a quiet-day headline and omit its story. |
+| **P1** | `src/sim/director.ts:30` | **Yesterday’s paper can contain today’s developments.** Secondary stories use live `at.top()` and its latest beats, constrained only by current clock. Limit all newspaper beats to the issue’s reporting window; calculate heat within that window. |
+| **P1** | `src/sim/arcs.ts:133` | **Arc event indices corrupt after beat eviction.** `beats.shift()` leaves every stored `byEvent.idx` unchanged. Updates can overwrite a different beat, and chips report incorrect beat numbers. Store stable beat references/IDs and prune mappings when evicting beats and arcs. |
+| **P1** | `src/sim/sim.ts:98` | **Failed navigation becomes walking through obstacles.** A null path falls back to the direct destination. Fail/retry the action or choose a reachable alternative; never substitute an unchecked straight path. |
+
+**Ambient-specific:** `src/world/ambient.ts:20` chooses positive rotation in both ternary branches; use `-1` for one branch if mixed circling was intended. Birds use wall-clock phase (`:44`), while birds/fish continue during pause (`:42`, `:53`). That can be intentional ambient animation, but replay and pause semantics should be explicit. The rainbow’s reversed-edge `smoothstep(1., .82, t)` (`:32`) is undefined GLSL behavior; replace it with `1. - smoothstep(.82, 1., t)`.
+
+## 2. Determinism risks
+
+- **The seed does not initialize the simulation RNG.** `src/main.ts:45` seeds global `Math.random`; `src/sim/sim.ts:17` always constructs `RNG(20261109)`. Initialize dedicated simulation/world streams from the requested seed.
+- **Rendered world state feeds decisions.** The dog moves in `World.update()` (`src/world/world.ts:329`), while `UtilityBrain.ambient()` targets its current position (`src/sim/brain.ts:135`). Different frame rates, speeds, or fast-forward change navigation and action timing. Move decision-relevant animal state into fixed simulation ticks.
+- **World RNG mixes rendering and simulation.** Leaf selection, animal destinations, and ducks consume `world.rng` per render (`src/world/world.ts:303`, `:323`, `:342`); brain decisions read world state. Separate cosmetic randomness completely.
+- **Random comparators are unstable.** Resource selection consumes `sim.rng` inside sorting comparisons (`src/sim/brain.ts:173`, `:178`, `:183`). Comparison counts/order can vary by engine. Assign one random score per candidate, then sort deterministically.
+- **Camera activity changes wall-time progression.** Beat cooldowns use `performance.now()`, while beats/montages slow simulation (`src/main.ts:276`, `:359`). Same seed at equal wall time can diverge in elapsed game time even if fixed-tick events match. Define replay guarantees by tick count and log interventions at ticks.
+- **Save/resume is not a deterministic continuation.** Actions/callbacks, world state/RNG, accumulator, memory ID counter, and editorial RNG are not restored. Clearing actions changes the next RNG-consuming choices.
+- **Gazette randomness depends on viewing.** Camera picks and paper generation share module-global `ED` (`src/sim/director.ts:9`). Opening early editions or changing camera behavior changes later newspaper wording. Derive editorial randomness from seed/day/event IDs.
+- **Async interventions depend on microtask timing.** Traveller/festival gameplay changes occur after asset awaits (`src/sim/god.ts:26`, `:51`). Commit gameplay immediately at a simulation tick; load visuals independently.
+- **Optional LLM mode is inherently asynchronous.** Responses apply to live state without request-day/revision checks (`src/sim/llm.ts:44`). Reject stale results and record accepted outputs for replay.
+
+## 3. Performance hot spots
+
+Estimates indicate likely impact, not benchmark results.
+
+| Location | Hot spot | Estimated impact / improvement |
+|---|---|---|
+| `main.ts:294` | Up to ten recursive whole-scene raycasts per clearance check, including merged scenery and instanced borders. | **High hitch risk:** potentially multi-millisecond bursts. Raycast simplified obstruction meshes; reuse hit buffers and spatially shortlist candidates. |
+| `core/save.ts:58` | Synchronous graph encoding and localStorage writes. Keeping 400 `events` does not bound `dayStats`, which still references historical events. | **High over long sessions:** growing pauses and eventual quota failure. Bound retained days and serialize a deliberate snapshot schema. |
+| `sim/arcs.ts:128` | Evicted arcs remain reachable through `byEvent`; `seen` also grows indefinitely. | **Medium long-session memory risk.** Remove expired mappings and bound event retention. |
+| `ui/ui.ts:135` | Every bubble forces layout through `offsetWidth`; fast-forward still queues conversations and creates icons/bubbles. | **Medium burst cost:** several layouts/DOM mutations during social peaks. Suppress transient presentation during catch-up and batch animation restarts. |
+| `ui/ui.ts:166` | Bubble positioning parses CSS transforms back into numbers, allocates rectangles, and repeatedly scans nearby bubbles. | **Low–medium at 12 villagers.** Keep numeric layout records and perform measurements before writes. |
+| `main.ts:77` | Portraits render the whole scene, up to twice per frame. | **High transient GPU cost**, especially software rendering. Use a small studio scene and cached portrait assets. |
+| `agents/avatar.ts:35` | Tool/carry changes allocate new geometry/materials without disposal; `props.ts` builds many separate meshes. | **Medium cumulative GPU-memory risk.** Cache prop variants per avatar or dispose owned resources on replacement. |
+| `world/nav.ts:38` | Each path allocates grid-sized typed arrays; pursuing social targets repath every 2.5 game minutes. | **Medium at 16×**, with GC bursts. Reuse search buffers and avoid repathing until targets move meaningfully. |
+| `main.ts:132`, `world/world.ts:317` | Per-frame expression arrays/sorts, vectors, plot colors, and avatar arrays. | **Low individually.** Reuse scratch values after fixing raycasts, portraits, and saves. |
+
+## 4. Drama / storytelling quality
+
+- **Give events structured causes.** Arc grouping currently infers causality from prose and actor pairs. Add `factId`, `causeEventId`, `keepsakeId`, and outcome fields; use them for reliable “because…” summaries.
+- **Separate truth, belief, and public knowledge.** A false-rumour badge tells the viewer the truth, but the interesting question is who believes it and why. Show the source, believers, doubters, and the first contradictory witness.
+- **Make consequences persist visibly.** Alliances mostly grant banners and influence; give them small behavioral effects: defending members, refusing invitations, or helping recover keepsakes.
+- **Broaden resolutions.** Add witnessed restitution, reluctant truces, rejected peace offerings with returned keepsakes, and private reconciliation that the village has not heard about.
+- **Make the montage honest.** `main.ts:248` films yesterday’s coordinates populated by today’s world. Save a tiny event snapshot—participants, poses, positions—or present illustrated memory cards instead of implying a replay.
+- **Preserve character specificity.** Let arguments reference the remembered deed in dialogue, not only narration; gate romantic gestures and forgiveness by relationship history.
+
+## 5. Cheap wow-factor ideas
+
+- **“Why now?” chip:** one sentence linking an action to its strongest memory or need.
+- **Rumour trail:** briefly animate existing relationship-web edges as news spreads.
+- **Before/after relationship badges:** “Trust −22 · heard from Jen,” attached to major beats.
+- **Dawn postcards:** save one small screenshot at major events; montage existing images with restrained camera movement.
+- **Unfinished-business strip:** three open threads with a concrete question: “Will Edgar get his book back?”
+- **Distinct reaction shots:** nearby witnesses turn toward a confession, theft, or accusation; reuse existing expressions and animations.
+
+## 6. Top 10 prioritized action list
+
+1. **M — Make saving side-effect-free and loading transactional.** Include storage-failure and malformed-save checks.
+2. **M — Repair resume invariants.** Restore indoor occupancy, interventions, claims, and letter reservations; verify reload during sleep, delivery, and parties.
+3. **L — Establish deterministic simulation ownership.** Seed sim/world explicitly; move decision-relevant world state into fixed ticks; isolate presentation RNG.
+4. **M — Unify real-time and fast-forward stepping.** Preserve fractional time, validate durations, suppress catch-up presentation, and compare event hashes across chunk sizes.
+5. **M — Replace whole-scene camera raycasts.** Use obstruction geometry, correct distance semantics, periodic rechecks, and an elevated fallback.
+6. **M — Refresh open-card sections from state revisions.** Prioritize relationships, keepsakes, romance, and plans.
+7. **M — Repair arc identity and retention.** Stable beat references, bounded maps, and structured causal IDs.
+8. **S — Fix Gazette eligibility and reporting windows.** Include all-unprintable and dawn-boundary cases.
+9. **S — Finish chronicle/toast behavior.** Reclassify updated rows, preserve folded identities, respect collapsed visibility, and reset toast timers.
+10. **M — Add legible causal feedback.** Ship “Why now?”, relationship deltas, and three unresolved story questions before adding more event volume.
