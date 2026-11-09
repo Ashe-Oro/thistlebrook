@@ -137,7 +137,10 @@ export class ArcTracker {
   private recompute(arc: Arc) {
     const last = arc.beats[arc.beats.length - 1];
     const terminal = last && /Returned|Sweethearts|Heartbreak|Breakup|Reconciled|Exposed/.test(last.beat);
-    arc.status = terminal ? 'resolved' : arc.beats.length >= 2 ? 'open' : 'brewing';
+    let done = !!terminal;
+    // a keepsake theft only resolves once the keepsake is truly back with its owner (whatever the last line said)
+    if (arc.family === 'theft' && arc.key.startsWith('theft:')) { const needle = arc.key.slice(6); for (const k of this.sim.keepsakes.values()) if (keepsakeNeedle(k.name) === needle) { done = k.holder === k.owner; break; } }
+    arc.status = done ? 'resolved' : arc.beats.length >= 2 ? 'open' : 'brewing';
   }
   heat(arc: Arc, now = this.sim.clock): number {
     // reward distinct, developing beats; a repeated gossip re-tell adds little (keeps the firehose from burying real drama)
@@ -153,6 +156,7 @@ export class ArcTracker {
   }
   // top story threads by heat; by default only ones with real shape (>= 2 beats)
   top(n = 4, minBeats = 2, now = this.sim.clock): Arc[] {
+    for (const a of this.arcs) if (a.family === 'theft' && a.beats.length) this.recompute(a);
     return this.arcs.filter(a => a.beats.length >= minBeats).map(a => ({ a, h: this.heat(a, now) })).sort((x, y) => y.h - x.h).slice(0, n).map(x => x.a);
   }
 }

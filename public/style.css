@@ -140,3 +140,29 @@ body:has(.cine.on) .feedwrap, body:has(.cine.on) .lb, body:has(.cine.on) .card {
 .landmark { position: absolute; left: 0; top: 0; pointer-events: none; background: rgba(251, 244, 228, .86); color: #3b2a1a; font: 600 11px/1.2 Georgia, serif; padding: 2px 8px 2px 5px; border-radius: 9px; border: 1px solid rgba(90, 60, 30, .25); white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
 .landmark i { font-style: normal; margin-right: 4px; }
 .landmark::after { content: ''; position: absolute; left: 50%; bottom: -5px; width: 1px; height: 5px; background: rgba(90, 60, 30, .4); }
+/* round 3 / QA fixes */
+.dock button.cool { position: relative; opacity: .55; cursor: wait; overflow: hidden; }
+.dock button.cool::after { content: ''; position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: var(--accent, #c9873a); transform-origin: left; animation: coolbar var(--cool, 10s) linear forwards; }
+@keyframes coolbar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.feed .rep { font-weight: 700; color: #9b8762; font-size: .9em; }
+.paper .side p, .paper .side { text-align: left; }
+body.intro .feedwrap, body.intro .lb, body.intro .card, body.intro .dock, body.intro .hint { opacity: 0 !important; pointer-events: none; transition: opacity .6s; }
+.hint { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + var(--top-h) + 18px); transform: translateX(-50%); background: rgba(30, 22, 14, .8); color: #f6ead0; padding: 7px 14px; border-radius: 18px; font-size: 13px; z-index: 5; pointer-events: auto; cursor: pointer; transition: opacity .6s; white-space: nowrap; }
+.hint.gone { opacity: 0; pointer-events: none; }
+.topbar #newv { font-size: 13px; }
+@media (max-width: 700px), (pointer: coarse) {
+  .speeds button, .toggles button, .topbar button { min-height: 44px; min-width: 44px; }
+  .ff button { min-height: 36px; padding: 0 10px; }
+  .feedtog { min-width: 44px; min-height: 40px; }
+  .dock button { min-height: 48px; min-width: 52px; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; }
+  .dock button i { display: block; font-size: 9.5px; font-style: normal; margin-top: 3px; opacity: .8; }
+  .card .tabs button { min-height: 40px; }
+  .feedwrap { max-height: 24vh; }
+  .feedwrap .feed { min-height: 3.6em; }
+  /* the villager card becomes a bottom sheet over the chronicle; the camera frames the villager in the space above it */
+  .card { top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + var(--dock-h) + 10px); max-height: 50vh; border-radius: 16px 16px 12px 12px; }
+  body:has(.card:not(.hidden)) .feedwrap { display: none; }
+  .paper .cols { grid-template-columns: 1fr; } .paper .side { border-left: 0; padding-left: 0; border-top: 1px solid var(--ink); padding-top: 8px; }
+}
+@media (orientation: landscape) and (max-height: 500px) { .feedwrap { max-height: 34vh; } .card { max-height: 70vh; } }
+.sheet.web canvas { display: block; margin: 0 auto; height: min(560px, calc(88vh - 160px)); width: auto; max-width: 100%; }

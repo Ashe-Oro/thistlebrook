@@ -11,7 +11,9 @@ const ALLIANCE_NAMES = ['the Lantern Pact', 'the Copper Circle', 'the Hearth Gui
 export function op(a: Villager, b: Villager) { return a.opinion[b.id] ?? 0; }
 export function bump(sim: Sim, a: Villager, b: Villager, d: number) {
   const before = a.opinion[b.id] ?? 0, after = clamp(before + d, -100, 100); a.opinion[b.id] = after;
-  if (before < 70 && after >= 70 && !a.family.includes(b.id)) { sim.log(`${a.first} now counts ${b.first} as a close friend.`, 5, [a.id, b.id], 'bond', '💞'); if ((b.opinion[a.id] ?? 0) >= 70) sim.achieve(null, `bff-${[a.id, b.id].sort().join('-')}`, 'Best Friends', `${a.first} & ${b.first}`); }
+  if (before < 70 && after >= 70 && !a.family.includes(b.id)) { const mutual = (b.opinion[a.id] ?? 0) >= 70; const said = ((sim as any)._bff ??= new Set<string>()); const key = [a.id, b.id].sort().join('-');
+    // one line per friendship: the second half of a mutual pair upgrades it instead of mirroring it
+    if (!said.has(key)) { said.add(key); sim.log(mutual ? `${a.first} and ${b.first} are firm friends now.` : `${a.first} now counts ${b.first} as a close friend.`, 5, [a.id, b.id], 'bond', '💞'); } else if (mutual && !said.has(key + '!')) { said.add(key + '!'); sim.log(`${a.first} and ${b.first} are firm friends now, and it goes both ways.`, 5, [a.id, b.id], 'bond', '💞'); } if ((b.opinion[a.id] ?? 0) >= 70) sim.achieve(null, `bff-${[a.id, b.id].sort().join('-')}`, 'Best Friends', `${a.first} & ${b.first}`); }
   if (before > -50 && after <= -50) { sim.log(`${a.first} has come to resent ${b.first}.`, 5, [a.id, b.id], 'bond', '😠'); if ((b.opinion[a.id] ?? 0) <= -50) sim.achieve(null, `rivals-${[a.id, b.id].sort().join('-')}`, 'Arch-Rivals', `${a.first} vs ${b.first}`); }
 }
 function trust(listener: Villager, speaker: Villager) { return clamp((op(listener, speaker) + 60) / 100, .15, 1.2); }
@@ -20,7 +22,7 @@ function convo(sim: Sim, lines: Line[], gap = 5) { sim.emit('convo', lines.map((
 
 export function pickGossip(v: Villager, t: Villager, sim: Sim): Fact | null {
   const warn = (f: Fact) => f.about === t.id && f.valence < 0 && (f as any).fake && op(v, t) > 30 && f.origin !== v.id; // friends warn you about rumours concerning you
-  const cands = [...v.mem.known.values()].filter(f => f.kind === 'deed' && (f.about !== t.id || warn(f)) && f.actor !== t.id && !t.mem.known.has(f.id) && sim.clock - f.t < 60 * 48 && (f.valence < 0 || f.imp >= 5 || v.traits.kindness > .7));
+  const cands = [...v.mem.known.values()].filter(f => f.kind === 'deed' && f.about !== v.id && f.actor !== v.id && (f.about !== t.id || warn(f)) && f.actor !== t.id && !t.mem.known.has(f.id) && sim.clock - f.t < 60 * 48 && (f.valence < 0 || f.imp >= 5 || v.traits.kindness > .7));
   if (!cands.length) return null;
   const mean = v.goal === 'power' || v.traits.kindness < .4;
   cands.sort((a, b) => (b.imp + (mean ? -b.valence : b.valence) * 3) - (a.imp + (mean ? -a.valence : a.valence) * 3));
@@ -158,7 +160,7 @@ export function resolveSocial(sim: Sim, v: Villager, t: Villager, a: Action): nu
     case 'rumour': {
       const about = sim.byId.get(a.about)!; const lies = [`${about.first} talks to the scarecrow when nobody's looking`, `${about.first} re-gifts every present`, `${about.first} cried at the hen's birthday`, `${about.first} cheated at the harvest-pie contest`, `${about.first} sleeps in ${pr(about).pos} boots`, `${about.first} has been reading the mayor's mail`, `${about.first} blamed the goat for ${pr(about).pos} own mess`, `${about.first} cheats at cards`, `${about.first} badmouths everyone behind their backs`, `${about.first} kicked a chicken`, `${about.first} reads other people's letters`, `${about.first} laughed at ${t.first} behind their back`, `${about.first} faked being sick to skip the barn raising`, `${about.first} snores loud enough to wake the hens`, `${about.first} has a secret sweetheart in the next village`];
       (v as any)._lastRumour = sim.clock; v.stats.rumours++; const used = ((sim as any)._liesUsed ??= new Set<string>()); const fresh = lies.filter(l => !used.has(l)); const lie = R.pick(fresh.length ? fresh : lies) as string; used.add(lie); const f = sim.fact('deed', lie, about.id, about.id, -.6, 6); (f as any).fake = true; f.origin = v.id; v.mem.learn(f); ((v as any)._rumoured ??= {})[about.id + t.id] = 1;
-      const lines: Line[] = [[v, say(sim, v, 'rumourOpener', { t: t.first }), '🤫']];
+      const lines: Line[] = [[v, say(sim, v, 'rumourOpener', { t: t.first }), '🤫']]; v.mem.add(sim.clock, `I told ${t.first} that ${lie}. Not a word of it is true.`, 6, [about.id, t.id], -.1, 'obs');
       const believed = t.traits.honesty < .8 || op(t, v) > 20 || R.chance(.5);
       if (believed) { sim.learnFact(t, f, v); bump(sim, t, about, -Math.round(10 * trust(t, v))); t.mem.add(sim.clock, `${v.first} told me ${f.text}`, 5, [about.id, v.id], -.5, 'heard', f.id); lines.push([v, `${f.text}.`, '🐍'], [t, say(sim, t, 'rumourBelieved'), '😮']); sim.log(`${v.first} whispered to ${t.first} that ${f.text}. (It isn't true.)`, 5, [v.id, t.id, about.id], 'gossip', '🐍'); }
       else { bump(sim, t, v, -8); lines.push([v, `${f.text}.`, '🐍'], [t, say(sim, t, 'rumourDisbelieved'), '🤨']); sim.log(`${v.first} tried to spread a rumour about ${about.first}, but ${t.first} wasn't buying it.`, 5, [v.id, t.id, about.id], 'gossip', '🤨'); }
@@ -210,19 +212,20 @@ export function tellGossip(sim: Sim, v: Villager, t: Villager, f: Fact, lines: L
   if (about && f.target && f.target !== t.id && f.valence < 0) { const victim = sim.byId.get(f.target); if (victim) bump(sim, t, victim, 2); }
   t.mem.add(sim.clock, `${v.first} told me: ${f.text}`, Math.max(2, f.imp - 1), [f.about, v.id], f.valence * tr, 'heard', f.id);
   lines.push([v, `Did you hear? ${f.text}!`, f.valence < 0 ? '🤫' : '✨'], [t, f.valence < 0 ? say(sim, t, 'gossipReactNeg') : say(sim, t, 'gossipReactPos'), f.valence < 0 ? '😱' : '😊']);
+  v.mem.add(sim.clock, `I told ${t.first}: ${f.text}`, 2, [f.about, t.id], 0, 'obs');
   (v as any)._lastGossip = sim.clock; const hopN = (f as any).hops as number;
-  sim.log(`${v.first} told ${t.first} that ${lowerFirst(f.text)}.`, hopN <= 2 ? (f.valence < 0 ? 4 : 3) : 1, [v.id, t.id, f.about], 'gossip', '🗣️');
+  sim.log(`${v.first} told ${t.first} that ${lowerFirst(f.text)}.${(f as any).fake ? " (It isn't true.)" : ''}`, hopN <= 2 ? (f.valence < 0 ? 4 : 3) : 1, [v.id, t.id, f.about], 'gossip', '🗣️');
   const reach = sim.villagers.filter(x => x.mem.known.has(f.id)).length;
   if (reach >= 5 && !(f as any).viral) { (f as any).viral = true;
     // one grapevine line per stretch of the day: a second story going viral within two hours folds into the same entry
     const V = ((sim as any)._viral ??= { ev: null as any, facts: [] as string[] }), last = V.ev;
     if (last && sim.clock - last.t < 120 && V.facts.length < 4 && sim.events.includes(last)) {
-      V.facts.push(lowerFirst(f.text)); const n = V.facts.length;
+      V.facts.push(lowerFirst(f.text) + ((f as any).fake ? " (It isn't true.)" : '')); const n = V.facts.length;
       last.text = `The grapevine is buzzing: ${n} stories are doing the rounds — ${V.facts.slice(0, -1).join('; ')}; and now, ${V.facts[n - 1]}.`;
       last.actors = [...new Set([...last.actors, f.about])]; last.imp = Math.max(last.imp, 6); sim.emit('eventUpdate', last);
     } else {
-      V.facts = [lowerFirst(f.text)];
-      V.ev = sim.log(sim.rng.pick([`Word travels fast: ${reach} villagers now know that ${lowerFirst(f.text)}.`, `The whole village is whispering: ${lowerFirst(f.text)}.`, `It's all over Thistlebrook by now: ${lowerFirst(f.text)}.`]) as string, 6, [f.about], 'gossip', '📣');
+      V.facts = [lowerFirst(f.text) + ((f as any).fake ? " (It isn't true.)" : '')];
+      V.ev = sim.log(sim.rng.pick([`Word travels fast: ${reach} villagers now know that ${lowerFirst(f.text)}.`, `The whole village is whispering: ${lowerFirst(f.text)}.`, `It's all over Thistlebrook by now: ${lowerFirst(f.text)}.`]) + ((f as any).fake ? " (It isn't true.)" : '') as string, 6, [f.about], 'gossip', '📣');
     } sim.achieve(null, `viral-${f.id}`, 'The Grapevine', `A story reached ${reach} villagers`); }
   return 6;
 }

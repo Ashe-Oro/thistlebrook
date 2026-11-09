@@ -1,5 +1,5 @@
 import type { Sim } from '../sim/sim';
-import type { Villager, SimEvent } from '../sim/types';
+import type { Villager, SimEvent, PlanBlock } from '../sim/types';
 import type { Director, Paper } from '../sim/director';
 import { JOB_INFO, GOAL_LABEL } from '../data/villagers';
 import { fmtTime, dayOf } from '../core/util';
@@ -11,8 +11,8 @@ export const VCOLOR: Record<string, string> = { mara: '#e8875b', tom: '#6c8fd1',
 const setHTML = (el: Element, html: string) => { if ((el as any)._html !== html) { (el as any)._html = html; el.innerHTML = html; } };
 const h = (tag: string, cls = '', html = '') => { const e = document.createElement(tag); if (cls) e.className = cls; if (html) e.innerHTML = html; return e; };
 const esc = (s: string) => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' } as any)[c]);
-export interface AppApi { sim: Sim; director: Director; setSpeed(s: number): void; speed: number; select(id: string | null): void; selected: string | null; portrait(id: string): HTMLCanvasElement; setMode(m: 'director' | 'free'): void; mode: string;
-  god(kind: string): void; sound: { setMuted(m: boolean): void; muted: boolean; play(k: string, v?: number): void }; project(x: number, y: number, z: number): { x: number; y: number; on: boolean }; camDist(): number; }
+export interface AppApi { sim: Sim; director: Director; setSpeed(s: number): void; togglePause(): void; speed: number; select(id: string | null): void; selected: string | null; portrait(id: string): HTMLCanvasElement; setMode(m: 'director' | 'free'): void; mode: string;
+  god(kind: string): boolean; newVillage(): void; sound: { setMuted(m: boolean): void; muted: boolean; play(k: string, v?: number): void }; project(x: number, y: number, z: number): { x: number; y: number; on: boolean }; camDist(): number; }
 
 function sim0(v: Villager, s: any) { const f = s.villagers.filter((u: Villager) => u.crush === v.id && u.partner !== v.id && u !== v); return f.length ? `<span class="it love" title="Only you can see this">💌 ${f.map((u: Villager) => u.first).join(' & ')} ${f.length > 1 ? 'are' : 'is'} sweet on them</span>` : ''; }
 const cleanLie = (t: string) => t.replace(/\s*\(It isn't true\.\)/gi, '').replace(/\.\s*,/g, ',').replace(/\s+/g, ' ').trim();
@@ -21,7 +21,7 @@ export class UI {
   marks: { el: HTMLElement; x: number; z: number }[] = []; markT = 0; cardRect: { l: number; r: number; t: number; b: number } | null = null;
   tags = new Map<string, HTMLElement>(); bubbles = new Map<string, { el: HTMLElement; until: number; t0: number }>(); icons: { el: HTMLElement; id: string; t: number }[] = []; convo: { who: string; text: string; emoji: string; at: number }[] = [];
   tab = 'rel'; cardT = 0; lbKind: 'popularity' | 'power' | 'mischief' = 'popularity'; feedFilter = 'all'; autoPaper = true;
-  feedDay = 0; safeTop = 70;
+  feedDay = 0; safeTop = 70; hint: HTMLElement | null = null;
   constructor(public app: AppApi, parent: HTMLElement) {
     this.root = h('div', 'ui'); parent.appendChild(this.root); this.build();
     const s = app.sim;
@@ -38,11 +38,15 @@ export class UI {
       <div class="speeds">${[[0, '⏸'], [1, '1×'], [4, '4×'], [16, '16×']].map(([s, l]) => `<button data-speed="${s}">${l}</button>`).join('')}</div>
       <div class="toggles"><button id="mode" title="Camera: cinematic director / free">🎬 Director</button><button id="snd" title="Sound">🔇</button></div>`;
     r.appendChild(top); this.clock = top.querySelector('#clock')!;
+    (top.querySelector('.toggles') as HTMLElement).insertAdjacentHTML('beforeend', '<button id="newv" title="Start a brand-new village (the current one is forgotten)">🌱</button>');
+    (top.querySelector('#newv') as HTMLButtonElement).onclick = () => { if (confirm('Start a new village? The current story (it is saved automatically) will be forgotten.')) this.app.newVillage(); };
     top.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach(b => b.onclick = () => this.app.setSpeed(+b.dataset.speed!));
     (top.querySelector('#mode') as HTMLButtonElement).onclick = () => this.app.setMode(this.app.mode === 'director' ? 'free' : 'director');
     (top.querySelector('#snd') as HTMLButtonElement).onclick = (e) => { this.app.sound.setMuted(!this.app.sound.muted); (e.target as HTMLElement).textContent = this.app.sound.muted ? '🔇' : '🔊'; };
     const fw = h('div', 'feedwrap'); fw.innerHTML = `<div class="ph"><b>📜 Village chronicle</b><div class="ff"><button data-f="all" class="on">All</button><button data-f="drama">Drama</button><button data-f="social">Social</button><button data-f="work">Work</button></div><button class="feedtog" title="Collapse chronicle">▾</button></div>`;
     this.feed = h('div', 'feed'); fw.appendChild(this.feed); r.appendChild(fw);
+    // one delegated listener for every name link and story chip in the chronicle (rows come and go; listeners don't pile up)
+    this.feed.addEventListener('click', (ev) => { const t = ev.target as HTMLElement; const nm = t.closest<HTMLElement>('.nm'); if (nm) { ev.stopPropagation(); this.app.select(nm.dataset.id!); return; } const ch = t.closest<HTMLElement>('.arcchip'); if (ch) { ev.stopPropagation(); this.showArc(ch.dataset.arc!); } });
     fw.querySelectorAll<HTMLButtonElement>('[data-f]').forEach(b => b.onclick = () => { this.feedFilter = b.dataset.f!; fw.querySelectorAll('[data-f]').forEach(x => x.classList.toggle('on', x === b)); this.refilter(); });
     const ftog = fw.querySelector<HTMLButtonElement>('.feedtog')!; ftog.onclick = () => { const col = fw.classList.toggle('collapsed'); ftog.textContent = col ? '▸' : '▾'; ftog.title = col ? 'Expand chronicle' : 'Collapse chronicle'; };
     if (matchMedia('(max-width: 700px), (pointer: coarse)').matches) ftog.click(); // phones start with the chronicle folded to a one-line strip
@@ -51,7 +55,10 @@ export class UI {
     const dock = h('div', 'dock'); dock.innerHTML = `<div class="grp"><span class="lbl">God powers</span><button data-g="gift">🎁<i>Drop gift</i></button><button data-g="rain">🌧️<i>Rain</i></button><button data-g="traveller">🧳<i>Traveller</i></button><button data-g="festival">🎪<i>Festival</i></button></div>
       <div class="grp"><span class="lbl">Views</span><button data-v="web">🕸️<i>Relationships</i></button><button data-v="paper">📰<i>Gazette</i></button><button data-v="recap">📈<i>Recap</i></button><button data-v="villagers">👥<i>Villagers</i></button></div>`;
     r.appendChild(dock);
-    dock.querySelectorAll<HTMLButtonElement>('[data-g]').forEach(b => b.onclick = () => { this.app.god(b.dataset.g!); b.classList.add('flash'); setTimeout(() => b.classList.remove('flash'), 600); });
+    // god powers cool down (a sweep fills the button) so spamming can't flood the chronicle
+    const COOL: Record<string, number> = { gift: 8, rain: 25, traveller: 30, festival: 30 };
+    dock.querySelectorAll<HTMLButtonElement>('[data-g]').forEach(b => b.onclick = () => { if (b.classList.contains('cool')) return; const k = b.dataset.g!; if (!this.app.god(k)) return; b.classList.add('flash'); setTimeout(() => b.classList.remove('flash'), 600);
+      const sec = COOL[k] ?? 10; b.classList.add('cool'); b.setAttribute('aria-disabled', 'true'); b.style.setProperty('--cool', `${sec}s`); b.title = 'Recharging…'; setTimeout(() => { b.classList.remove('cool'); b.removeAttribute('aria-disabled'); b.title = ''; }, sec * 1000); });
     dock.querySelectorAll<HTMLButtonElement>('[data-v]').forEach(b => b.onclick = () => this.view(b.dataset.v!));
     this.overlay = h('div', 'overlay'); r.appendChild(this.overlay); this.toasts = h('div', 'toasts'); r.appendChild(this.toasts); this.caption = h('div', 'caption'); r.appendChild(this.caption);
     this.modal = h('div', 'modal hidden'); r.appendChild(this.modal); this.modal.onclick = (e) => { if (e.target === this.modal) this.closeModal(); };
@@ -59,10 +66,17 @@ export class UI {
     const PIC: Record<string, string> = { bakery: '🥖', store: '✉️', tavern: '🍺', smithy: '⚒️', market: '🧺', well: '🪣', field: '🌾', coop: '🐔', orchard: '🍎', forest: '🌲', quarry: '⛏️', campfire: '🔥', plaza: '⛲', pond: '🦆', barn: '🐄', chapel: '⛪', windmill: '🌬️', pasture: '🐑', school: '📚', garden: '🌿', dock: '🎣' };
     for (const pl of this.app.sim.world.places.values() as Iterable<any>) { if (!PIC[pl.kind]) continue; const el = h('div', 'landmark', `<i>${PIC[pl.kind]}</i>${esc(pl.name.replace(/^the /, ''))}`); el.style.display = 'none'; this.overlay.appendChild(el); this.marks.push({ el, x: pl.x, z: pl.z }); }
     for (const v of this.app.sim.villagers) { const t = h('div', 'tag', `<span style="background:${VCOLOR[v.id]}"></span>${v.first}`); t.onclick = () => this.app.select(v.id); this.overlay.appendChild(t); this.tags.set(v.id, t); }
-    window.addEventListener('keydown', e => { if (e.key === 'Escape') { this.closeModal(); this.app.select(null); } if (e.key === ' ') { this.app.setSpeed(this.app.speed ? 0 : 1); e.preventDefault(); } });
+    // keep the CSS layout vars in step with the real (wrapping) top bar and dock heights
+    const measure = () => { this.root.style.setProperty('--top-h', `${top.offsetHeight}px`); this.root.style.setProperty('--dock-h', `${dock.offsetHeight}px`); };
+    addEventListener('resize', measure); requestAnimationFrame(measure); setTimeout(measure, 500);
+    // first-visit tip: goes away on the first villager click (or when tapped)
+    if (!localStorage.getItem('thistlebrook.hinted')) { const hint = h('div', 'hint', '👆 Click a villager to read their mind'); hint.onclick = () => hint.classList.add('gone'); r.appendChild(hint); this.hint = hint; }
+    window.addEventListener('keydown', e => { if (e.key === 'Escape') { this.closeModal(); this.app.select(null); } if (e.key === ' ') { this.app.togglePause(); e.preventDefault(); } });
   }
   name(id: string) { const v = this.app.sim.byId.get(id); return v ? `<a class="nm" data-id="${id}" style="--c:${VCOLOR[id]}">${v.first}</a>` : id; }
   linkify(text: string) { let t = esc(text); for (const v of this.app.sim.villagers) t = t.replace(new RegExp(`\\b${v.first}(?!\\w)`, 'g'), this.name(v.id)); return t; }
+  // text with a fabricated rumour inside gets the same badge everywhere (chronicle, Gazette, recap, story tab, arcs)
+  rich(text: string) { return text.includes("(It isn't true.)") ? `${this.linkify(cleanLie(text))} <span class="badge false" title="A fabricated rumour — not actually true">false rumour</span>` : this.linkify(text); }
   isLie(e: SimEvent) { return e.kind === 'gossip' && e.text.includes("(It isn't true.)"); }
   cat(e: SimEvent) {
     if (e.kind === 'weather') return 'weather'; // routine weather stays out of Drama; only in All
@@ -71,27 +85,33 @@ export class UI {
       : ['talk', 'gift', 'gossip', 'invite', 'party', 'bond', 'reflect', 'generous', 'lunch', 'breakfast', 'evening', 'social'].includes(e.kind) ? 'social' : 'work';
   }
   addFeed(e: SimEvent) {
-    if (e.imp <= 1) return; // small talk lives in each villager's story log, not the main chronicle
     const cat = this.cat(e), lie = this.isLie(e);
-    const day = dayOf(e.t); if (this.feedDay && day !== this.feedDay) { const sep = h('div', 'daysep', `— Day ${day} —`); this.feed.prepend(sep); } this.feedDay = day;
-    const el = h('div', `ev imp${Math.min(9, e.imp)} k-${e.kind} c-${cat}`); el.dataset.id = String(e.id); el.dataset.cat = cat;
+    // small talk lives in each villager's story log; routine work (imp 1) is kept only for the Work filter
+    const minor = e.imp <= 1; if (minor && cat !== 'work') return;
+    const day = dayOf(e.t);
+    // an identical line already near the top (the same chore again, a repeated accusation) is bumped with a ×N count, not re-printed
+    if (day === this.feedDay) { for (let i = 0, c = this.feed.firstElementChild as HTMLElement | null; c && i < 40; i++, c = c.nextElementSibling as HTMLElement | null) {
+      if (c.classList.contains('daysep')) break;
+      if (c.dataset.txt === e.text) { const n = (+(c.dataset.n ?? 1)) + 1; c.dataset.n = String(n); c.querySelector('.t')!.textContent = fmtTime(e.t); let rep = c.querySelector('.rep'); if (!rep) { rep = h('span', 'rep'); c.querySelector('.tx')!.appendChild(rep); } rep.textContent = ` ×${n}`; if (!minor) { delete c.dataset.minor; this.applyFilter(c); } this.feed.prepend(c); return; }
+    } } if (this.feedDay && day !== this.feedDay) { const sep = h('div', 'daysep', `— Day ${day} —`); this.feed.prepend(sep); } this.feedDay = day;
+    const el = h('div', `ev imp${Math.min(9, e.imp)} k-${e.kind} c-${cat}`); el.dataset.id = String(e.id); el.dataset.cat = cat; el.dataset.txt = e.text; if (minor) el.dataset.minor = '1';
     const txt = lie ? cleanLie(e.text) : e.text;
     el.innerHTML = `<span class="t">${fmtTime(e.t)}</span><span class="ic">${e.icon}</span><span class="tx">${this.linkify(txt)}${lie ? ' <span class="badge false" title="A fabricated rumour — not actually true">false rumour</span>' : ''}</span>`;
-    el.querySelectorAll<HTMLElement>('.nm').forEach(a => a.onclick = (ev) => { ev.stopPropagation(); this.app.select(a.dataset.id!); });
     this.arcChip(el, e.id);
-    if (this.feedFilter !== 'all' && this.feedFilter !== cat) el.style.display = 'none';
-    this.feed.prepend(el); while (this.feed.children.length > 160) this.feed.lastChild!.remove();
+    this.applyFilter(el);
+    this.feed.prepend(el); while (this.feed.children.length > 100) this.feed.lastChild!.remove();
+    if (minor) { const m = this.feed.querySelectorAll('[data-minor]'); for (let i = 30; i < m.length; i++) m[i].remove(); }
     // only promote to the big caption when the event isn't already the visible top of the chronicle
     const visibleInFeed = this.feedFilter === 'all' || this.feedFilter === cat;
     if (e.imp >= 7 && !visibleInFeed) { this.captionText(`${e.icon} ${this.linkify(txt)}`); }
   }
-  updateFeed(e: SimEvent) { const el = this.feed.querySelector<HTMLElement>(`[data-id="${e.id}"] .tx`); if (el) { const lie = this.isLie(e); const txt = lie ? cleanLie(e.text) : e.text; el.innerHTML = `${this.linkify(txt)}${lie ? ' <span class="badge false" title="A fabricated rumour — not actually true">false rumour</span>' : ''}`; el.querySelectorAll<HTMLElement>('.nm').forEach(a => a.onclick = (ev) => { ev.stopPropagation(); this.app.select(a.dataset.id!); }); } }
-  refilter() { this.feed.querySelectorAll<HTMLElement>('.ev').forEach(el => el.style.display = this.feedFilter === 'all' || el.dataset.cat === this.feedFilter ? '' : 'none'); }
+  updateFeed(e: SimEvent) { const el = this.feed.querySelector<HTMLElement>(`[data-id="${e.id}"] .tx`); if (el) { const lie = this.isLie(e); const txt = lie ? cleanLie(e.text) : e.text; el.innerHTML = `${this.linkify(txt)}${lie ? ' <span class="badge false" title="A fabricated rumour — not actually true">false rumour</span>' : ''}`; (el.parentElement as HTMLElement).dataset.txt = e.text; } }
+  applyFilter(el: HTMLElement) { const f = this.feedFilter; el.style.display = (f === 'all' ? !el.dataset.minor : el.dataset.cat === f) ? '' : 'none'; }
+  refilter() { this.feed.querySelectorAll<HTMLElement>('.ev').forEach(el => this.applyFilter(el)); }
   // small arc chip under a feed row once its story has shape (>= 2 beats): "📖 The Missing Geode · beat 3"
   arcChip(el: HTMLElement, eventId: number) {
     const hit = arcs(this.app.sim).arcForEvent(eventId); if (!hit || hit.arc.beats.length < 2) return;
-    const chip = h('a', 'arcchip', `📖 ${esc(hit.arc.title)} · beat ${hit.beatNo}`); chip.title = 'Open this story';
-    chip.onclick = (ev) => { ev.stopPropagation(); this.showArc(hit.arc.id); };
+    const chip = h('a', 'arcchip', `📖 ${esc(hit.arc.title)} · beat ${hit.beatNo}`); chip.title = 'Open this story'; chip.dataset.arc = hit.arc.id;
     el.appendChild(chip);
   }
   showArc(arcId: string) {
@@ -99,13 +119,17 @@ export class UI {
     this.modal.classList.remove('hidden');
     this.modal.innerHTML = `<div class="sheet arcview"><button class="x">✕</button><div class="archd"><span class="status ${arc.status}">${arc.status}</span><h2>📖 ${esc(arc.title)}</h2></div>
       <div class="cast">${[...arc.actors].filter(a => s.byId.get(a)).map(a => `<span class="nm" data-id="${a}" style="--c:${VCOLOR[a]}">${s.byId.get(a)!.first}</span>`).join('')}</div>
-      <div class="arctl">${arc.beats.map((b, i) => `<div class="beat"><span class="dot">${b.icon}</span><div class="bbody"><div class="bhd"><span class="bno">Beat ${i + 1}</span><span class="blabel">${esc(b.beat)}</span><span class="t">${fmtTime(b.t)}</span></div><div class="btx">${this.linkify(b.text.replace(/\s*\(It isn't true\.\)\s*/i, ' ').trim())}</div></div></div>`).join('')}</div></div>`;
+      <div class="arctl">${arc.beats.map((b, i) => `<div class="beat"><span class="dot">${b.icon}</span><div class="bbody"><div class="bhd"><span class="bno">Beat ${i + 1}</span><span class="blabel">${esc(b.beat)}</span><span class="t">${fmtTime(b.t)}</span></div><div class="btx">${this.rich(b.text)}</div></div></div>`).join('')}</div></div>`;
     this.modal.querySelectorAll<HTMLElement>('.nm').forEach(a => a.onclick = () => { this.closeModal(); this.app.select(a.dataset.id!); });
     this.modal.querySelector('.x')?.addEventListener('click', () => this.closeModal());
   }
   captionTO: any; captionText(html: string) { this.caption.innerHTML = html; this.caption.classList.add('show'); clearTimeout(this.captionTO); this.captionTO = setTimeout(() => this.caption.classList.remove('show'), 6000); }
   toastQ: [string, string][] = []; quiet = false;
-  toast(title: string, desc: string) { if (this.quiet) return; if (this.toasts.children.length >= 2) { if (this.toastQ.length < 6) this.toastQ.push([title, desc]); return; } const t = h('div', 'toast', `<b>${title}</b><span>${this.linkify(desc)}</span>`); this.toasts.appendChild(t); this.app.sound.play('toast'); setTimeout(() => t.classList.add('out'), 4200); setTimeout(() => { t.remove(); const n = this.toastQ.shift(); if (n) this.toast(n[0], n[1]); }, 5000); }
+  toast(title: string, desc: string) { if (this.quiet) return;
+    // the same achievement again (a story reaching more people) refreshes the toast already showing or queued, never stacks a twin
+    const same = [...this.toasts.children].find(t => t.querySelector('b')?.textContent === title && !t.classList.contains('out')); if (same) { same.querySelector('span')!.innerHTML = this.linkify(desc); return; }
+    const q = this.toastQ.find(t => t[0] === title); if (q) { q[1] = desc; return; }
+    if (this.toasts.children.length >= 2) { if (this.toastQ.length < 6) this.toastQ.push([title, desc]); return; } const t = h('div', 'toast', `<b>${title}</b><span>${this.linkify(desc)}</span>`); this.toasts.appendChild(t); this.app.sound.play('toast'); setTimeout(() => t.classList.add('out'), 4200); setTimeout(() => { t.remove(); const n = this.toastQ.shift(); if (n) this.toast(n[0], n[1]); }, 5000); }
   bubble(id: string, text: string, emoji: string, dur: number) {
     let b = this.bubbles.get(id); if (!b) { const el = h('div', 'bubble'); this.overlay.appendChild(el); b = { el, until: 0, t0: 0 }; this.bubbles.set(id, b); }
     b.el.innerHTML = `${emoji ? `<span class="em">${emoji}</span>` : ''}${esc(text)}`; b.el.classList.remove('pop'); void b.el.offsetWidth; b.el.classList.add('pop'); b.t0 = performance.now(); b.until = performance.now() + dur * 1000 / Math.max(1, Math.sqrt(this.app.speed || 1));
@@ -182,9 +206,9 @@ export class UI {
     let past: Record<string, number> | null = null;
     if (hk && s.history.length) { const tgt = s.clock - 1440; let pick = s.history[0]; for (const snap of s.history) { if (snap.t <= tgt) pick = snap; } past = (pick as any)[hk]; }
     const trend = (id: string, cur: number) => { if (!past || past[id] === undefined) return ''; const d = cur - past[id]; return d > 2 ? '<span class="tr up" title="rising since yesterday">↑</span>' : d < -2 ? '<span class="tr dn" title="falling since yesterday">↓</span>' : '<span class="tr fl" title="steady">·</span>'; };
-    setHTML(this.lb, `<div class="ph"><b>🏆 Leaderboard</b><div class="ff">${(['popularity', 'power', 'mischief'] as const).map(k => `<button data-k="${k}" class="${k === this.lbKind ? 'on' : ''}">${k === 'mischief' ? '😈 Mischief' : k === 'popularity' ? '❤️ Liked' : '👑 Influence'}</button>`).join('')}</div></div>`) +
+    setHTML(this.lb, `<div class="ph"><b>🏆 Leaderboard</b><div class="ff">${(['popularity', 'power', 'mischief'] as const).map(k => `<button data-k="${k}" class="${k === this.lbKind ? 'on' : ''}">${k === 'mischief' ? '😈 Mischief' : k === 'popularity' ? '❤️ Liked' : '👑 Influence'}</button>`).join('')}</div></div>` +
       `<div class="lbleg">${esc(legend[this.lbKind])}</div>` +
-      rows.map((r, i) => { const neg = r.score < 0, w = Math.max(2, Math.abs(r.score) / max * 50); return `<div class="row" data-id="${r.v.id}"><span class="rk">${['🥇', '🥈', '🥉'][i] ?? i + 1}</span><span class="dot" style="background:${VCOLOR[r.v.id]}"></span><span class="n">${r.v.first}</span><span class="bar signed"><i class="${neg ? 'neg' : 'pos'}" style="${neg ? 'right:50%' : 'left:50%'};width:${w}%;background:${neg ? '#d1574b' : VCOLOR[r.v.id]}"></i></span><span class="sc">${r.score}${trend(r.v.id, r.score)}</span></div>`; }).join('');
+      rows.map((r, i) => { const neg = r.score < 0, w = Math.max(2, Math.abs(r.score) / max * 50); return `<div class="row" data-id="${r.v.id}"><span class="rk">${['🥇', '🥈', '🥉'][i] ?? i + 1}</span><span class="dot" style="background:${VCOLOR[r.v.id]}"></span><span class="n">${r.v.first}</span><span class="bar signed"><i class="${neg ? 'neg' : 'pos'}" style="${neg ? 'right:50%' : 'left:50%'};width:${w}%;background:${neg ? '#d1574b' : VCOLOR[r.v.id]}"></i></span><span class="sc">${r.score}${trend(r.v.id, r.score)}</span></div>`; }).join(''));
     this.lb.querySelectorAll<HTMLElement>('[data-k]').forEach(b => b.onclick = () => { this.lbKind = b.dataset.k as any; this.renderLB(); });
     this.lb.querySelectorAll<HTMLElement>('.row').forEach(b => b.onclick = () => this.app.select(b.dataset.id!));
   }
@@ -208,9 +232,9 @@ export class UI {
     const inv = held + (lost ? `<span class="it miss">❓ ${esc(lost.name.replace(/^(his|her) /, ''))} is missing</span>` : '') + heart || '<span class="muted">nothing in their pockets</span>';
     let body = '';
     if (this.tab === 'rel') body = [...s.villagers].filter(u => u !== v).sort((a, b) => (v.opinion[b.id] ?? 0) - (v.opinion[a.id] ?? 0)).map(u => { const o = Math.round(v.opinion[u.id] ?? 0), back = Math.round(u.opinion[v.id] ?? 0), bel = v.mem.belief(u.id); return `<div class="rel" data-id="${u.id}"><span class="dot" style="background:${VCOLOR[u.id]}"></span><span class="n">${u.first}${v.family.includes(u.id) ? ' 👪' : ''}${u.alliance && u.alliance === v.alliance ? ' 🚩' : ''}</span><span class="ob"><i class="${o < 0 ? 'neg' : 'pos'}" style="${o < 0 ? 'right:50%' : 'left:50%'};width:${Math.abs(o) / 2}%"></i></span><span class="lab">${this.relLabel(o)}</span><span class="back" title="How ${u.first} feels about ${v.first}">${back >= 35 ? '💚' : back <= -35 ? '💢' : '·'}</span>${bel ? `<div class="bel">“${esc(bel.text)}”</div>` : ''}</div>`; }).join('');
-    if (this.tab === 'plan') body = v.plan.filter(b => b.to > s.clock - 60).map(b => `<div class="pl ${s.clock >= b.from && s.clock < b.to ? 'now' : ''} ${b.act === 'event' ? 'evt' : ''}"><span class="t">${fmtTime(b.from)}–${fmtTime(b.to)}</span>${esc(b.note)}</div>`).join('') + (v.intent ? `<div class="intent">🎯 ${esc(v.intent)}</div>` : '');
+    if (this.tab === 'plan') body = v.plan.filter(b => b.to > s.clock - 60).reduce((acc: PlanBlock[], b) => { const p = acc[acc.length - 1]; if (p && p.act === b.act && p.note === b.note && Math.abs(p.to - b.from) < 1) acc[acc.length - 1] = { ...p, to: b.to }; else acc.push(b); return acc; }, []).map(b => `<div class="pl ${s.clock >= b.from && s.clock < b.to ? 'now' : ''} ${b.act === 'event' ? 'evt' : ''}"><span class="t">${fmtTime(b.from)}–${fmtTime(b.to)}</span>${esc(b.note)}${dayOf(b.from) > s.day ? ' <i class="muted">(tomorrow)</i>' : ''}</div>`).join('') + (v.intent ? `<div class="intent">🎯 ${esc(v.intent)}</div>` : '');
     if (this.tab === 'mem') body = `${v.mem.beliefs.length ? `<div class="sub">Beliefs (from reflection)</div>${v.mem.beliefs.map(b => `<div class="mem refl">💭 ${esc(b.text)}</div>`).join('')}` : ''}<div class="sub">Most salient memories</div>` + v.mem.retrieve(s.clock, [], 10).map(m => `<div class="mem k-${m.kind}"><span class="t">${fmtTime(m.t)}</span><span class="imp" title="importance">${'●'.repeat(Math.ceil(m.imp / 2))}</span> ${esc(m.text)}</div>`).join('') + `<div class="sub">Knows ${v.mem.known.size} pieces of news · ${v.mem.items.length} memories</div>`;
-    if (this.tab === 'story') body = v.story.slice().reverse().slice(0, 30).map(x => `<div class="st"><span class="t">${fmtTime(x.t)}</span>${this.linkify(x.text)}</div>`).join('') || '<div class="muted">Nothing yet.</div>';
+    if (this.tab === 'story') body = v.story.slice().reverse().slice(0, 30).map(x => `<div class="st"><span class="t">${fmtTime(x.t)}</span>${this.rich(x.text)}</div>`).join('') || '<div class="muted">Nothing yet.</div>';
     this.card.innerHTML = `<button class="x">✕</button><div class="hd"><div class="pt"></div><div><div class="nmb" style="color:${VCOLOR[v.id]}">${v.name} <span class="md">${this.mood(v)}</span></div><div class="jb">${JOB_INFO[v.job].label} · ${v.def.age}</div><div class="gl">🎯 ${GOAL_LABEL[v.goal]}</div>${al ? `<div class="al" style="--c:${al.color}">🚩 ${al.name}</div>` : ''}</div></div>
       <div class="thought">💭 ${esc(v.thought)}</div><div class="doing">▶ ${esc(v.doing)}${v.inside ? ` <span class="muted">(inside ${s.place(v.inside).name})</span>` : ''}</div>
       ${bar('🍞 Fed', v.needs.food, '#e0a64a')}${bar('⚡ Energy', v.needs.energy, '#6cc36c')}${bar('💬 Social', v.needs.social, '#6aa6e8')}
@@ -225,7 +249,7 @@ export class UI {
   closeModal() { this.modal.classList.add('hidden'); this.modal.innerHTML = ''; }
   view(kind: string) {
     const s = this.app.sim; this.modal.classList.remove('hidden');
-    if (kind === 'paper') { const p = this.app.director.papers[this.app.director.papers.length - 1] ?? this.app.director.paper(s.day); this.showPaper(p); return; }
+    if (kind === 'paper') { const p = this.app.director.papers[this.app.director.papers.length - 1] ?? { ...this.app.director.paper(s.day), early: true }; this.showPaper(p); return; }
     if (kind === 'web') { this.modal.innerHTML = `<div class="sheet web"><button class="x">✕</button><h2>🕸️ Who likes whom</h2><p class="muted">Green = fondness, red = resentment, thickness = strength. Hover or tap a face to see who <b>they</b> like (→ outgoing) and who likes <b>them</b> (← incoming). 💞 sweethearts · 💗 crushes · 🚩 alliances.</p><canvas width="760" height="560"></canvas></div>`; drawWeb(this.modal.querySelector('canvas')!, s, VCOLOR, (id) => this.app.portrait(id)); }
     if (kind === 'recap') this.showRecap();
     if (kind === 'villagers') { this.modal.innerHTML = `<div class="sheet"><button class="x">✕</button><h2>👥 The villagers</h2><div class="vgrid">${s.villagers.map(v => `<div class="vc" data-id="${v.id}"><div class="pt"></div><b style="color:${VCOLOR[v.id]}">${v.name}</b><small>${JOB_INFO[v.job].label} · ${GOAL_LABEL[v.goal]}</small><p>${esc(v.def.bio)}</p></div>`).join('')}</div></div>`;
@@ -234,19 +258,19 @@ export class UI {
   }
   showPaper(p: Paper) {
     this.modal.classList.remove('hidden'); this.app.sound.play('paper');
-    this.modal.innerHTML = `<div class="sheet paper"><button class="x">✕</button><div class="mast">The Thistlebrook Gazette</div><div class="dateline">Day ${p.day + 1} · Village morning edition · Weather: ${p.weather}</div><h1>${this.linkify(p.headline)}</h1>
+    this.modal.innerHTML = `<div class="sheet paper"><button class="x">✕</button><div class="mast">The Thistlebrook Gazette</div><div class="dateline">${p.early ? `Day ${p.day} · Early edition, today so far (the first full paper comes out at dawn)` : `Day ${p.day + 1} · Village morning edition`} · Weather: ${p.weather}</div><h1>${this.linkify(p.headline)}</h1>
       ${p.lead ? `<p class="lead">${this.linkify(p.lead)}</p>` : ''}
-      <div class="cols"><div>${p.stories.map(x => `<p>${x.icon} ${this.linkify(x.text)}</p>`).join('') || '<p>All quiet on the village front.</p>'}</div><div class="side"><h3>Standings</h3><p>❤️ Best-loved: <b>${p.leaders.popular}</b></p><p>👑 Most influential: <b>${p.leaders.power}</b></p><p>😈 Most mischievous: <b>${p.leaders.mischief}</b></p>${p.couples ? `<p>💞 Sweethearts: <b>${p.couples}</b></p>` : ''}${p.quote ? `<h3>Overheard</h3><p class="q">“${esc(p.quote.text)}”<br>— ${p.quote.who}</p>` : ''}</div></div></div>`;
+      <div class="cols"><div>${p.stories.map(x => `<p>${x.icon} ${this.rich(x.text)}</p>`).join('') || '<p>All quiet on the village front.</p>'}</div><div class="side"><h3>Standings</h3><p>❤️ Best-loved: <b>${p.leaders.popular}</b></p><p>👑 Most influential: <b>${p.leaders.power}</b></p><p>😈 Most mischievous: <b>${p.leaders.mischief}</b></p>${p.couples ? `<p>💞 Sweethearts: <b>${p.couples}</b></p>` : ''}${p.quote ? `<h3>Overheard</h3><p class="q">“${esc(p.quote.text)}”<br>— ${p.quote.who}</p>` : ''}</div></div></div>`;
     this.modal.querySelector('.x')?.addEventListener('click', () => this.closeModal());
   }
   showRecap() {
     const s = this.app.sim; const days = Object.keys(s.dayStats).map(Number).sort((a, b) => a - b);
     const at = arcs(s), top = at.top(4, 2);
     const statusLabel: Record<Arc['status'], string> = { brewing: 'brewing', open: 'ongoing', resolved: 'resolved' };
-    const stories = top.length ? `<div class="stories">${top.map(a => `<div class="storyc" data-arc="${a.id}"><div class="shd"><span class="status ${a.status}">${statusLabel[a.status]}</span><b>📖 ${esc(a.title)}</b></div><div class="mini">${a.beats.map(b => `<span class="mb" title="${esc(b.beat)} · ${fmtTime(b.t)}">${b.icon}</span>`).join('<span class="arr">→</span>')}</div><div class="latest">${this.linkify(a.beats[a.beats.length - 1].text.replace(/\s*\(It isn't true\.\)\s*/i, ' ').trim())}</div></div>`).join('')}</div>` : '<p class="muted">No stories have taken shape yet — give the village time.</p>';
+    const stories = top.length ? `<div class="stories">${top.map(a => `<div class="storyc" data-arc="${a.id}"><div class="shd"><span class="status ${a.status}">${statusLabel[a.status]}</span><b>📖 ${esc(a.title)}</b></div><div class="mini">${a.beats.map(b => `<span class="mb" title="${esc(b.beat)} · ${fmtTime(b.t)}">${b.icon}</span>`).join('<span class="arr">→</span>')}</div><div class="latest">${this.rich(a.beats[a.beats.length - 1].text)}</div></div>`).join('')}</div>` : '<p class="muted">No stories have taken shape yet — give the village time.</p>';
     this.modal.innerHTML = `<div class="sheet recap"><button class="x">✕</button><h2>📖 This week’s stories</h2>${stories}
       <h2>📈 The story so far</h2><canvas width="760" height="220"></canvas><div class="legend">${s.villagers.map(v => `<span><i style="background:${VCOLOR[v.id]}"></i>${v.first}</span>`).join('')}</div>
-      <div class="timeline">${days.map(d => `<div class="day"><h3>Day ${d}</h3>${(s.dayStats[d] ?? []).filter(e => e.imp >= 5).slice(0, 8).map(e => `<p><span class="t">${fmtTime(e.t)}</span> ${e.icon} ${this.linkify(e.text)}</p>`).join('') || '<p class="muted">A quiet day.</p>'}</div>`).join('')}</div></div>`;
+      <div class="timeline">${days.map(d => `<div class="day"><h3>Day ${d}</h3>${(s.dayStats[d] ?? []).filter(e => e.imp >= 5).slice(0, 8).map(e => `<p><span class="t">${fmtTime(e.t)}</span> ${e.icon} ${this.rich(e.text)}</p>`).join('') || '<p class="muted">A quiet day.</p>'}</div>`).join('')}</div></div>`;
     this.modal.querySelectorAll<HTMLElement>('.storyc').forEach(el => el.onclick = () => this.showArc(el.dataset.arc!));
     const c = this.modal.querySelector('canvas')!, g = c.getContext('2d')!, H = s.history; if (H.length > 1) { const max = Math.max(1, ...H.flatMap(x => Object.values(x.pop).map(Math.abs))); g.fillStyle = '#fbf4e4'; g.fillRect(0, 0, c.width, c.height); g.strokeStyle = '#d9cdb3'; g.font = '12px sans-serif'; g.fillStyle = '#8a7a5a';
       const xOf = (t: number) => { let i = H.findIndex(x => x.t >= t); if (i < 0) i = H.length - 1; return 30 + i / (H.length - 1) * (c.width - 40); };

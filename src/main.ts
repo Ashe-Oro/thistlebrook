@@ -13,6 +13,9 @@ import { Sound } from './ui/sound';
 import { dropGift, animateGifts, summonRain, spawnTraveller, tickTraveller, startFestival, tickFestival, NELL } from './sim/god';
 import type { Villager, SimEvent } from './sim/types';
 import { makeAnvil } from './agents/props';
+import { saveGame, loadGame, clearSave, peekSave } from './core/save';
+import { arcs } from './sim/arcs';
+import { fmtTime } from './core/util';
 
 const mobile = matchMedia('(pointer: coarse)').matches || innerWidth < 760;
 function params0() { return new URLSearchParams(location.search); }
@@ -30,7 +33,7 @@ app.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, .3, 420);
 camera.position.set(-9 + 30, 34, 4 + 40);
-const controls = new OrbitControls(camera, renderer.domElement); controls.target.set(-6, 0, -2); controls.enableDamping = true; controls.dampingFactor = .08; controls.minDistance = 5; controls.maxDistance = 120; controls.maxPolarAngle = 1.32; controls.minPolarAngle = .35; controls.screenSpacePanning = false;
+const controls = new OrbitControls(camera, renderer.domElement); controls.target.set(-6, 0, -2); controls.enableDamping = true; controls.dampingFactor = .08; controls.minDistance = 4.5; controls.maxDistance = 72; controls.maxPolarAngle = 1.32; controls.minPolarAngle = .35; controls.screenSpacePanning = false;
 controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE } as any; controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
 addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
 
@@ -58,7 +61,7 @@ async function boot() {
   start();
 }
 
-let speed = 1, mode: 'director' | 'free' = params.get('cam') === 'free' ? 'free' : 'director', selected: string | null = null; let acc = 0; let follow: string | null = null; let dirT = 0;
+let lastSpeed = 1; let speed = 1, mode: 'director' | 'free' = params.get('cam') === 'free' ? 'free' : 'director', selected: string | null = null; let acc = 0; let follow: string | null = null; let dirT = 0;
 const director = new Director(sim);
 const pcam = new THREE.PerspectiveCamera(15, 1, .3, 40); const portraits = new Map<string, HTMLCanvasElement>(); const pTime = new Map<string, number>();
 // Portraits: the villager is lifted to a 'studio' spot high above the town for one render (lit by the real sun and sky,
@@ -86,13 +89,27 @@ function portrait(id: string) {
 }
 const tmpV = new THREE.Vector3();
 const api: AppApi = {
-  sim, director, get speed() { return speed; }, setSpeed(s) { speed = s; }, get selected() { return selected; },
-  select(id) { selected = id; follow = id; if (id) { const v = sim.byId.get(id)!; if (v && camera.position.distanceTo(controls.target) > 24) { const dir = camera.position.clone().sub(controls.target).normalize(); controls.target.set(v.x, 1, v.z); camera.position.copy(controls.target).addScaledVector(dir, 15); } sound.play('pop'); if (mode === 'director') mode = 'free'; if (v) controls.autoRotate = false; } },
+  sim, director, get speed() { return speed; }, setSpeed(s) { if (s === 0 && speed > 0) lastSpeed = speed; speed = s; }, togglePause() { api.setSpeed(speed ? 0 : lastSpeed || 1); }, get selected() { return selected; },
+  select(id) { selected = id; follow = id; if (id && ui?.hint) { ui.hint.classList.add('gone'); try { localStorage.setItem('thistlebrook.hinted', '1'); } catch {} } if (id) { const v = sim.byId.get(id)!; if (v && camera.position.distanceTo(controls.target) > 24) { const dir = camera.position.clone().sub(controls.target).normalize(); controls.target.set(v.x, 1, v.z); camera.position.copy(controls.target).addScaledVector(dir, 15); } sound.play('pop'); if (mode === 'director') mode = 'free'; if (v) controls.autoRotate = false; } },
   portrait, get mode() { return mode; }, setMode(m) { mode = m; if (m === 'director') { selected = null; follow = null; } controls.autoRotate = false; },
-  god(kind) { if (kind === 'gift') { const v = selected ? sim.byId.get(selected) : null; const g = dropGift(sim, v ? v.x + 3 : undefined, v ? v.z + 2 : undefined); focusPoint(g.x, g.z); } if (kind === 'rain') summonRain(sim); if (kind === 'traveller' || kind === 'merchant') { spawnTraveller(sim); focusPoint(NELL[0], NELL[1] + 2); } if (kind === 'festival') { startFestival(sim); focusPoint(-9, 5); } },
+  god(kind) {
+    if (speed === 0) { ui.toast('⏸ Time is paused', 'Unpause to use god powers.'); return false; }
+    if (kind === 'rain' && (sim.rain > .25 || sim.rainUntil > sim.clock)) { ui.toast('🌧️ Already raining', 'Wait for this storm to blow over.'); return false; }
+    if (kind === 'gift') { const v = selected ? sim.byId.get(selected) : null; const g = dropGift(sim, v ? v.x + 3 : undefined, v ? v.z + 2 : undefined); focusPoint(g.x, g.z); } if (kind === 'rain') summonRain(sim); if (kind === 'traveller' || kind === 'merchant') { spawnTraveller(sim); focusPoint(NELL[0], NELL[1] + 2); } if (kind === 'festival') { startFestival(sim); focusPoint(-9, 5); } return true; },
   sound, project(x, y, z) { tmpV.set(x, y, z).project(camera); return { x: (tmpV.x * .5 + .5) * innerWidth, y: (-tmpV.y * .5 + .5) * innerHeight, on: tmpV.z < 1 && Math.abs(tmpV.x) < 1.1 && Math.abs(tmpV.y) < 1.1 }; },
   camDist() { return camera.position.distanceTo(controls.target); },
+  newVillage() { noSave = true; clearSave(); const q = new URLSearchParams(location.search); q.set('seed', String(1 + Math.floor(Math.random() * 1e6))); q.delete('resume'); location.search = q.toString(); },
 };
+// ---- save / resume -------------------------------------------------------------------------------
+let noSave = params.has('nosave');
+const seedParam = params.get('seed');
+function autosave() { if (noSave || !ui) return; saveGame(sim, director, seedParam); }
+function tryResume(): boolean {
+  if (params.has('fresh') || params.has('new')) return false;
+  const info = peekSave(); if (!info) return false;
+  if (seedParam !== null && info.seed !== seedParam) return false; // asking for a specific seed starts that village fresh
+  return loadGame(sim, director);
+}
 let ui: UI;
 let focusTarget: THREE.Vector3 | null = null, focusDist = 0;
 function focusPoint(x: number, z: number, dist = 22) { focusTarget = new THREE.Vector3(x, 0, z); focusDist = dist; follow = null; }
@@ -161,6 +178,34 @@ const perf = (() => {
   };
 })();
 
+// ---- director camera care -----------------------------------------------------------------------
+// Twice a second: if the followed villager went indoors (or everyone is asleep), cut to a lit outdoor spot instead of
+// staring at a wall; if a roof, wall or tree blocks the line of sight, swing round to a clear angle.
+let careT = 0, yawFix = 0; const careT0 = new THREE.Vector3();
+function directorCare(dt: number) {
+  if (yawFix) { const step = Math.sign(yawFix) * Math.min(Math.abs(yawFix), dt * 1.6); yawFix -= step; const off = camera.position.clone().sub(controls.target); off.applyAxisAngle(THREE.Object3D.DEFAULT_UP, step); camera.position.copy(controls.target).add(off); if (Math.abs(yawFix) < 1e-3) yawFix = 0; }
+  careT -= dt; if (careT > 0) return; careT = .5;
+  const fv = follow ? sim.byId.get(follow) : null;
+  if (fv && fv.inside) { // pick someone outdoors; nobody? frame the plaza lamps / campfire
+    const out = sim.villagers.filter(v => !v.inside); if (out.length) { const c = out.sort((a, b) => Math.hypot(a.x - fv.x, a.z - fv.z) - Math.hypot(b.x - fv.x, b.z - fv.z))[0]; follow = c.id; director.focus = { id: c.id, until: sim.clock + 25, reason: c.doing }; }
+    else { const spot = world.places.get(sky.night > .5 ? 'campfire' : 'plaza') ?? world.places.get('plaza'); if (spot) focusPoint(spot.x, spot.z, 26); }
+    return;
+  }
+  if (!fv && !focusTarget) { const out = sim.villagers.filter(v => !v.inside); if (out.length) follow = out[0].id; }
+  if (!fv || yawFix) return;
+  careT0.set(fv.x, 1.2, fv.z); if (careT0.distanceTo(controls.target) > 3) return; // still travelling to the subject
+  bT.copy(careT0); const off = camera.position.clone().sub(controls.target); const dist = off.length(), yaw = Math.atan2(off.x, off.z);
+  const fix = clearYaw(yaw, dist, camera.position.y - bT.y * .3); if (fix) { yawFix = Math.atan2(Math.sin(fix), Math.cos(fix)); controls.autoRotate = false; }
+}
+// phones: with the villager card up as a bottom sheet, shift the picture up so the villager sits in the open space above it
+let vOff = false;
+function mobileFrame() {
+  const want = !!(selected && innerWidth <= 700 && ui && !ui.card.classList.contains('hidden'));
+  if (want === vOff) return; vOff = want;
+  if (want) camera.setViewOffset(innerWidth, innerHeight, 0, innerHeight * .26, innerWidth, innerHeight); else camera.clearViewOffset();
+}
+addEventListener('resize', () => { vOff = !vOff; mobileFrame(); });
+
 // ---- cinematic beats ---------------------------------------------------------------------------------
 // When something big happens while the director has the camera, cut to a framed, letterboxed shot of it:
 // a low two-shot across the action line (or a three-quarter on one subject), a slow push-in, a title card,
@@ -175,6 +220,11 @@ function beatTitle(e: SimEvent): string | null {
   if (e.kind === 'theft' && e.imp >= 7) return e.icon === '🫳' ? 'Caught Red-Handed' : 'Thief in the Night';
   if (e.kind === 'party' && e.imp >= 7) return 'Party of the Season';
   if (e.kind === 'festival') return 'Festival!';
+  if (e.kind === 'theft' && e.imp >= 5) return 'Light Fingers';
+  if ((e.kind === 'accuse' || /accused/.test(e.text)) && e.imp >= 5 && e.actors.length >= 2) return 'The Accusation';
+  if (e.kind === 'argue' && e.imp >= 5 && e.actors.length >= 2) return 'Words Are Exchanged';
+  if (e.kind === 'reconcile' && e.actors.length >= 2) return 'Making Up';
+  if (e.kind === 'ally' && e.imp >= 6) return 'An Alliance';
   if (e.kind === 'traveller' && (e.icon === '🧳' || (e.icon === '📜' && e.imp >= 8))) return e.icon === '🧳' ? 'The Storyteller' : 'The Ballad';
   return null;
 }
@@ -192,7 +242,7 @@ function startBeat(e: SimEvent, force = false) {
   cine.classList.add('on'); follow = null; focusTarget = null; controls.autoRotate = false;
   return true;
 }
-function endBeat() { if (!beat) return; const b = beat; beat = null; cine.classList.remove('on'); beatCool = performance.now() + 9000; if (mode === 'director') { follow = b.ids[0] ?? null; if (b.fixed) focusPoint(b.fixed[0], b.fixed[1], 16); director.focus = { id: b.ids[0] ?? null, until: sim.clock + 30, reason: b.e.text }; } }
+function endBeat() { if (!beat) return; const b = beat; beat = null; cine.classList.remove('on'); beatCool = performance.now() + 6000; if (mode === 'director') { follow = b.ids[0] ?? null; if (b.fixed) focusPoint(b.fixed[0], b.fixed[1], 16); director.focus = { id: b.ids[0] ?? null, until: sim.clock + 30, reason: b.e.text }; } }
 const bT = new THREE.Vector3(), bP = new THREE.Vector3(), rc = new THREE.Raycaster(), rDir = new THREE.Vector3();
 // pick a yaw offset whose camera spot has a clear line of sight to the subject (no walls, trees or stalls in the way)
 function clearYaw(yaw: number, dist: number, h: number): number {
@@ -224,9 +274,9 @@ let intro: { t: number; dur: number } | null = null;
 const iA = new THREE.Vector3(), iB = new THREE.Vector3();
 function startIntro() {
   intro = { t: 0, dur: 11 }; (cine.querySelector('em') as HTMLElement).textContent = '🌿'; (cine.querySelector('b') as HTMLElement).textContent = 'Thistlebrook';
-  (cine.querySelector('span') as HTMLElement).textContent = `${sim.villagers.length} villagers, ${world.places.size} places, and every one of them has an opinion. Click anywhere to take over.`; cine.classList.add('on');
+  (cine.querySelector('span') as HTMLElement).textContent = `${sim.villagers.length} villagers, ${world.places.size} places, and every one of them has an opinion. Click anywhere to take over.`; cine.classList.add('on'); document.body.classList.add('intro');
 }
-function endIntro() { if (!intro) return; intro = null; cine.classList.remove('on'); }
+function endIntro() { if (!intro) return; intro = null; cine.classList.remove('on'); document.body.classList.remove('intro'); }
 function introCamera(dt: number) {
   if (!intro) return; intro.t += dt; const u = Math.min(1, intro.t / intro.dur), e = u * u * (3 - 2 * u);
   const ang = 2.6 - e * 1.9, r = 78 - e * 50, hgt = 48 - e * 30;
@@ -234,7 +284,16 @@ function introCamera(dt: number) {
   camera.position.copy(iA); controls.target.copy(iB); camera.lookAt(iB); if (u >= 1) endIntro();
 }
 function start() {
+  const resumed = tryResume();
   ui = new UI(api, document.body);
+  if (resumed) { // rebuild the story threads and the visible chronicle from the restored events
+    const at = arcs(sim); for (const e of sim.events) at.ingest(e);
+    ui.quiet = true; for (const e of sim.events.slice(-80)) ui.addFeed(e); ui.quiet = false;
+    for (const v of sim.villagers) syncAvatar(v, .016);
+    setTimeout(() => ui.toast('📂 Welcome back', `Resumed Day ${sim.day}, ${fmtTime(sim.clock)}. 🌱 starts a new village.`), 1200);
+  }
+  setInterval(autosave, 20000); addEventListener('pagehide', autosave); document.addEventListener('visibilitychange', () => { if (document.hidden) autosave(); });
+  sim.on('dawn', () => setTimeout(autosave, 50));
   sim.on('sound', (k: string, x: number, z: number) => sound.play(k, Math.max(0, 1 - Math.hypot(x - controls.target.x, z - controls.target.z) / 40)));
   sim.on('dawn', () => { const p = director.papers[director.papers.length - 1]; if (p && ui.autoPaper && !params.has('nopaper')) { ui.showPaper(p); setTimeout(() => { if (ui.modal.querySelector('.paper')) ui.closeModal(); }, 20000); } });
   sim.on('event', (e: SimEvent) => { if (mode === 'director' && !selected && !intro && !ui.quiet && !params.has('nobeats')) startBeat(e); });
@@ -244,7 +303,12 @@ function start() {
   loading.classList.add('done'); setTimeout(() => loading.remove(), 900);
   requestAnimationFrame(frame);
 }
-function stepSim(dtWorld: number) { const n = Math.min(400, Math.ceil(dtWorld / (1 / 30))); const h = dtWorld / n; for (let i = 0; i < n; i++) { sim.step(h); } tickTraveller(sim); tickFestival(sim); }
+// Real time runs the sim in fixed 1/30 s world steps from an accumulator, so a seed plays out the same story whatever the
+// frame rate (under heavy load the excess is dropped: time slows, the sequence of steps doesn't change).
+const SIM_H = 1 / 30; let simAcc = 0;
+function stepSim(dtWorld: number) { simAcc += dtWorld; let n = Math.floor(simAcc / SIM_H + 1e-9); simAcc -= n * SIM_H; if (n > 240) n = 240; for (let i = 0; i < n; i++) { sim.step(SIM_H); tickTraveller(sim); tickFestival(sim); } }
+// fastForward(min, true): the old coarse stepping (big steps; quick but thins out the social life)
+function stepSimCoarse(dtWorld: number) { const n = Math.min(400, Math.ceil(dtWorld / SIM_H)); const h = dtWorld / n; for (let i = 0; i < n; i++) { sim.step(h); } tickTraveller(sim); tickFestival(sim); }
 let cpuMsAvg = 0; // JS cost of a frame (sim + UI + draw submission) — what bounds fps on a real GPU
 function frame(now: number) {
   requestAnimationFrame(frame);
@@ -262,13 +326,15 @@ function frame(now: number) {
   else controls.autoRotate = false;
   const want = beat || intro ? null : follow ? sim.byId.get(follow)!.avatar.root.position : focusTarget;
   if (want) { const k = 1 - Math.pow(.04, dt), dx = (want.x - controls.target.x) * k, dz = (want.z - controls.target.z) * k, dy = ((follow ? 1 : 0) - controls.target.y) * k; controls.target.x += dx; controls.target.z += dz; controls.target.y += dy; camera.position.x += dx; camera.position.z += dz; camera.position.y += dy;
-    const wantDist = mode === 'director' ? 17 + Math.sin(now / 9000) * 4 : (focusTarget && !follow ? focusDist : 0); if (wantDist) { const off = camera.position.clone().sub(controls.target); const d = off.length(); off.multiplyScalar(1 + (wantDist / d - 1) * k * .5); camera.position.copy(controls.target).add(off); } }
+    const wantDist = mode === 'director' ? (follow ? (mobile ? 13 : 11.5) + Math.sin(now / 9000) * 1.5 : focusDist || 24) : (focusTarget && !follow ? focusDist : 0); if (wantDist) { const off = camera.position.clone().sub(controls.target); const d = off.length(); off.multiplyScalar(1 + (wantDist / d - 1) * k * .5); camera.position.copy(controls.target).add(off); } }
+  if (mode === 'director' && !beat && !intro && !selected) directorCare(dt);
+  mobileFrame();
   if (intro) { introCamera(Math.min(.25, (now - (beatLast || now)) / 1000)); beatLast = now; }
   else if (!beat) controls.update(); else beatCamera(Math.min(.25, (now - (beatLast || now)) / 1000)); beatLast = now;
-  sky.update(sim.hour, sim.rain, controls.target, dt * Math.max(speed, .0001)); renderer.toneMappingExposure = 1.05 + sky.golden * .1 + sky.flash * .45; world.fx.setRain(sim.rain > .35); world.fx.update(dt, controls.target);
+  sky.update(sim.hour, sim.rain, controls.target, dt * Math.max(speed, .0001)); renderer.toneMappingExposure = 1.05 + sky.golden * .1 + sky.flash * .45; world.fx.setRain(sim.rain > .12); world.fx.update(dt, controls.target);
   sound.ambient(sky.night, sim.rain, dt);
   ui.frame(dt);
-  pBudget = 2; for (const id of [...pQueue].slice(0, 2)) portrait(id); pBudget = 2;
+  pBudget = 2; for (const id of [...pQueue].sort((a, b) => (b === selected ? 1 : 0) - (a === selected ? 1 : 0)).slice(0, 2)) portrait(id); pBudget = 2;
   perf.beforeRender();
   renderer.render(scene, camera); cpuMsAvg += ((performance.now() - cpu0) - cpuMsAvg) * .1;
 }
@@ -277,7 +343,7 @@ function frame(now: number) {
 (window as any).terrarium = {
   sim, director, world, camera, controls, renderer, scene, get fps() { return perf.fps; }, get pixelRatio() { return perf.pr; }, quality: { soft: SOFT, aa: AA }, get simMs() { return simMsAvg; }, get cpuMs() { return cpuMsAvg; },
   setSpeed: (s: number) => (speed = s), select: (id: string | null) => api.select(id), setMode: (m: any) => api.setMode(m), god: (k: string) => api.god(k), ui: () => ui,
-  fastForward(minutes: number) { ui.quiet = true; stepSim(minutes / MIN_PER_SEC); ui.quiet = false; for (const v of sim.villagers) syncAvatar(v, .016); },
+  fastForward(minutes: number, coarse = false) { ui.quiet = true; if (coarse) stepSimCoarse(minutes / MIN_PER_SEC); else { const n = Math.round(minutes / MIN_PER_SEC / SIM_H); for (let i = 0; i < n; i++) { sim.step(SIM_H); tickTraveller(sim); tickFestival(sim); } } ui.quiet = false; for (const v of sim.villagers) syncAvatar(v, .016); },
   look(x: number, z: number, dist = 30, yaw = .6, pitch = .9) { endIntro(); follow = null; focusTarget = null; mode = 'free'; controls.target.set(x, 0, z); camera.position.set(x + Math.sin(yaw) * Math.cos(pitch) * dist, Math.sin(pitch) * dist, z + Math.cos(yaw) * Math.cos(pitch) * dist); controls.update(); },
   closeUp(id: string, dist = 3.2, side = .3) { const v = sim.byId.get(id)!; follow = null; focusTarget = null; mode = 'free'; const hd = v.avatar.heading; const hy = v.avatar.height * .8; controls.target.set(v.x, hy, v.z); camera.position.set(v.x + Math.sin(hd + side) * dist, hy + .5, v.z + Math.cos(hd + side) * dist); controls.update(); },
   beat(id?: number) { const e = id === undefined ? [...sim.events].reverse().find(x => beatTitle(x)) : sim.events.find(x => x.id === id); mode = 'director'; selected = null; return e ? startBeat(e, true) : false; }, get beatOn() { return !!beat; }, strike: () => sky.strike(),
