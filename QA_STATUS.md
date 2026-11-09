@@ -1,0 +1,43 @@
+# QA round 1: status per item
+
+Tested build: 54eb4c4. These fixes landed on master in round 3.
+
+| # | Item | Status | Notes |
+|---|------|--------|-------|
+| 1 | Leaderboard empty | Fixed | Rows and legend now go inside `setHTML`, so all 12 rows show. |
+| 2 | Self-referential gossip | Fixed | `pickGossip` skips facts about the teller (or acted by them). 0 cases in a 3-day soak. |
+| 3 | False rumours printed as fact | Fixed | The chronicle "false rumour" badge now also shows in the Gazette, Recap timeline, story cards, arc view and card Story tab. Relayed and viral retellings of a fake fact carry the marker. Gazette leads say "(or so the rumour goes)". A rumour never becomes the headline. |
+| 4 | Black Book marked RESOLVED | Fixed | A keepsake-theft arc resolves only when the keepsake is back with its owner. This is rechecked on every recap. |
+| 5 | Director cam framing roofs, walls or empty houses | Fixed | Following distance is now 11.5 m (13 m on mobile). Every 0.5 s a line-of-sight check swings the camera to a clear angle. If the subject goes indoors, the camera switches to the nearest villager outside. If everyone is in, it frames the campfire (night) or plaza. More event kinds trigger beats (theft, accusation, argument, making up, alliance), and the beat cooldown dropped from 9 s to 6 s. |
+| 6 | Reload loses the village | Fixed | localStorage autosave (every 20 s, at dawn, and when the tab is hidden) and resume on load. 🌱 starts a new village. `?fresh` / `?nosave` are available. |
+| 7 | DOM growth / per-row listeners | Fixed | The chronicle caps at 100 rows (minor work rows at 30). One delegated click handler covers names and story chips, and repeated lines fold into ×N. |
+| 8 | Mobile card covers the villager | Fixed | Bottom sheet above the dock (it hides the chronicle while open). Compact header. The camera view is offset so the villager sits above the sheet. 3+ rows visible. |
+| 9 | God-power spam | Fixed | Cooldowns with a recharge bar: gift 8 s, rain 25 s, traveller/festival 30 s. Rain is refused while it's already raining. |
+| 10 | Day-1 Gazette says "Day 2" | Fixed | Before the first dawn it is labelled "Day N · Early edition, today so far" and only includes past events. |
+| 11 | Headline grammar / "Nobody knows… yet" in the paper | Fixed | Names are uppercased in all-caps headlines and the pronoun is correct. Leads use only the first sentence of each beat, with no "!.". Secret-crush lines are kept out of headlines, leads and stories. "Most mischievous: Nobody, yet" when tied at 0. |
+| 12 | Headline doesn't match the stories | Fixed | With no lead, the headline's own event is always the first story. Stories are de-duplicated. |
+| 13 | Duplicate achievement toasts | Fixed | The same title refreshes the visible or queued toast instead of stacking. |
+| 14 | Work filter empty | Fixed | Routine work (importance 1) is kept for the Work filter only, and hidden from All. |
+| 15 | Free-cam zoom void / clipping | Fixed | Zoom is clamped to 4.5–72 m (was 5–120). |
+| 16 | Blank portrait on select | Fixed | The selected villager jumps the portrait queue. |
+| 17 | Space resumes at 1× | Fixed | Space restores the previous speed. |
+| 18 | God powers while paused | Fixed | Refused with a "Time is paused" toast. |
+| 19 | Relationship web clipped at 720p | Fixed | The canvas scales to fit the sheet (`height: min(560px, 88vh − 160px)`). |
+| 20 | Romance repeats / mirrored friend lines | Fixed | "Quietly fallen for" is logged once per pair; a repeat is a minor line. No re-crush for 3 days after a confession. Friendship gets one line per pair, upgraded to "both ways" instead of mirrored. |
+| 21 | "over what he did" | Fixed | The fight reason is now the remembered fact ("over how Tom pinched Edgar's book"). |
+| 22 | Apologies to the thief | Fixed | Villagers apologise only when the other person is sore at *them*, and never to whoever holds their keepsake. |
+| 23 | Clipping into stalls | Partly fixed | Work spots that land on a blocked nav cell now snap to the nearest free cell. Avatar-to-avatar overlap at the campfire is unchanged. |
+| 24 | Rain visuals lag / linger | Partly fixed | Rain particles start at intensity 0.12 (was 0.35), so they appear with the chronicle line. Existing streaks still finish falling when a festival clears the sky. |
+| 25 | Intro panels ghosting | Fixed | During the intro crane (and the dawn montage) the chronicle, leaderboard, card and dock are hidden. |
+| 26 | Mobile tap targets | Fixed | Top bar, filter and dock buttons are 44–48 px. The one-row dock has short labels (Gift, Rain, Visitor, Fest, Web, Paper, Recap, People). |
+| 27 | Justified Gazette text | Fixed | Left-aligned on mobile, and the sidebar is always left-aligned. |
+| 28 | Work lines repeat | Fixed | Repeats fold into one row with ×N. |
+| 29 | Thought vs relationship mismatch | Fixed | "I've had enough of X" appears only below Neutral. Envy sniping says "Who does X think he is, anyway?". |
+| 30 | Plan duplicates sleep | Fixed | Contiguous identical blocks merge, and next-day blocks are marked "(tomorrow)". |
+| 31 | Mind tab misses own actions | Fixed | Starting a rumour and passing on gossip are now remembered by the teller. |
+
+## Other changes
+
+- **Gossip share:** gossip is now about 24–26% of events (seed 7, 3 days), down from about 30%. The cooldown went from 100 to 170 minutes and the score was scaled by 0.7. More thefts happen in daylight, and confrontations come sooner.
+- **Determinism:** real time uses the same fixed 1/30 s step as `fastForward`. Two concurrent runs of seed 7 at different frame rates produced identical events. `fastForward(min)` uses fine steps by default; `fastForward(min, true)` keeps the old coarse stepping.
+- **Click hint:** a first-visit "Click a villager to read their mind" hint. It goes away on the first selection or after 45 s.

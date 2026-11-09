@@ -4,7 +4,7 @@ const W = +(process.argv[2] || 1280), H = +(process.argv[3] || 720), Q = process
 const PORT = +(process.env.PORT || 5191); const srv = await start(PORT);
 const b = await chromium.launch({ executablePath: '/usr/bin/google-chrome', args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const p = await b.newPage(process.env.MOBILE ? { viewport: { width: W, height: H }, deviceScaleFactor: 3, isMobile: true, hasTouch: true } : { viewport: { width: W, height: H } }); const errs = []; p.on('pageerror', e => errs.push(e.message));
-await p.goto(`http://127.0.0.1:${PORT}/?nopaper&seed=7${Q}`); await p.waitForFunction(() => window.terrarium && document.querySelector('.loading.done'), null, { timeout: 120000 });
+await p.goto(`http://127.0.0.1:${PORT}/?nopaper&fresh&nosave&seed=7${Q}`); await p.waitForFunction(() => window.terrarium && document.querySelector('.loading.done'), null, { timeout: 120000 });
 await p.evaluate(() => terrarium.fastForward(10 * 60 - terrarium.sim.clock));
 const spots = { overview: 'terrarium.look(-6,-2,62,.55,.85)', plaza: 'terrarium.look(-9,4,22,.45,.5)', director: "terrarium.setMode('director')" };
 const out = {};

@@ -12,11 +12,20 @@ npm install                 # once
 node tools/build.mjs        # production bundle -> dist/   (add --dev for an unminified build)
 node tools/serve.mjs        # http://127.0.0.1:5173  (serves dist/ plus licensed GLBs at /glb)
 ```
-URL params: `?seed=7` gives a deterministic run, `?cam=free` starts in free cam, `?nopaper` skips the dawn Gazette popup.
+URL params: `?seed=7` gives a deterministic run (the sim advances in fixed 1/30 s steps, so the same seed tells the same story
+at any frame rate or speed, in real time or via `terrarium.fastForward`), `?cam=free` starts in free cam, `?nopaper` skips the
+dawn Gazette (and its "Previously in Thistlebrook" montage; `?nomontage` skips only the montage).
+
+Save / resume: the village autosaves to localStorage every 20 s, at dawn and when the tab is hidden, and resumes on reload.
+🌱 in the top bar starts a new village (new random seed). `?fresh` ignores the save for one load, `?nosave` never writes one,
+and a `?seed=` that differs from the saved village starts that seed fresh.
 
 Controls: click a villager to open the card (Relationships, Plan, Mind, Story). Use the dock for god powers (gift, rain,
 traveller, festival) and views (relationship web, Gazette, recap, villagers). `Space` pauses and `Esc` deselects. 1×/4×/16× sets the speed.
 Director cam picks the juiciest thing happening. Free cam lets you orbit.
+God powers recharge after use (gift 8 s, rain 25 s, traveller/festival 30 s); they do nothing while paused, and rain won't
+re-fire during a storm. Living-world touches: a bird flock by day, fish leaping in both ponds, ducks, a rainbow after a daytime
+shower (with an "After the Rain" shot when the director has the camera), and a sepia dawn montage of yesterday's big moments.
 
 ## Verify / media
 ```bash

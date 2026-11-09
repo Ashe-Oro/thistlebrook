@@ -8,7 +8,7 @@ const p = await b.newPage({ viewport: { width: 1280, height: 720 } }); const err
 p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); }); p.on('pageerror', e => errs.push('pageerror: ' + e.message));
 p.on('response', r => { if (r.status() >= 400) errs.push('HTTP ' + r.status() + ' ' + r.url()); });
 const t0 = Date.now();
-await p.goto(`http://127.0.0.1:5182/?nopaper&seed=${SEED}`); await p.waitForFunction(() => window.terrarium && document.querySelector('.loading.done'), null, { timeout: 180000 });
+await p.goto(`http://127.0.0.1:5182/?nopaper&fresh&nosave&seed=${SEED}`); await p.waitForFunction(() => window.terrarium && document.querySelector('.loading.done'), null, { timeout: 180000 });
 const loadMs = Date.now() - t0;
 const ev = (c, arg) => p.evaluate(c, arg);
 // 1) real-time sanity: villagers move on screen at 1x (late morning, heading to lunch)

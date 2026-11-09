@@ -5,7 +5,7 @@ const srv = await start(5183);
 const b = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const errs = []; const watch = p => { p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); }); p.on('pageerror', e => errs.push('pageerror: ' + e.message)); };
 const p = await b.newPage({ viewport: { width: 1600, height: 900 } }); watch(p);
-await p.goto('http://127.0.0.1:5183/?nopaper&capture&dynres=0&seed=' + (process.env.SEED || 7)); await p.waitForFunction(() => window.terrarium && document.querySelector('.loading.done'), null, { timeout: 180000 });
+await p.goto('http://127.0.0.1:5183/?nopaper&fresh&nosave&capture&dynres=0&seed=' + (process.env.SEED || 7)); await p.waitForFunction(() => window.terrarium && document.querySelector('.loading.done'), null, { timeout: 180000 });
 const run = async (code, arg) => { const r = await p.evaluate(async ([c, a]) => { const F = Object.getPrototypeOf(async function () {}).constructor; return await new F('arg', c)(a); }, [code, arg]); if (r !== undefined) console.log(JSON.stringify(r)); return r; };
 const wait = ms => p.waitForTimeout(ms);
 const shot = async (name, opts = {}) => { await p.screenshot({ path: `${OUT}/${name}.png`, ...opts }); console.log('shot', name); };
@@ -43,6 +43,7 @@ for (const [id] of EX) fs.unlinkSync(`${OUT}/x_${id}.png`); console.log('shot 06
 await ffTo(20.7); await run("terrarium.setSpeed(1)"); await wait(1500); await run('terrarium.setSpeed(1); const S=terrarium.sim, p=S.parties.find(p=>!p.done&&p.at<=S.clock+30)||S.parties[S.parties.length-1]; const pl=S.place(p?p.place:"campfire"); terrarium.look(pl.cx, pl.cz+(pl.kind==="campfire"?.5:3), 13, .5, .5); return p&&[p.title,p.place,[...p.attendees]]'); await wait(3500); await shot('07_party_night');
 await run('terrarium.look(-6,-2,62,.55,.85)'); await wait(1500); await shot('08_night_overview');
 // Dawn paper
+await ffTo(24 + 6.1); await run("terrarium.setSpeed(1); terrarium.setMode('director'); return terrarium.montage(1)"); await wait(2200); await shot('27_dawn_montage'); await run('terrarium.endMontage()');
 await ffTo(24 + 6.3); await run('terrarium.ui().view("paper")'); await wait(900); await shot('09_gazette'); await run('terrarium.ui().closeModal()');
 // Day 3: relationships have history now
 await ffTo(48 + 13); await run('terrarium.setSpeed(1)');
@@ -58,14 +59,15 @@ await ffTo(48 + 16.5); await run("terrarium.setSpeed(1); terrarium.setMode('dire
 // Golden hour over the plaza
 await ffTo(48 + 18.1); await run('terrarium.look(-9,4,30,.5,.42)'); await wait(2500); await shot('23_golden_hour');
 await ffTo(72 + 10); await run('terrarium.god("rain"); terrarium.fastForward(45)'); await wait(3500); await run('terrarium.look(-9,0,30,.6,.6)'); await wait(2500); await shot('19_rain'); await run('terrarium.strike()'); await wait(120); await shot('19b_lightning');
+await run("const S=terrarium.sim; S.rain=0; S.rainUntil=S.clock; terrarium.setSpeed(1); terrarium.setMode('director'); terrarium.look(-9,4,30,.5,.5); terrarium.setMode('director'); terrarium.rainbow()"); await wait(4500); await shot('26_rainbow'); await wait(4000);
 // Scuffle: two villagers who dislike each other, staged next to each other
 await ffTo(72 + 14); await run(`const S=terrarium.sim; let best=null; for (const a of S.villagers) for (const c of S.villagers) if (a!==c && !a.inside && !c.inside && (!best || (a.opinion[c.id]??0) < (best[0].opinion[best[1].id]??0))) best=[a,c]; const [a,c]=best; c.x=a.x+1.2; c.z=a.z; terrarium.look(a.x,a.z,14,.6,.5); terrarium.setMode('director'); S.startFight(a,c,a.first+' finally had it out with '+c.first); if(!terrarium.beatOn) terrarium.beat(); return [a.id,c.id]`);
 await wait(2600); await shot('20_brawl_beat'); await wait(9000); await run("terrarium.setMode('free'); const S=terrarium.sim; const e=[...S.events].reverse().find(e=>e.kind==='fight'); terrarium.look(e.x,e.z,11,.6,.45)"); await wait(1500); await shot('21_brawl_after');
 await p.close(); // free the renderer before the next page
 // Establishing crane shot (plays on first load for real visitors)
-{ const q = await b.newPage({ viewport: { width: 1600, height: 900 } }); watch(q); await q.goto('http://127.0.0.1:5183/?nopaper&capture&dynres=0&intro&seed=7'); await q.waitForFunction(() => window.terrarium && document.querySelector('.loading.done'), null, { timeout: 180000 }); await q.waitForTimeout(5000); await q.screenshot({ path: `${OUT}/00_intro.png`, timeout: 120000 }); console.log('shot 00_intro'); await q.close(); }
+{ const q = await b.newPage({ viewport: { width: 1600, height: 900 } }); watch(q); await q.goto('http://127.0.0.1:5183/?nopaper&fresh&nosave&capture&dynres=0&intro&seed=7'); await q.waitForFunction(() => window.terrarium && document.querySelector('.loading.done'), null, { timeout: 180000 }); await q.waitForTimeout(5000); await q.screenshot({ path: `${OUT}/00_intro.png`, timeout: 120000 }); console.log('shot 00_intro'); await q.close(); }
 // Mobile layout
 const m = await b.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }); watch(m);
-await m.goto('http://127.0.0.1:5183/?nopaper&seed=7'); await m.waitForFunction(() => window.terrarium && document.querySelector('.loading.done'), null, { timeout: 180000 });
-await m.evaluate(() => { terrarium.fastForward(4 * 60); terrarium.select('mara'); }); await m.waitForTimeout(2500); await m.screenshot({ path: `${OUT}/22_mobile.png` }); console.log('shot 22_mobile');
+await m.goto('http://127.0.0.1:5183/?nopaper&fresh&nosave&seed=7'); await m.waitForFunction(() => window.terrarium && document.querySelector('.loading.done'), null, { timeout: 180000 });
+await m.evaluate(() => { terrarium.fastForward(4 * 60); terrarium.select('mara'); }); await m.waitForTimeout(8000); await m.screenshot({ path: `${OUT}/22_mobile.png` }); console.log('shot 22_mobile');
 console.log('errors:', errs.join('\n') || 'none'); await b.close(); srv.close(); process.exit(errs.length ? 1 : 0);

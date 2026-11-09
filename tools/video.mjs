@@ -21,7 +21,7 @@ await p.addInitScript(() => {
 });
 let frameN = 0, recording = false; const FPS = 24; let cdp;
 p.on('pageerror', e => errs.push(e.message)); p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
-await p.goto('http://127.0.0.1:5184/?nopaper&capture&dynres=0&seed=' + (process.env.SEED || 7)); for (let k = 0; k < 4000; k++) { const ok = await p.evaluate(() => { for (let i = 0; i < 5; i++) window.__step(16); return !!(window.terrarium && document.querySelector('.loading.done')); }); if (ok) break; }
+await p.goto('http://127.0.0.1:5184/?nopaper&fresh&nosave&capture&dynres=0&seed=' + (process.env.SEED || 7)); for (let k = 0; k < 4000; k++) { const ok = await p.evaluate(() => { for (let i = 0; i < 5; i++) window.__step(16); return !!(window.terrarium && document.querySelector('.loading.done')); }); if (ok) break; }
 await p.evaluate(() => { for (let i = 0; i < 60; i++) window.__step(16); });
 const run = async (code, arg) => p.evaluate(async ([c, a]) => { const F = Object.getPrototypeOf(async function () {}).constructor; return await new F('arg', c)(a); }, [code, arg]);
 const wait = async ms => { const n = Math.max(1, Math.round(ms / 1000 * FPS)); for (let k = 0; k < n; k++) { await p.evaluate(d => window.__step(d), 1000 / FPS); if (recording) { cdp ??= await ctx.newCDPSession(p); const r = await cdp.send('Page.captureScreenshot', { format: 'jpeg', quality: 90, optimizeForSpeed: true }); fs.writeFileSync(`${TMP}/f${String(frameN++).padStart(5, '0')}.jpg`, Buffer.from(r.data, 'base64')); } } };
@@ -76,12 +76,14 @@ await cap('Crushes, confessions, heartbreak', 'romance grows out of opinions, me
 // 7 · god powers: rain + traveller
 await run("terrarium.god('rain'); terrarium.setSpeed(2); terrarium.fastForward(25); terrarium.setMode('free'); glide(-9,4,34,24,.5,.75,.5,.4,5600)");
 await cap('Play god', 'make it rain · drop a gift · throw a festival · summon the storyteller'); await wait(1900); await run('terrarium.strike()'); await wait(1600); await run('terrarium.strike()'); await beat(1900);
-await run("halt(); terrarium.sim.rainUntil = terrarium.sim.clock; terrarium.setSpeed(1); terrarium.setMode('director'); terrarium.god('traveller')"); await wait(900);
+await run("halt(); const S=terrarium.sim; S.rainUntil = S.clock; S.rain = 0; terrarium.setSpeed(1); terrarium.setMode('director'); terrarium.rainbow()"); await wait(400); await cap('…and when a shower clears, a rainbow', 'birds wheel overhead, fish leap in the ponds'); await beat(6000);
+await run("terrarium.setMode('director'); terrarium.god('traveller')"); await wait(900);
 await run("terrarium.ui().quiet = true; terrarium.fastForward(12); terrarium.ui().quiet = false; if (!terrarium.beatOn) terrarium.beat();"); await wait(5600);
 // 8 · night party
 await ffTo(20.7); await run(`terrarium.setSpeed(1); const S=terrarium.sim, p=S.parties.find(p=>!p.done&&p.at<=S.clock+30)||S.parties[S.parties.length-1]; const pl=S.place(p?p.place:'campfire'); glide(pl.cx, pl.cz+.5, 18, 11, .2, .7, .55, .4, 6000); return p&&p.title`);
 await cap('Invitations spread by word of mouth', 'and parties happen when enough people actually show up'); await beat(5200); await panels(true);
 // 9 · morning paper + relationship web
+await ffTo(24 + 6.1); await run("halt(); terrarium.setSpeed(1); terrarium.setMode('director'); terrarium.montage(1)"); await wait(7600); await run('terrarium.endMontage()');
 await ffTo(24 + 6.4); await run("halt(); terrarium.ui().view('paper')"); await cap('Every dawn: the Thistlebrook Gazette', 'headlines, leaderboards, sweethearts'); await beat(4000);
 await run("terrarium.ui().closeModal(); terrarium.ui().view('web')"); await cap('…and the web of who likes whom', 'all of it emergent, all of it remembered'); await beat(4200);
 await run("terrarium.ui().closeModal(); glide(-6,-2,40,70,.4,.9,.6,.85,4000)"); await cap('Thistlebrook', 'v1 · built with three.js', true); await wait(3600);
