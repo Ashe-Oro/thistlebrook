@@ -7,7 +7,7 @@ import { drawWeb } from './web';
 import { arcs } from '../sim/arcs';
 import type { Arc } from '../sim/arcs';
 
-export const VCOLOR: Record<string, string> = { mara: '#e8875b', tom: '#6c8fd1', jen: '#c96bd6', ollie: '#d8b23b', pip: '#6dbb5a', rosa: '#d4574a', wren: '#5fc0c4', edgar: '#a98a62' };
+export const VCOLOR: Record<string, string> = { mara: '#e8875b', tom: '#6c8fd1', jen: '#c96bd6', ollie: '#d8b23b', pip: '#6dbb5a', rosa: '#d4574a', wren: '#5fc0c4', edgar: '#a98a62', bram: '#b5763a', sol: '#4f7fa0', posy: '#e58fb1', agnes: '#8c7bc0' };
 const setHTML = (el: Element, html: string) => { if ((el as any)._html !== html) { (el as any)._html = html; el.innerHTML = html; } };
 const h = (tag: string, cls = '', html = '') => { const e = document.createElement(tag); if (cls) e.className = cls; if (html) e.innerHTML = html; return e; };
 const esc = (s: string) => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' } as any)[c]);
@@ -56,7 +56,7 @@ export class UI {
     this.overlay = h('div', 'overlay'); r.appendChild(this.overlay); this.toasts = h('div', 'toasts'); r.appendChild(this.toasts); this.caption = h('div', 'caption'); r.appendChild(this.caption);
     this.modal = h('div', 'modal hidden'); r.appendChild(this.modal); this.modal.onclick = (e) => { if (e.target === this.modal) this.closeModal(); };
     // landmark labels: shown when the camera pulls back far enough to see the whole village
-    const PIC: Record<string, string> = { bakery: '🥖', store: '✉️', tavern: '🍺', smithy: '⚒️', market: '🧺', well: '🪣', field: '🌾', coop: '🐔', orchard: '🍎', forest: '🌲', quarry: '⛏️', campfire: '🔥', plaza: '⛲', pond: '🦆', barn: '🐄', chapel: '⛪', windmill: '🌬️', pasture: '🐑' };
+    const PIC: Record<string, string> = { bakery: '🥖', store: '✉️', tavern: '🍺', smithy: '⚒️', market: '🧺', well: '🪣', field: '🌾', coop: '🐔', orchard: '🍎', forest: '🌲', quarry: '⛏️', campfire: '🔥', plaza: '⛲', pond: '🦆', barn: '🐄', chapel: '⛪', windmill: '🌬️', pasture: '🐑', school: '📚', garden: '🌿', dock: '🎣' };
     for (const pl of this.app.sim.world.places.values() as Iterable<any>) { if (!PIC[pl.kind]) continue; const el = h('div', 'landmark', `<i>${PIC[pl.kind]}</i>${esc(pl.name.replace(/^the /, ''))}`); el.style.display = 'none'; this.overlay.appendChild(el); this.marks.push({ el, x: pl.x, z: pl.z }); }
     for (const v of this.app.sim.villagers) { const t = h('div', 'tag', `<span style="background:${VCOLOR[v.id]}"></span>${v.first}`); t.onclick = () => this.app.select(v.id); this.overlay.appendChild(t); this.tags.set(v.id, t); }
     window.addEventListener('keydown', e => { if (e.key === 'Escape') { this.closeModal(); this.app.select(null); } if (e.key === ' ') { this.app.setSpeed(this.app.speed ? 0 : 1); e.preventDefault(); } });

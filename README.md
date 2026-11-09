@@ -25,6 +25,28 @@ node tools/gallery.mjs                # staged review screenshots -> shots/final
 node tools/video.mjs                  # frame-exact director's cut (virtual clock, 24 fps) -> shots/terrarium.mp4
 ```
 
+## Performance
+
+`node tools/perf.mjs [W] [H]` is a headless probe. It reports **real** fps (rAF frames per wall-clock second), JS ms per frame (sim + UI + draw submission), draw calls, triangles and the dynamic render scale at three camera spots. Options: `MOBILE=1` emulates a phone; `Q='&dynres=0'` passes extra URL flags.
+
+**What the governor does (src/main.ts `perf`).**
+- **Villagers:** culled when off-screen. The ink outline is dropped beyond 34 m and real shadows beyond 26 m, where a blob shadow replaces them.
+- **Shadow map:** refreshed every other frame (`?shadowEvery=N`).
+- **Dynamic resolution:** the render scale moves between 0.65× (0.5× on software rasterisers) and the device ratio to hold 50–58 fps (`?dynres=0` turns it off).
+- **Software rasterisers** (SwiftShader/llvmpipe, i.e. no GPU): MSAA is off and the shadow map is 1k.
+- **UI:** the per-frame label/bubble layout no longer thrashes layout (sizes are cached, DOM writes are guarded), and the panels lost a backdrop blur.
+
+**Measured headless numbers.** The box has no GPU, so these are SwiftShader CPU rasterisation at 1280×720.
+
+| | overview | plaza | director |
+|---|---|---|---|
+| before (round 1) | 2.8–3.3 fps | 3.7–4.3 | 3.5–4 |
+| after | ~12 fps | ~16–17 | ~12–13 |
+| JS cost per frame (after) | 4.6 ms | 1.7 ms | 2.3 ms |
+| phone emulation 390×844 (after) | 24 fps | 38 | 26 |
+
+On a laptop GPU, frame time is bounded by JS cost. At about 2–5 ms per frame, that leaves room for 60 fps. That can't be measured here. Capture runs (`?capture`) keep full quality.
+
 ## Architecture (src/)
 - `sim/sim.ts`: world clock, action executor, parties, fights, keepsakes, weather, witnesses, fact propagation.
 - `sim/brain.ts`: `UtilityBrain`, which handles day plans (re-planned on interruptions), utility-scored choices, and reflections. `sim/llm.ts` is an optional LLM brain (off by default).
