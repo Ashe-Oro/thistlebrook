@@ -41,7 +41,7 @@ export const TOWN = {
         { a: 'farm/farmhand_cottage', x: 13, z: -21, place: { id: 'home-spare', kind: 'home', name: 'Willow Cottage', enterable: true } },
         // Main street (row B)
         { a: 'cozy/bld_bakery_01', x: -27, z: -10, place: { id: 'bakery', kind: 'bakery', name: 'the bakery', enterable: true, chimney: [1.3, 5.6, -0.9] } },
-        { a: 'cozy/bld_general_store_01', x: -19, z: -10, place: { id: 'store', kind: 'store', name: 'the general store', enterable: true } },
+        { a: 'cozy/bld_general_store_01', x: -19, z: -10, place: { id: 'store', kind: 'store', name: 'the post office', enterable: true } },
         { a: 'cozy/bld_tavern_inn_01', x: -9.5, z: -10.5, place: { id: 'tavern', kind: 'tavern', name: 'the Tipsy Thistle', enterable: true, chimney: [-1.6, 8.6, -0.6] } },
         { a: 'cozy/bld_blacksmith_01', x: 0.5, z: -10, place: { id: 'smithy', kind: 'smithy', name: 'the smithy', enterable: true, chimney: [-1.2, 6.6, -0.9] } },
         { a: 'cozy/home_cottage_01', x: 8.5, z: -10, rot: 0, place: { id: 'home-edgar', kind: 'home', name: 'Vale Cottage', enterable: true, chimney: [0.9, 4.9, -0.6] } },

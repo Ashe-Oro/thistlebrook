@@ -1,6 +1,6 @@
 import type { Sim } from './sim';
-import type { Villager, Action, Item } from './types';
-import { ITEM_ICON, FOOD } from './types';
+import type { Villager, Action } from './types';
+import { JOB_INFO } from '../data/villagers';
 import type { Fact } from '../agents/memory';
 import { clamp } from '../core/util';
 
@@ -40,7 +40,7 @@ export function resolveSocial(sim: Sim, v: Villager, t: Villager, a: Action): nu
       const grumpy = (v.needs.food < 30 || v.needs.energy < 25 ? v.traits.temper : 0) + (t.needs.food < 30 || t.needs.energy < 25 ? t.traits.temper : 0); const d = Math.round(compat * 6 + R.range(-3, 3) - grumpy * 8); bump(sim, v, t, d); bump(sim, t, v, d);
       const topics: Line[][] = [
         [[v, hi, '👋'], [t, R.pick(['Busy day!', 'Can\u2019t complain.', 'Did you see the sky this morning?']), '🙂'], [v, R.pick(v.def.catchphrases), '💬'], [t, d > 2 ? 'Ha! Exactly.' : 'Hmm, if you say so.', d > 2 ? '😄' : '😐']],
-        [[v, hi, '👋'], [t, R.pick(['The bread smelled amazing today.', 'Prices at the market are wild.', 'My back is killing me.', 'Heard any news?']), '💬'], [v, R.pick(['Tell me about it.', 'Same here!', 'Really?']), '😮'], [t, R.pick(t.def.catchphrases), '😄']],
+        [[v, hi, '👋'], [t, R.pick(['The bread smelled amazing today.', 'The hens were extra loud today.', 'My back is killing me.', 'Heard any news?']), '💬'], [v, R.pick(['Tell me about it.', 'Same here!', 'Really?']), '😮'], [t, R.pick(t.def.catchphrases), '😄']],
       ];
       const lines = R.pick(topics);
       // share a bit of gossip if they have any (Smallville: conversations spread information)
@@ -54,24 +54,61 @@ export function resolveSocial(sim: Sim, v: Villager, t: Villager, a: Action): nu
       return convo(sim, lines) + extra;
     }
     case 'gift': {
-      const item = a.item as Item, n = Math.min(a.n ?? 1, v.inv[item]); if (n <= 0) return 4;
-      sim.give(v, t, item, n); v.stats.gifts++; (v as any)._lastGift = sim.clock; ((v as any)._gave ??= {})[t.id] = sim.clock; soc(v, 20); soc(t, 20);
-      const d = 10 + Math.round(n * (item === 'coins' ? .7 : 4)) + (t.needs.food < 30 && FOOD[item] ? 10 : 0); bump(sim, t, v, d); bump(sim, v, t, 3);
-      t.emotions.love = Math.min(1, t.emotions.love + .6); t.emotions.joy += .4; sim.icon(t, '❤️'); sim.icon(v, '❤️');
-      const why = a.why ?? ''; sim.log(`${v.first} gave ${t.first} ${n} ${item}${why}.`, 4, [v.id, t.id], 'gift', '🎁');
-      const f = sim.fact('deed', `${v.first} gave ${t.first} a gift of ${item}`, v.id, v.id, .5, 2, t.id); sim.witness(`${v.first} gave ${t.first} ${item}`, 4, [v.id, t.id], { [t.id]: .8, [v.id]: .4, '*': .2 }, t.x, t.z, f, 10);
+      const [icon, what] = JOB_INFO[v.job].gift; const romantic = v.crush === t.id && !v.family.includes(t.id);
+      v.stats.gifts++; (v as any)._lastGift = sim.clock; ((v as any)._gave ??= {})[t.id] = sim.clock; soc(v, 20); soc(t, 20);
+      const d = 12 + (t.needs.social < 30 ? 6 : 0) + (romantic && t.crush === v.id ? 10 : 0); bump(sim, t, v, d); bump(sim, v, t, 3);
+      t.emotions.love = Math.min(1, t.emotions.love + (romantic ? .8 : .5)); t.emotions.joy += .4; sim.icon(t, romantic ? '💗' : '❤️'); sim.icon(v, romantic ? '💗' : '❤️');
+      const why = a.why ?? ''; sim.log(romantic ? `${v.first} shyly gave ${t.first} ${what}${R.chance(.5) ? ', blushing to the ears' : ''}.` : `${v.first} gave ${t.first} ${what}${why}.`, romantic ? 5 : 4, [v.id, t.id], romantic ? 'romance' : 'gift', icon);
+      const f = sim.fact('deed', romantic ? `${v.first} gave ${t.first} ${what} and blushed` : `${v.first} gave ${t.first} ${what}`, v.id, v.id, romantic ? .2 : .5, romantic ? 6 : 2, t.id); if (romantic) (f as any).romance = true;
+      sim.witness(`${v.first} gave ${t.first} ${what}`, 4, [v.id, t.id], { [t.id]: .8, [v.id]: .4, '*': .2 }, t.x, t.z, f, 10);
       if (v.stats.gifts >= 5) sim.achieve(v, 'generous', 'Generous Soul', `${v.first} has given 5 gifts`);
-      return convo(sim, [[v, R.pick([`For you, ${t.first}!`, 'I thought you could use this.', 'A little something!']), ITEM_ICON[item]], [t, R.pick(['Oh! You shouldn\u2019t have!', 'That\u2019s so kind!', 'You\u2019re a treasure.']), '🥰'], [v, 'Anytime.', '😊']]);
+      return convo(sim, [[v, romantic ? R.pick(['I, um, made this for you.', 'This made me think of you.', 'For you. Only you.']) : R.pick([`For you, ${t.first}!`, 'I thought you could use this.', 'A little something!']), icon], [t, R.pick(['Oh! You shouldn\u2019t have!', 'That\u2019s so kind!', 'You\u2019re a treasure.']), romantic ? '😳' : '🥰'], [v, romantic ? '...' : 'Anytime.', '😊']]);
     }
-    case 'trade': {
-      const [give, gn, get, gtn] = a.deal as [Item, number, Item, number];
-      if (v.inv[give] < gn || t.inv[get] < gtn) return 4;
-      const fair = gn * (sim.price(give, false)) >= gtn * sim.price(get, false) * .8;
-      if (!fair && op(t, v) < 30) { bump(sim, t, v, -2); sim.log(`${t.first} turned down ${v.first}'s lowball offer.`, 2, [v.id, t.id], 'trade', '🙅'); return convo(sim, [[v, `${gn} ${give} for ${gtn} ${get}?`, '🤝'], [t, 'Ha! Not a chance.', '🙄']]); }
-      sim.give(v, t, give, gn); sim.give(t, v, get, gtn); v.stats.trades++; t.stats.trades++; bump(sim, v, t, 4); bump(sim, t, v, 4); soc(v, 15); soc(t, 15);
-      sim.log(`${v.first} traded ${gn} ${give} for ${t.first}'s ${gtn} ${get}.`, 3, [v.id, t.id], 'trade', '🤝'); sim.world.fx.coinBurst(t.x, 1.4, t.z, 3);
-      sim.achieve(null, 'first-trade', 'Open for Business', `${v.first} & ${t.first} made the first trade`);
-      return convo(sim, [[v, `${gn} ${give} for ${gtn} ${get}?`, '🤝'], [t, R.pick(['Deal!', 'You drive a hard bargain. Deal.', 'Sounds fair.']), '👍'], [v, 'Pleasure doing business.', '🪙']]);
+    case 'flirt': {
+      soc(v, 20); soc(t, 15); const recept = op(t, v) + (t.crush === v.id ? 30 : 0) + t.traits.sociability * 20 - (t.partner && t.partner !== v.id ? 60 : 0) + R.range(-15, 15);
+      const lines: Line[] = [[v, R.pick([`You look nice today, ${t.first}.`, 'Walk with me a while?', `I saved you the good seat, ${t.first}.`, 'Your laugh is the best sound in the village.']), '💗']];
+      if (recept > 30) { bump(sim, t, v, 7); bump(sim, v, t, 4); t.emotions.love = Math.min(1, t.emotions.love + .5); v.emotions.love = Math.min(1, v.emotions.love + .6); sim.icon(v, '💗'); sim.icon(t, '😊'); lines.push([t, R.pick(['Oh, stop it...', 'You\u2019re sweet.', 'I\u2019d like that.']), '😊']); if (op(t, v) > 55 && !t.crush && !t.partner && !t.family.includes(v.id) && t.def.age !== 'teen') t.crush = v.id; }
+      else { bump(sim, v, t, -2); v.emotions.sadness += .2; lines.push([t, R.pick(['Uh... thanks?', 'I should get back to work.', 'Mm-hm.']), '😅']); }
+      const f = sim.fact('deed', `${v.first} has been sweet-talking ${t.first}`, v.id, v.id, .1, 5, t.id); (f as any).romance = true; v.mem.learn(f); sim.witness(`${v.first} flirted with ${t.first}`, 4, [v.id, t.id], { [v.id]: .4, [t.id]: recept > 30 ? .5 : -.1 }, v.x, v.z, f, 9);
+      if (recept > 30 && R.chance(.45)) sim.log(`${v.first} was flirting with ${t.first} ${R.pick(['by the well', 'in plain sight', 'again', 'and fooling nobody'])}.`, 3, [v.id, t.id], 'romance', '💗');
+      else if (recept <= 30 && R.chance(.5)) sim.log(`${v.first} tried a sweet line on ${t.first}. It did not land.`, 3, [v.id, t.id], 'romance', '😅');
+      return convo(sim, lines);
+    }
+    case 'confess': {
+      ((v as any)._confessed ??= {})[t.id] = sim.clock; const yes = !t.partner && (t.crush === v.id || op(t, v) > 62) && !t.family.includes(v.id) && R.range(0, 1) < .55 + op(t, v) / 200;
+      if (yes) {
+        if (v.partner) { const ex = sim.byId.get(v.partner); if (ex) sim.breakUp(v, ex); }
+        sim.couple(v, t); bump(sim, v, t, 15); bump(sim, t, v, 15); v.emotions.love = t.emotions.love = 1; v.emotions.joy = t.emotions.joy = 1; sim.icon(v, '💞'); sim.icon(t, '💞'); sim.world.fx.sparkle(t.x, 1.8, t.z, [1, .5, .7], 26);
+        sim.log(`${v.first} confessed their feelings to ${t.first}, and ${t.first} said yes! Thistlebrook has new sweethearts.`, 9, [v.id, t.id], 'romance', '💞'); sim.achieve(null, `couple-${[v.id, t.id].sort().join('-')}`, 'Sweethearts', `${v.first} & ${t.first}`);
+        const f = sim.fact('news', `${v.first} and ${t.first} are sweethearts now`, v.id, v.id, .4, 8, t.id); (f as any).romance = true; sim.witness(`${v.first} and ${t.first} became sweethearts`, 8, [v.id, t.id], { [v.id]: 1, [t.id]: 1, '*': .2 }, v.x, v.z, f, 14);
+        return convo(sim, [[v, `${t.first}... I can\u2019t keep it in any longer. I like you. A lot.`, '💗'], [t, 'You... really? Because I feel the same.', '🥹'], [v, 'Really?!', '😳'], [t, 'Really.', '💞']], 5);
+      }
+      v.crush = null; v.heartbreak = sim.clock + 1440; v.emotions.sadness = 1; v.emotions.love = 0; bump(sim, v, t, -8); sim.icon(v, '💔');
+      v.mem.add(sim.clock, `I told ${t.first} how I feel. ${t.first} said no.`, 9, [t.id], -.6, 'feeling');
+      sim.log(`${v.first} poured their heart out to ${t.first}, who let them down gently. ${v.first} walked home alone.`, 8, [v.id, t.id], 'romance', '💔'); sim.achieve(v, 'heartbreak', 'Heartbreak', `${v.first} was turned down`);
+      const f = sim.fact('deed', `${v.first} confessed to ${t.first} and got turned down`, v.id, v.id, -.2, 7, t.id); t.mem.learn(f);
+      a.after = () => { v.queue.unshift({ type: 'enter', place: v.def.home, dur: 60, t: 0, label: 'moping at home' }); };
+      return convo(sim, [[v, `${t.first}, I... I think I\u2019m in love with you.`, '💗'], [t, R.pick(['Oh. Oh no. I\u2019m so sorry...', 'You\u2019re dear to me, but not like that.', 'I... don\u2019t feel the same way.']), '😟'], [v, 'Right. Of course. Forget I said anything.', '💔']], 5);
+    }
+    case 'deliver': { // Jen hands over a letter; she may already know what's in it
+      const L = a.letter; sim.letters = sim.letters.filter(x => x !== L); const from = sim.byId.get(L.from);
+      soc(v, 10); soc(t, 10); bump(sim, t, v, 2);
+      if (!from) { t.mem.add(sim.clock, `Got a letter from ${R.pick(['a cousin in the city', 'the county clerk', 'an old friend'])}`, 2, [], .2, 'heard'); return convo(sim, [[v, R.pick([`Post for ${t.first}!`, 'A letter for you!']), '✉️'], [t, 'Thanks, Jen.', '🙂']]); }
+      if (L.love) { t.emotions.love = Math.min(1, t.emotions.love + .6); bump(sim, t, from, 10); t.mem.add(sim.clock, `${from.first} sent me a love letter`, 8, [from.id], .6, 'heard'); if (op(t, from) > 50 && !t.crush && !t.partner && !t.family.includes(from.id)) t.crush = from.id; sim.icon(t, '💌'); }
+      else t.mem.add(sim.clock, `Got a letter from ${from.first}`, 3, [from.id], .3, 'heard');
+      if (L.love) sim.log(`${v.first} delivered a pink envelope to ${t.first}. It smelled of lavender and was signed "${from.first}".`, 6, [v.id, t.id, from.id], 'romance', '💌');
+      return convo(sim, [[v, R.pick([`Post for ${t.first}!`, 'Special delivery!', 'A letter for you!']), '✉️'], [t, L.love ? 'Oh! Who could this be from...' : 'Thanks, Jen.', L.love ? '😳' : '🙂']]);
+    }
+    case 'accuse': { // a victim confronts whoever they *suspect* took their keepsake (they may be wrong)
+      const k = sim.keepsakes.get(v.id)!; const guilty = k.holder === t.id; ((v as any)._accused ??= {})[t.id] = sim.clock; const thing = k.name.replace(/^(his|her) /, 'my '), theirs = k.name;
+      v.emotions.anger = Math.min(1, v.emotions.anger + .4); sim.icon(v, '💢');
+      if (guilty && t.traits.kindness + R.range(0, .5) > .75) { k.holder = v.id; bump(sim, v, t, -10); t.emotions.sadness += .4; sim.log(`${v.first} confronted ${t.first} about the missing ${k.name.replace(/^(his|her) /, '')}. ${t.first} went red and handed it back.`, 7, [v.id, t.id], 'theft', k.icon); const f = sim.fact('deed', `${t.first} had ${v.first}'s ${k.name.replace(/^(his|her) /, '')} all along`, t.id, t.id, -.7, 7, v.id); (f as any).label = 'the theft'; sim.witness(`${t.first} returned what they took from ${v.first}`, 6, [v.id, t.id], { [v.id]: -.6, '*': -.3 }, v.x, v.z, f, 10); return convo(sim, [[v, `Where is ${thing}?`, '😠'], [t, '...', '😳'], [t, 'Fine. Here. I\u2019m sorry.', '😞']]); }
+      if (guilty) { bump(sim, v, t, -12); bump(sim, t, v, -6); sim.log(`${v.first} accused ${t.first} of taking ${theirs}. ${t.first} denied everything with a perfectly straight face.`, 6, [v.id, t.id], 'theft', '🤥'); return convo(sim, [[v, `You took ${thing}. Admit it.`, '😠'], [t, 'Me? I would never!', '😇'], [v, 'Hmph.', '🤨']]); }
+      bump(sim, t, v, -22); bump(sim, v, t, -4); t.emotions.anger = Math.min(1, t.emotions.anger + .6); sim.icon(t, '😤');
+      t.mem.add(sim.clock, `${v.first} accused me of stealing. I did nothing!`, 8, [v.id], -.8, 'feeling');
+      const f = sim.fact('deed', `${v.first} falsely accused ${t.first} of theft`, v.id, v.id, -.4, 6, t.id); (f as any).label = 'the false accusation'; t.mem.learn(f); sim.witness(`${v.first} accused ${t.first} of stealing`, 5, [v.id, t.id], { [t.id]: -.8, '*': -.1 }, v.x, v.z, f, 10);
+      sim.log(`${v.first} accused ${t.first} of taking ${theirs}, but ${t.first} had nothing to do with it. ${t.first} is furious.`, 7, [v.id, t.id], 'theft', '😤');
+      return convo(sim, [[v, `Give back ${thing}, ${t.first}!`, '😠'], [t, 'What?! I never touched it!', '😡'], [v, 'Then who did?', '😟']]);
     }
     case 'gossip': {
       const f = a.fact as Fact; const lines: Line[] = [[v, R.pick([`Psst, ${t.first}...`, 'Can you keep a secret?', 'You didn\u2019t hear this from me...']), '🤫']];
@@ -93,13 +130,14 @@ export function resolveSocial(sim: Sim, v: Villager, t: Villager, a: Action): nu
       return convo(sim, [[v, 'Together we could run this village.', '🤝'], [t, 'I\u2019m in.', '💪'], [v, `To ${al.name}!`, '🚩']]);
     }
     case 'reconcile': {
-      const gift: Item | null = v.inv.bread > 0 ? 'bread' : v.inv.apples > 0 ? 'apples' : v.inv.coins >= 4 ? 'coins' : null; if (gift) sim.give(v, t, gift, gift === 'coins' ? 4 : 1);
+      const gift = v.traits.kindness > .5 || R.chance(.4); const back = sim.keepsakes.get(t.id); const returning = back && back.holder === v.id; if (returning) back!.holder = t.id;
       const accept = t.traits.kindness * 60 + op(t, v) + (gift ? 25 : 0) + R.range(0, 30) > 25;
       if (!accept) { bump(sim, t, v, 3); sim.log(`${v.first} tried to apologise to ${t.first}, who wasn't ready to forgive.`, 5, [v.id, t.id], 'reconcile', '💔'); t.emotions.anger += .2; return convo(sim, [[v, 'I\u2019m sorry. Truly.', '🙏'], [t, 'Sorry doesn\u2019t cut it.', '😤']]); }
-      t.opinion[v.id] = Math.max(op(t, v) + 35, 10); v.opinion[t.id] = Math.max(op(v, t) + 30, 15); t.emotions.anger = 0; v.emotions.anger = 0; t.emotions.joy += .3; sim.icon(v, '🕊️'); sim.icon(t, '🕊️');
+      t.opinion[v.id] = Math.max(op(t, v) + 35, 10); v.opinion[t.id] = Math.max(op(v, t) + 30, 15); t.emotions.anger = 0; v.emotions.anger = 0; t.emotions.joy += .3; sim.icon(v, '🕊️'); sim.icon(t, '🕊️'); v.stats.makeups++;
       const wronged = [...v.mem.known.values()].some(f => f.actor === t.id && f.valence < 0 && (f.target === v.id || f.about === v.id));
       const guilty = [...t.mem.known.values()].some(f => f.actor === v.id && f.valence < 0);
-      sim.log(wronged ? `${v.first} offered ${t.first} an olive branch${gift ? ' and a gift' : ''}. They made up.` : guilty ? `${v.first} apologised to ${t.first}${gift ? ' with a peace offering' : ''}. They made up.` : `${v.first} cleared the air with ${t.first}${gift ? ' over a shared snack' : ''}. They're on good terms again.`, 6, [v.id, t.id], 'reconcile', '🕊️'); sim.achieve(null, `made-up-${v.id}-${t.id}`, 'Water Under the Bridge', `${v.first} and ${t.first} reconciled`);
+      if (returning) sim.log(`${v.first} came clean to ${t.first} and handed back ${back!.name.replace(/^(his|her) /, '')}. ${t.first} forgave them.`, 7, [v.id, t.id], 'reconcile', back!.icon);
+      else sim.log(wronged ? `${v.first} offered ${t.first} an olive branch${gift ? ' and a gift' : ''}. They made up.` : guilty ? `${v.first} apologised to ${t.first}${gift ? ' with a peace offering' : ''}. They made up.` : `${v.first} cleared the air with ${t.first}${gift ? ' over a shared snack' : ''}. They're on good terms again.`, 6, [v.id, t.id], 'reconcile', '🕊️'); sim.achieve(null, `made-up-${v.id}-${t.id}`, 'Water Under the Bridge', `${v.first} and ${t.first} reconciled`);
       const f = sim.fact('deed', `${v.first} and ${t.first} buried the hatchet`, v.id, v.id, .5, 5, t.id); sim.witness(`${v.first} made peace with ${t.first}`, 5, [v.id, t.id], { [v.id]: .6, [t.id]: .6, '*': .2 }, v.x, v.z, f, 10);
       return convo(sim, [[v, 'I\u2019m sorry about before.', '🙏'], [t, '...Alright. Water under the bridge.', '🙂'], [v, 'Friends?', '🤝'], [t, 'Friends.', '😊']]);
     }
@@ -115,8 +153,8 @@ export function resolveSocial(sim: Sim, v: Villager, t: Villager, a: Action): nu
       return convo(sim, lines, 4);
     }
     case 'rumour': {
-      const about = sim.byId.get(a.about)!; const lies = [`${about.first} waters down what they sell`, `${about.first} cheats at cards`, `${about.first} has been skimming coins from the market`, `${about.first} badmouths everyone behind their backs`, `${about.first} is planning to steal ${t.first}'s customers`, `${about.first} kicked a chicken`];
-      (v as any)._lastRumour = sim.clock; const f = sim.fact('deed', R.pick(lies), about.id, about.id, -.6, 6); (f as any).fake = true; f.origin = v.id; v.mem.learn(f); ((v as any)._rumoured ??= {})[about.id + t.id] = 1;
+      const about = sim.byId.get(a.about)!; const lies = [`${about.first} cheats at cards`, `${about.first} badmouths everyone behind their backs`, `${about.first} kicked a chicken`, `${about.first} reads other people's letters`, `${about.first} laughed at ${t.first} behind their back`, `${about.first} faked being sick to skip the barn raising`, `${about.first} snores loud enough to wake the hens`, `${about.first} has a secret sweetheart in the next village`];
+      (v as any)._lastRumour = sim.clock; v.stats.rumours++; const f = sim.fact('deed', R.pick(lies), about.id, about.id, -.6, 6); (f as any).fake = true; f.origin = v.id; v.mem.learn(f); ((v as any)._rumoured ??= {})[about.id + t.id] = 1;
       const lines: Line[] = [[v, R.pick([`Between you and me, ${t.first}...`, 'Don\u2019t repeat this, but...', 'I probably shouldn\u2019t say...']), '🤫']];
       const believed = t.traits.honesty < .8 || op(t, v) > 20 || R.chance(.5);
       if (believed) { sim.learnFact(t, f, v); bump(sim, t, about, -Math.round(10 * trust(t, v))); t.mem.add(sim.clock, `${v.first} told me ${f.text}`, 5, [about.id, v.id], -.5, 'heard', f.id); lines.push([v, `${f.text}.`, '🐍'], [t, R.pick(['I had no idea!', 'Hmm. That explains a lot.', 'Really?!']), '😮']); sim.log(`${v.first} whispered to ${t.first} that ${f.text}. (It isn't true.)`, 5, [v.id, t.id, about.id], 'gossip', '🐍'); }
@@ -124,37 +162,29 @@ export function resolveSocial(sim: Sim, v: Villager, t: Villager, a: Action): nu
       sim.achieve(v, 'rumour', 'Silver Tongue', `${v.first} started a rumour`);
       return convo(sim, lines);
     }
-    case 'ask_food': {
-      const has: Item | null = t.inv.bread > 0 ? 'bread' : t.inv.apples > 0 ? 'apples' : t.inv.eggs > 0 ? 'eggs' : null;
-      const yes = has && (t.traits.kindness * 70 + op(t, v) + (t.family.includes(v.id) ? 60 : 0) + R.range(0, 30) > 55);
-      if (yes && has) { sim.give(t, v, has, 1); bump(sim, v, t, 15); t.stats.gifts++; sim.icon(v, '❤️'); sim.log(`A hungry ${v.first} asked ${t.first} for food, and ${t.first} shared ${has}.`, 4, [v.id, t.id], 'gift', '🍞'); v.queue.unshift({ type: 'eat', item: has, t: 0, label: 'eating' }); return convo(sim, [[v, 'I haven\u2019t eaten all day...', '🥺'], [t, 'Here, take this.', ITEM_ICON[has]], [v, 'Thank you, truly.', '🥹']]); }
-      bump(sim, v, t, -10); v.emotions.sadness += .3; sim.log(`${t.first} refused to share food with a starving ${v.first}.`, 5, [v.id, t.id], 'gift', '🙅');
-      v.mem.add(sim.clock, `${t.first} refused to feed me when I was starving`, 7, [t.id], -.8); const f = sim.fact('deed', `${t.first} refused to share food with a starving ${v.first}`, t.id, t.id, -.5, 5, v.id); (f as any).label = `refusing to feed ${v.first}`; v.mem.learn(f);
-      return convo(sim, [[v, 'Could you spare a bite?', '🥺'], [t, has ? 'Get your own.' : 'I\u2019ve got nothing, sorry.', has ? '😒' : '😕']]);
-    }
-    case 'steal': {
-      const loot = a.loot as Item, n = Math.min(a.lootN ?? 3, t.inv[loot]); if (n <= 0) return 2;
-      sim.give(t, v, loot, n); v.stats.stolen += n; v.wanted = sim.clock + 900; a._noFace = true;
-      const seen = R.chance(.35 + t.traits.bravery * .2 - v.traits.bravery * .1);
+    case 'steal': { // pinching a cherished keepsake: no value, all drama
+      const k = sim.keepsakes.get(a.loot); if (!k || k.holder !== t.id) return 2;
+      k.holder = v.id; k.takenAt = sim.clock; v.stats.stolen++; v.wanted = sim.clock + 900; a._noFace = true;
+      const seen = R.chance(.3 + t.traits.bravery * .2 - v.traits.bravery * .1);
       const witnesses = sim.villagers.filter(w => w !== v && w !== t && !w.inside && Math.hypot(w.x - v.x, w.z - v.z) < 11 && w.doing !== 'sleeping');
-      const f = sim.fact('deed', `${v.first} stole ${loot} from ${t.first}`, v.id, v.id, -.9, 8, t.id); (f as any).label = `stealing from ${t.first}`;
+      const owner = sim.byId.get(k.owner)!, thing = owner === t ? possess(k.name, t.first) : k.name.startsWith('his ') || k.name.startsWith('her ') ? possess(k.name, owner.first) + ` (which ${t.first} had pinched)` : `${t.first}'s ${k.name.replace(/^(a|an|the) /, '')}`;
+      const f = sim.fact('deed', `${v.first} pinched ${thing}`, v.id, v.id, -.9, 8, t.id); (f as any).label = `taking ${thing}`;
       sim.icon(v, '🫳');
       if (seen || witnesses.length) {
         const who = seen ? t : witnesses[0];
-        t.mem.add(sim.clock, `${v.first} stole ${n} ${loot} from me!`, 9, [v.id], -1, 'obs', f.id); t.mem.learn(f); for (const w of witnesses) { w.mem.add(sim.clock, `Saw ${v.first} steal from ${t.first}`, 8, [v.id, t.id], -.8, 'obs', f.id); w.mem.learn(f); bump(sim, w, v, -15); }
+        t.mem.add(sim.clock, `${v.first} snatched ${k.name.replace(/^(his|her) /, 'my ')}!`, 9, [v.id], -1, 'obs', f.id); t.mem.learn(f); for (const w of witnesses) { w.mem.add(sim.clock, `Saw ${v.first} pinch ${thing}`, 8, [v.id, t.id], -.8, 'obs', f.id); w.mem.learn(f); bump(sim, w, v, -15); }
         bump(sim, t, v, -35); t.emotions.anger = 1; t.emotions.surprise = 1;
-        sim.say(who, seen ? 'Hey! THIEF!' : `${t.first}! ${v.first} just robbed you!`, '😱', 3); sim.say(v, 'Uh oh...', '😬', 2);
-        sim.log(`${v.first} pickpocketed ${n} ${loot} from ${t.first} — but ${seen ? t.first + ' noticed' : witnesses[0].first + ' saw it'}! A chase is on!`, 8, [v.id, t.id, ...witnesses.map(w => w.id)], 'theft', '🏃');
-        a.after = () => { v.act = null; v.queue = [{ type: 'flee', place: v.def.home, t: 0, label: 'fleeing!', run: true, loot, lootN: n } as any]; v.queue.push({ type: 'enter', place: v.def.home, dur: 30, t: 0, label: 'hiding at home' }); };
-        if (t.traits.bravery > .3 && !t.inside) { t.busyUntil = 0; sim.leaveSeat(t); t.act = { type: 'chase', target: v.id, t: -1.2, label: `chasing ${v.first}!` }; t.queue = []; }
-        sim.achieve(null, 'first-theft', 'Thief in Thistlebrook', `${v.first} was caught red-handed`);
+        sim.say(who, seen ? 'Hey! Give that BACK!' : `${t.first}! ${v.first} just took your ${k.name.replace(/^(his|her) /, '')}!`, '😱', 3); sim.say(v, 'Uh oh...', '😬', 2);
+        sim.log(`${v.first} snatched ${thing}, but ${seen ? t.first + ' noticed' : witnesses[0].first + ' saw it'}! A chase is on!`, 8, [v.id, t.id, ...witnesses.map(w => w.id)], 'theft', '🏃');
+        a.after = () => { v.act = null; v.queue = [{ type: 'flee', place: v.def.home, t: 0, label: 'fleeing!', run: true, loot: k.id } as any]; v.queue.push({ type: 'enter', place: v.def.home, dur: 30, t: 0, label: 'hiding at home' }); };
+        if (t.traits.bravery > .3 && !t.inside) { t.busyUntil = 0; sim.leaveSeat(t); t.act = { type: 'chase', target: v.id, t: -1.2, label: `chasing ${v.first}!`, loot: k.id }; t.queue = []; }
+        sim.achieve(null, 'first-theft', 'Sticky Fingers', `${v.first} was caught red-handed`);
         return .4;
-      } else {
-        v.mem.add(sim.clock, `I swiped ${n} ${loot} from ${t.first} and nobody saw`, 6, [t.id], .2); v.mem.learn(f);
-        t.mem.add(sim.clock, `Some of my ${loot} went missing`, 5, [], -.4);
-        sim.log(`${v.first} quietly pocketed ${n} ${loot} from ${t.first}. Nobody noticed... yet.`, 6, [v.id, t.id], 'theft', '🤫'); sim.say(v, '...', '😏', 2);
-        sim.achieve(v, 'sneaky', 'Light Fingers', `${v.first} stole without being seen`);
       }
+      v.mem.add(sim.clock, `I pinched ${thing} and nobody saw`, 6, [t.id], .2); v.mem.learn(f);
+      sim.log(`${v.first} quietly pocketed ${thing}. Nobody noticed... yet.`, 6, [v.id, t.id], 'theft', '🤫'); sim.say(v, '...', '😏', 2);
+      (t as any)._missFrom = sim.clock + R.range(20, 90); // they'll notice it's gone a little later
+      sim.achieve(v, 'sneaky', 'Light Fingers', `${v.first} took something without being seen`);
       return 2;
     }
   }
@@ -199,3 +229,4 @@ export function maybeOverhear(sim: Sim, a: Villager, b: Villager) {
   for (const w of sim.villagers) { if (w === a || w === b || w.inside || Math.hypot(w.x - a.x, w.z - a.z) > 6) continue;
     const g = pickGossip(a, w, sim); if (!g) continue; if (sim.rng.chance(w.job === 'tavernkeeper' ? .8 : .25)) { if (sim.learnFact(w, g)) { w.mem.add(sim.clock, `Overheard: ${g.text}`, 4, [g.about], g.valence * .7, 'heard', g.id); const ab = sim.byId.get(g.about); if (ab && ab !== w) bump(sim, w, ab, Math.round(g.valence * g.imp)); sim.icon(w, '👂'); } } }
 }
+export function possess(name: string, first: string) { return name.replace(/^(his|her|their) /, `${first}'s `).replace(/^(?!.*'s )(.*)$/, `${first}'s $1`).replace(/'s (a|an|the) /, '\'s '); }

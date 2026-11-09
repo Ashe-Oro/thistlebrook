@@ -1,15 +1,13 @@
 import * as THREE from 'three';
-import { VILLAGERS, type VillagerDef } from '../data/villagers';
+import { KEEPSAKES, type VillagerDef } from '../data/villagers';
 import { World, type Place, type Seat } from '../world/world';
 import { MemoryStream, type Fact } from '../agents/memory';
 import { RNG, clamp, hourOf, dayOf, fmtTime } from '../core/util';
-import type { Villager, Action, SimEvent, Alliance, Item, Inv } from './types';
-import { ITEMS, ITEM_ICON, FOOD } from './types';
+import type { Villager, Action, SimEvent, Alliance, Keepsake } from './types';
 import type { Brain } from './brain';
 import { resolveSocial, maybeOverhear } from './social';
 
 export const MIN_PER_SEC = 2; // game minutes per world second (1x: one day = 12 real minutes)
-export const BASE_PRICE: Record<Item, number> = { coins: 1, bread: 6, wheat: 3, wood: 3, ore: 4, tools: 20, eggs: 3, apples: 2, trinket: 30 };
 
 export interface Party { id: string; host: string; title: string; place: string; at: number; until: number; invited: Set<string>; attendees: Set<string>; announced: boolean; done: boolean; fact: Fact; }
 export interface GiftDrop { x: number; z: number; obj: THREE.Object3D; claimedBy: string | null; t: number; }
@@ -17,10 +15,10 @@ export interface GiftDrop { x: number; z: number; obj: THREE.Object3D; claimedBy
 const stealthy = (a: Action) => a.type === 'steal';
 export class Sim {
   villagers: Villager[] = []; byId = new Map<string, Villager>(); clock = 6 * 60 + 15; rng = new RNG(20261109); events: SimEvent[] = []; eid = 1;
-  stock: Record<Item, number> = { coins: 0, bread: 2, wheat: 4, wood: 3, ore: 2, tools: 1, eggs: 2, apples: 3, trinket: 0 };
-  alliances: Alliance[] = []; parties: Party[] = []; rain = 0; rainUntil = 0; nextWeather = 60 * 30; festivalUntil = 0; merchantUntil = 0; gifts: GiftDrop[] = [];
+  keepsakes = new Map<string, Keepsake>(); couples: [string, string][] = []; letters: { from: string; to: string; love: boolean; read?: boolean }[] = [];
+  alliances: Alliance[] = []; parties: Party[] = []; rain = 0; rainUntil = 0; nextWeather = 60 * 30; festivalUntil = 0; visitorUntil = 0; gifts: GiftDrop[] = [];
   listeners: { [k: string]: ((...a: any[]) => void)[] } = {}; dayStats: Record<number, SimEvent[]> = {}; achievementsGlobal = new Set<string>();
-  history: { t: number; wealth: Record<string, number>; pop: Record<string, number> }[] = []; lastDay = 0; dizzy = new Map<string, number>(); brain!: Brain; factN = 1;
+  history: { t: number; power: Record<string, number>; pop: Record<string, number> }[] = []; lastDay = 0; dizzy = new Map<string, number>(); brain!: Brain; factN = 1;
   constructor(public world: World) {}
   on(k: string, f: (...a: any[]) => void) { (this.listeners[k] ??= []).push(f); }
   emit(k: string, ...a: any[]) { for (const f of this.listeners[k] ?? []) f(...a); }
@@ -28,12 +26,12 @@ export class Sim {
   place(id: string) { return this.world.places.get(id)!; }
 
   addVillager(def: VillagerDef, avatar: any) {
-    const home = this.place(def.home), inv = Object.fromEntries(ITEMS.map(i => [i, 0])) as Inv;
-    inv.coins = 12 + this.rng.int(0, 10); inv.bread = 1;
+    const home = this.place(def.home); const [icon, name] = KEEPSAKES[def.id] ?? ['🧸', 'a keepsake'];
+    this.keepsakes.set(def.id, { id: def.id, name, icon, owner: def.id, holder: def.id });
     const v: Villager = { id: def.id, def, name: def.name, first: def.name.split(' ')[0], job: def.job, goal: def.goal, traits: def.traits, x: home.x, z: home.z + .5, heading: 0, speed: 1.6, path: null, pathI: 0,
-      needs: { food: 70 + this.rng.range(0, 20), energy: 85, social: 50 + this.rng.range(0, 30) }, inv, opinion: {}, family: def.family ?? [], alliance: null,
+      needs: { food: 70 + this.rng.range(0, 20), energy: 85, social: 50 + this.rng.range(0, 30) }, opinion: {}, family: def.family ?? [], alliance: null, crush: null, partner: null, heartbreak: 0,
       emotions: { joy: .2, anger: 0, fear: 0, sadness: 0, love: 0, surprise: 0 }, mem: new MemoryStream(), plan: [], planDay: 0, queue: [], act: null, thought: 'A new day in Thistlebrook.', doing: 'waking up',
-      inside: null, busyUntil: 0, seat: null, story: [], stats: { stolen: 0, gifts: 0, trades: 0, fights: 0, parties: 0, earned: 0 }, lastSocial: {}, intent: null, avatar, anim: 'idle', replan: true, wanted: 0, achievements: new Set() };
+      inside: null, busyUntil: 0, seat: null, story: [], stats: { stolen: 0, gifts: 0, fights: 0, parties: 0, rumours: 0, makeups: 0, hosted: 0 }, lastSocial: {}, intent: null, avatar, anim: 'idle', replan: true, wanted: 0, achievements: new Set() };
     this.villagers.push(v); this.byId.set(v.id, v); avatar.root.position.set(v.x, 0, v.z);
     return v;
   }
@@ -45,12 +43,13 @@ export class Sim {
     // a little starting history so day one has texture
     const o = (a: string, b: string, v: number) => (this.byId.get(a)!.opinion[b] = v);
     o('tom', 'edgar', -18); o('edgar', 'tom', -10); o('rosa', 'jen', -22); o('jen', 'rosa', -8); o('pip', 'tom', 28); o('mara', 'wren', 42); o('wren', 'mara', 40);
+    // seeds of romance: Jen is sweet on Ollie; Tom has quietly admired Mara for years
+    o('jen', 'ollie', 48); o('ollie', 'jen', 22); o('tom', 'mara', 44); o('mara', 'tom', 18);
   }
 
   // ---- narration -------------------------------------------------------------------------------
   log(text: string, imp: number, actors: string[], kind = 'misc', icon = '•', x?: number, z?: number) {
     const a0 = this.byId.get(actors[0]); text = text.charAt(0).toUpperCase() + text.slice(1);
-    text = text.replace(/\b1 (apples|eggs|tools|coins|logs|trinkets)\b/g, (_m, w: string) => '1 ' + w.slice(0, -1)).replace(/\b1 loaves\b/g, '1 loaf');
     const last = this.events[this.events.length - 1];
     if (last && a0 && text.startsWith(a0.first + ' ') && last.text.startsWith(a0.first + ' ') && last.actors[0] === actors[0] && last.kind === kind && this.clock - last.t < 25 && last.kind !== 'headline' && kind !== 'headline' && last.text.length < 140 && imp >= 3 && last.imp >= 3) {
       last.text = last.text.replace(/\.$/, '') + ', then ' + text.replace(new RegExp('^' + (a0?.first ?? '') + ' '), '');
@@ -78,13 +77,16 @@ export class Sim {
     this.emit('achievement', { title, desc, who: v?.id });
   }
 
-  // ---- inventory & market -----------------------------------------------------------------------
-  price(i: Item, buy: boolean) { const b = BASE_PRICE[i], s = this.stock[i]; return buy ? Math.max(1, Math.round(b * (1 + .15 * Math.max(0, 3 - s)) * (this.festivalUntil > this.clock ? 1.1 : 1))) : Math.max(1, Math.round(b * .75 * (s > 8 ? .7 : 1) * (this.merchantUntil > this.clock ? 1.3 : 1))); }
-  give(from: Villager | null, to: Villager | null, item: Item, n: number) { if (from) from.inv[item] -= n; if (to) to.inv[item] += n; if (to && item === 'coins') to.stats.earned += n; }
-  carryFor(v: Villager) { const o: [Item, string][] = [['wood', 'wood'], ['ore', 'ore'], ['wheat', 'wheat'], ['bread', 'bread'], ['eggs', 'eggs'], ['apples', 'apples']]; for (const [i, k] of o) if (v.inv[i] >= (i === 'bread' ? 3 : 2)) return k; return v.inv.tools > 1 ? 'tools' : ''; }
-  wealth(v: Villager) { return v.inv.coins + ITEMS.filter(i => i !== 'coins').reduce((s, i) => s + v.inv[i] * BASE_PRICE[i] * .6, 0); }
+  // ---- keepsakes & standing (no economy in v1) ----------------------------------------------------
+  keepsake(ownerId: string) { return this.keepsakes.get(ownerId)!; }
+  holding(v: Villager) { return [...this.keepsakes.values()].filter(k => k.holder === v.id); }
+  missing(v: Villager) { const k = this.keepsakes.get(v.id); return k && k.holder !== v.id ? k : null; }
+  carryFor(v: Villager) { return v.act?.carry ?? ''; }
   popularity(v: Villager) { const o = this.villagers.filter(x => x !== v).map(x => x.opinion[v.id] ?? 0); return o.reduce((a, b) => a + b, 0) / Math.max(1, o.length); }
-  power(v: Villager) { const al = v.alliance ? this.alliances.find(a => a.id === v.alliance)!.members.length - 1 : 0; const fans = this.villagers.filter(x => x !== v && (x.opinion[v.id] ?? 0) > 35).length; const feared = this.villagers.filter(x => x !== v && (x.opinion[v.id] ?? 0) < -40).length; return Math.round(al * 12 + fans * 8 + feared * 3 + v.inv.coins / 8 + v.stats.fights * 2); }
+  power(v: Villager) { const al = v.alliance ? this.alliances.find(a => a.id === v.alliance)!.members.length - 1 : 0; const fans = this.villagers.filter(x => x !== v && (x.opinion[v.id] ?? 0) > 35).length; const feared = this.villagers.filter(x => x !== v && (x.opinion[v.id] ?? 0) < -40).length; return Math.round(al * 12 + fans * 8 + feared * 3 + v.stats.fights * 2 + v.stats.hosted * 3 + (v.partner ? 4 : 0)); }
+  mischief(v: Villager) { return v.stats.stolen * 4 + v.stats.rumours * 3 + v.stats.fights * 3 + this.villagers.filter(x => x !== v && (x.opinion[v.id] ?? 0) < -40).length * 2; }
+  couple(a: Villager, b: Villager) { a.partner = b.id; b.partner = a.id; a.crush = b.id; b.crush = a.id; this.couples.push([a.id, b.id]); }
+  breakUp(a: Villager, b: Villager) { a.partner = null; b.partner = null; if (a.crush === b.id) a.crush = null; this.couples = this.couples.filter(c => !(c.includes(a.id) && c.includes(b.id))); a.heartbreak = b.heartbreak = this.clock + 1440; }
 
   // ---- movement -------------------------------------------------------------------------------
   goTo(v: Villager, x: number, z: number) { v.path = this.world.nav.findPath(v.x, v.z, x, z) ?? [[x, z]]; v.pathI = 0; }
@@ -104,7 +106,7 @@ export class Sim {
   // ---- main step --------------------------------------------------------------------------------
   step(dt: number) {
     const gdt = dt * MIN_PER_SEC; this.clock += gdt;
-    const d = this.day; if (d !== this.lastDay && this.hour >= 6) { if (this.lastDay) { this.emit('dawn', this.lastDay); this.dawnMarket(); } this.lastDay = d; for (const v of this.villagers) v.replan = true; this.snapshot(); }
+    const d = this.day; if (d !== this.lastDay && this.hour >= 6) { if (this.lastDay) { this.emit('dawn', this.lastDay); } this.lastDay = d; for (const v of this.villagers) v.replan = true; this.snapshot(); }
     this.weather(gdt); this.world.simTick(gdt, this.clock);
     for (const p of this.parties) this.partyTick(p);
     for (const g of this.gifts) g.t += gdt;
@@ -112,8 +114,6 @@ export class Sim {
     this.separate(dt);
     if (Math.floor(this.clock / 60) !== Math.floor((this.clock - gdt) / 60)) this.snapshot();
   }
-  // overnight: surplus is carted off to other towns, and a little food arrives (keeps prices moving)
-  dawnMarket() { for (const i of ITEMS) if (this.stock[i] > 6) this.stock[i] = 6 + Math.floor((this.stock[i] - 6) * .3); this.stock.bread += 1; this.stock.eggs += 2; this.stock.wheat += 2; }
   // light local avoidance so people standing around don't merge into each other
   separate(dt: number) {
     const vs = this.villagers, R = .62;
@@ -126,11 +126,10 @@ export class Sim {
       if (this.world.nav.isFree(b.x + nx * push * bm, b.z + nz * push * bm)) { b.x += nx * push * bm; b.z += nz * push * bm; }
     }
   }
-  snapshot() { this.history.push({ t: this.clock, wealth: Object.fromEntries(this.villagers.map(v => [v.id, Math.round(this.wealth(v))])), pop: Object.fromEntries(this.villagers.map(v => [v.id, Math.round(this.popularity(v))])) }); if (this.history.length > 24 * 14) this.history.shift(); }
+  snapshot() { this.history.push({ t: this.clock, power: Object.fromEntries(this.villagers.map(v => [v.id, this.power(v)])), pop: Object.fromEntries(this.villagers.map(v => [v.id, Math.round(this.popularity(v))])) }); if (this.history.length > 24 * 14) this.history.shift(); }
   weather(gdt: number) {
     if (this.clock > this.nextWeather) { this.nextWeather = this.clock + this.rng.range(8, 20) * 60; if (this.rain < .5 && this.rng.chance(.3)) this.startRain(this.rng.range(90, 200)); }
     const target = this.clock < this.rainUntil ? 1 : 0; this.rain += (target - this.rain) * Math.min(1, gdt / 30);
-    if (this.rain > .5) for (const p of this.world.plots) if (p.stage === 'growing') p.water = Math.min(1, p.water + gdt / 120);
   }
   startRain(mins: number, byViewer = false) { this.rainUntil = this.clock + mins; this.log(byViewer ? 'A summoned storm rolled over Thistlebrook. Everyone ran for cover.' : 'Rain clouds rolled in over Thistlebrook.', byViewer ? 6 : 3, [], 'weather', '🌧️', -9, 0); for (const v of this.villagers) { v.replan = true; if (!v.inside) { v.emotions.sadness += .2; } } }
 
@@ -140,6 +139,8 @@ export class Sim {
     for (const k of Object.keys(v.emotions) as (keyof Villager['emotions'])[]) v.emotions[k] = clamp(v.emotions[k] - gdt * .004 * (k === 'anger' ? (1.3 - v.traits.temper) : k === 'surprise' ? 5 : k === 'love' ? 2 : k === 'joy' ? 1.5 : 1), 0, 1);
     if (this.rain > .5 && !v.inside) v.emotions.sadness = Math.min(.5, v.emotions.sadness + gdt * .001);
     if (n.food < 15) v.emotions.sadness = Math.max(v.emotions.sadness, .4);
+    // noticing a keepsake has gone missing (it was pinched while they weren't looking)
+    const miss = (v as any)._missFrom; if (miss && this.clock > miss && !v.inside) { (v as any)._missFrom = 0; const k = this.missing(v); if (k) { v.emotions.sadness = Math.max(v.emotions.sadness, .7); v.emotions.surprise = 1; this.say(v, `Where is ${k.name.replace(/^(his|her) /, 'my ')}?!`, '😟', 3); v.mem.add(this.clock, `${k.name.replace(/^(his|her) /, 'My ')} is gone. Someone took it.`, 8, [], -.7, 'feeling'); this.log(`${v.first} can't find ${k.name} anywhere and is turning the village upside down.`, 6, [v.id], 'theft', '😟'); const f = this.fact('news', `${v.first}'s ${k.name.replace(/^(his|her) /, '')} has gone missing`, v.id, v.id, -.1, 6); v.mem.learn(f); } }
     // reflection (Smallville): when enough has happened, or at bedtime
     if (v.mem.impSinceReflect > 38 || (asleep && this.clock - v.mem.lastReflect > 600 && v.mem.impSinceReflect > 10)) this.brain.reflect(v, this);
     if (v.replan && !v.act?.locked) { this.brain.planDay(v, this); v.replan = false; }
@@ -155,7 +156,7 @@ export class Sim {
     switch (a.type) {
       case 'go': { if (a.t > 240) return true; if (walk(a.x, a.z, a.r ?? .3)) { v.anim = 'idle'; return true; } return false; }
       case 'idle': { v.anim = a.anim ?? 'idle'; if (a.face !== undefined) v.heading = a.face; if (a.t >= a.dur) { a.after?.(this); return true; } return false; }
-      case 'eat': { v.anim = 'pickup'; if (!a._e) { a._e = 1; const it = a.item as Item; if (v.inv[it] > 0) { v.inv[it]--; v.needs.food = clamp(v.needs.food + (FOOD[it] ?? 10), 0, 100); v.emotions.joy += .1; this.say(v, this.rng.pick(['Mmm!', 'Delicious.', 'Just what I needed.']), ITEM_ICON[it], 2); } } return a.t >= 12; }
+      case 'eat': { v.anim = a.anim ?? 'drink'; if (!a._e) { a._e = 1; v.needs.food = clamp(v.needs.food + (a.food ?? 40), 0, 100); v.emotions.joy += .1; if (a.say) this.say(v, this.rng.pick(['Mmm!', 'Delicious.', 'Just what I needed.']), a.icon ?? '🍞', 2); } return a.t >= (a.dur ?? 12); }
       case 'enter': {
         const p = this.place(a.place);
         if (!a._in) { if (!walk(p.x, p.z, .4)) return false; a._in = 1; a.t0 = this.clock; v.inside = p.id; p.inside.add(v.id); v.avatar.targetAlpha = 0; v.anim = 'idle'; v.heading = Math.PI; a.onEnter?.(v, this); }
@@ -169,7 +170,6 @@ export class Sim {
         v.anim = a.anim2 && Math.sin(a.t * .2) > .3 ? a.anim2 : 'sit'; if (a.t >= a.dur || a.interrupt) { this.leaveSeat(v); const s = a.seat as Seat; v.x = s.x + Math.sin(s.rot) * .6; v.z = s.z + Math.cos(s.rot) * .6; v.anim = 'idle'; return true; } return false;
       }
       case 'work': return this.work(v, a, dt, walk);
-      case 'trade_market': return this.marketTrade(v, a, walk);
       case 'social': case 'steal': return this.socialAct(v, a, dt, gdt, walk);
       case 'flee': { const p = this.place(a.place); v.anim = 'run'; if (!a._p) { this.goTo(v, p.x, p.z); a._p = 1; } if (this.stepMove(v, dt, 3.9) || a.t > 120) { return true; } return false; }
       case 'chase': {
@@ -183,8 +183,11 @@ export class Sim {
       case 'claim': {
         const g = this.gifts.find(x => x === a.gift); if (!g || g.claimedBy) { if (g?.claimedBy && g.claimedBy !== v.id) { v.emotions.sadness += .2; v.emotions.anger += .2; this.say(v, 'Aww, too slow!', '😤', 2); } return true; }
         a.run = true; if (!walk(g.x, g.z, .9)) return false;
-        g.claimedBy = v.id; g.obj.visible = false; v.inv.coins += 15; v.inv.trinket += 1; v.emotions.joy = 1; v.emotions.surprise = .8; this.world.fx.coinBurst(g.x, .5, g.z, 10); this.world.fx.sparkle(g.x, .5, g.z, [1, .8, .4], 20);
-        this.say(v, 'A gift from the heavens!', '🎁', 3); v.anim = 'cheer'; this.log(`${v.first} found a mysterious gift: 15 coins and a sparkling trinket!`, 6, [v.id], 'god', '🎁', g.x, g.z);
+        g.claimedBy = v.id; g.obj.visible = false; v.emotions.joy = 1; v.emotions.surprise = .8; this.world.fx.coinBurst(g.x, .5, g.z, 10); this.world.fx.sparkle(g.x, .5, g.z, [1, .8, .4], 20);
+        const [ic, nm] = this.rng.pick([['🎶', 'a tinkling music box'], ['🔮', 'a glowing marble'], ['🪶', 'a golden feather'], ['⭐', 'a fallen star in a jar'], ['🧭', 'a compass that points home']]); const kid = `gift${this.eid}`;
+        this.keepsakes.set(kid, { id: kid, name: nm, icon: ic, owner: v.id, holder: v.id });
+        this.say(v, 'A gift from the heavens!', '🎁', 3); v.anim = 'cheer'; this.log(`${v.first} got to the mysterious gift first: ${nm}!`, 6, [v.id], 'god', ic, g.x, g.z);
+        for (const u of this.villagers) if (u !== v && u.act?.type === 'claim' && u.traits.envy > .5) { u.opinion[v.id] = (u.opinion[v.id] ?? 0) - 6; u.mem.add(this.clock, `${v.first} snatched the sky-gift from under my nose`, 5, [v.id], -.5, 'feeling'); }
         this.witness(`${v.first} grabbed the mysterious gift`, 4, [v.id], { [v.id]: .5, '*': -.1 }, g.x, g.z, undefined, 20);
         v.queue.unshift({ type: 'idle', anim: 'cheer', dur: 8, t: 0, label: 'celebrating' }); return true;
       }
@@ -199,59 +202,28 @@ export class Sim {
     v.heading = Math.atan2(a.fx - v.x, a.fz - v.z);
     // strikes are driven by game time (not by animation frames) so work output is identical at any speed or headless
     const strike = (every: number) => { a._h = (a._h ?? 0) + gdtW; if (a._h >= every) { a._h -= every; av.onHit?.(); av.phase = Math.floor(av.phase / 1.35) * 1.35 + 1.2; } };
+    const amb = (text: string, icon: string) => { if (this.rng.chance(.35)) this.log(text, 1, [v.id], 'work', icon); };
     switch (a.kind) {
-      case 'chop': {
+      case 'chop': { // woodcutting is a routine, not a harvest: the trees stay standing in v1
         const tr = a.target; v.anim = 'chop'; av.setTool('axe');
-        av.onHit = () => { if (tr.state !== 'standing') return; tr.shake = 1; fx.chips(tr.x + (v.x - tr.x) * .4, 1.0, tr.z + (v.z - tr.z) * .4, [.85, .65, .4], 7); tr.hp -= v.inv.tools > 0 ? 1.5 : 1; this.emit('sound', 'chop', tr.x, tr.z);
-          if (tr.hp <= 0) { tr.state = 'falling'; tr.t = 0; tr.fallDir = Math.atan2(tr.x - v.x, tr.z - v.z); this.say(v, 'Timber!', '🪓', 2.5); this.emit('sound', 'fall', tr.x, tr.z); a.fellAt = a.t; } };
-        if (tr.state === 'standing') strike(2.7);
-        if (tr.state === 'falling' && a.t - (a.fellAt ?? a.t) > 6) { tr.state = 'stump'; tr.obj.visible = false; tr.stump.visible = true; tr.regrowAt = this.clock + 1440; }
-        if (tr.state === 'stump') { av.onHit = null; v.inv.wood += 3; this.wear(v, 'axe'); tr.claimed = null; av.setTool(''); this.log(`${v.first} felled a tree in the west woods and hauled off 3 logs.`, 3, [v.id], 'work', '🪓'); this.achieve(v, 'timber', 'Timber!', `${v.first} felled their first tree`); v.emotions.joy += .2; return true; }
-        return a.t > 150;
+        av.onHit = () => { tr.shake = 1; fx.chips(tr.x + (v.x - tr.x) * .4, 1.0, tr.z + (v.z - tr.z) * .4, [.85, .65, .4], 7); this.emit('sound', 'chop', tr.x, tr.z); };
+        strike(2.7); if (a.t > (a.dur ?? 45)) { av.onHit = null; av.setTool(''); tr.claimed = null; amb(`${v.first} spent the morning swinging an axe in the west woods.`, '🪓'); return true; } return false;
       }
       case 'mine': {
         const r = a.target; v.anim = 'mine'; av.setTool('pickaxe');
-        av.onHit = () => { if (r.state !== 'solid') return; r.shake = 1; fx.sparks(r.x + (v.x - r.x) * .35, .7, r.z + (v.z - r.z) * .35, 8); fx.chips(r.x, .6, r.z, [.55, .55, .58], 4); r.hp -= v.inv.tools > 0 ? 1.4 : 1; a.hits = (a.hits ?? 0) + 1; this.emit('sound', 'mine', r.x, r.z);
-          r.obj.scale.setScalar(r.baseScale * (.45 + .55 * Math.max(0, r.hp) / r.maxHp)); if (a.hits % 3 === 0) v.inv.ore += 1;
-          if (r.hp <= 0) { r.state = 'gone'; r.obj.visible = false; r.regrowAt = this.clock + 1800; fx.dust(r.x, r.z, 18); } };
-        if (r.state === 'solid') strike(2.7);
-        if (r.state !== 'solid' || a.t > 120) { av.onHit = null; r.claimed = null; this.wear(v, 'pickaxe'); av.setTool(''); this.log(`${v.first} chipped ore out of the quarry rock (${v.inv.ore} ore in the sack).`, 2, [v.id], 'work', '⛏️'); return true; }
-        return false;
+        av.onHit = () => { r.shake = 1; fx.sparks(r.x + (v.x - r.x) * .35, .7, r.z + (v.z - r.z) * .35, 8); fx.chips(r.x, .6, r.z, [.55, .55, .58], 4); this.emit('sound', 'mine', r.x, r.z); };
+        strike(2.7); if (a.t > (a.dur ?? 50)) { av.onHit = null; r.claimed = null; av.setTool(''); amb(`${v.first} chiselled away at the quarry stone.`, '⛏️'); return true; } return false;
       }
-      case 'plant': { v.anim = 'hoe'; av.setTool('hoe'); av.onHit = () => fx.chips(a.fx, .5, a.fz, [.45, .32, .2], 4); strike(3.1); if (a.t > 50) { a.target.stage = 'growing'; a.target.growth = 0; a.target.claimed = null; av.setTool(''); av.onHit = null; this.log(`${v.first} sowed a field with wheat.`, 2, [v.id], 'work', '🌱'); return true; } return false; }
-      case 'water': { v.anim = 'water'; av.setTool('can'); if (Math.random() < dt * 10) fx.water(v.x + Math.sin(v.heading) * .8, .9, v.z + Math.cos(v.heading) * .8, Math.sin(v.heading), Math.cos(v.heading)); if (a.t > 30) { a.target.water = 1; a.target.claimed = null; av.setTool(''); return true; } return false; }
-      case 'harvest': { v.anim = 'pickup'; if (a.t > 45) { const p = a.target; p.stage = 'empty'; p.growth = 0; p.claimed = null; v.inv.wheat += 5; fx.chips(p.x, .8, p.z, [.95, .8, .35], 14); this.log(`${v.first} harvested a field of golden wheat.`, 3, [v.id], 'work', '🌾'); this.achieve(v, 'harvest', 'Bumper Harvest', `${v.first} brought in the first harvest`); v.emotions.joy += .3; return true; } return false; }
-      case 'feed': { v.anim = 'feed'; av.setTool('basket'); if (!a._f) { a._f = 1; W.feedAnimals(); } if (Math.random() < dt * 3) fx.grain(v.x + Math.sin(v.heading) * .5, 1.1, v.z + Math.cos(v.heading) * .5, Math.sin(v.heading), Math.cos(v.heading)); if (a.t > 40) { v.inv.eggs += 4; av.setTool(''); this.log(`${v.first} fed the hens and collected 4 eggs.`, 2, [v.id], 'work', '🐔'); a.target.eggDay = this.day; return true; } return false; }
-      case 'pick': { const t = a.target; v.anim = 'pickup'; if (a.t > 20) { const n = Math.min(t.apples, 3); t.apples -= n; t.t = 0; v.inv.apples += n; t.claimed = null; return true; } return false; }
-      case 'forge0': { // odd jobs while short of iron: sharpen a neighbour's blade for a few coins (keeps the smith solvent)
-        v.anim = 'hammer'; av.setTool('hammer'); av.onHit = () => { fx.sparks(a.fx, .75, a.fz, 6); this.emit('sound', 'anvil', a.fx, a.fz); }; strike(2.5);
-        if (a.t > 40) { av.onHit = null; av.setTool(''); const cust = this.villagers.filter(u => u !== v && u.inv.coins >= 8 && ['woodcutter', 'miner', 'farmer', 'baker', 'shepherd'].includes(u.job)).sort((x, y) => y.inv.coins - x.inv.coins)[0];
-          if (cust) { const fee = 5; cust.inv.coins -= fee; v.inv.coins += fee; v.stats.earned += fee; const what = ({ woodcutter: 'axe', miner: 'pickaxe', farmer: 'hoe', baker: 'bread knife', shepherd: 'shears' } as any)[cust.job]; this.log(`${v.first} sharpened ${cust.first}'s ${what} for ${fee} coins.`, 2, [v.id, cust.id], 'work', '⚒️'); }
-          return true; } return false; }
+      case 'tend': { v.anim = 'hoe'; av.setTool('hoe'); av.onHit = () => fx.chips(a.fx, .5, a.fz, [.45, .32, .2], 4); strike(3.1); if (a.t > 40) { av.setTool(''); av.onHit = null; if (a.target) a.target.claimed = null; amb(`${v.first} weeded the rows in the Fenn fields.`, '🌱'); return true; } return false; }
+      case 'water': { v.anim = 'water'; av.setTool('can'); if (Math.random() < dt * 10) fx.water(v.x + Math.sin(v.heading) * .8, .9, v.z + Math.cos(v.heading) * .8, Math.sin(v.heading), Math.cos(v.heading)); if (a.t > 30) { if (a.target) a.target.claimed = null; av.setTool(''); return true; } return false; }
+      case 'feed': { v.anim = 'feed'; av.setTool('basket'); if (!a._f) { a._f = 1; W.feedAnimals(); } if (Math.random() < dt * 3) fx.grain(v.x + Math.sin(v.heading) * .5, 1.1, v.z + Math.cos(v.heading) * .5, Math.sin(v.heading), Math.cos(v.heading)); if (a.t > 40) { av.setTool(''); amb(`${v.first} fed the hens. They followed her around like a fan club.`, '🐔'); a.target.fedDay = this.day; return true; } return false; }
       case 'forge': { v.anim = 'hammer'; av.setTool('hammer'); av.onHit = () => { fx.sparks(a.fx, .75, a.fz, 12); this.emit('sound', 'anvil', a.fx, a.fz); }; strike(2); this.place('smithy').smokeUntil = this.clock + 5;
-        if (a.t > 60) { av.onHit = null; av.setTool(''); v.inv.ore -= 2; v.inv.wood -= 1; v.inv.tools += 1; this.log(`${v.first} forged a new tool at the anvil.`, 3, [v.id], 'work', '⚒️'); return true; } return false; }
+        if (a.t > (a.dur ?? 55)) { av.onHit = null; av.setTool(''); amb(`${v.first} hammered out ${this.rng.pick(['a new gate hinge', 'horseshoes', 'a lantern bracket', 'a weathervane rooster'])} at the anvil.`, '⚒️'); return true; } return false; }
       case 'serve': { v.anim = a.t % 30 < 15 ? 'talk' : 'wave'; return a.t > a.dur; }
-      case 'stall': { v.anim = Math.sin(a.t * .3) > .5 ? 'wave' : 'idle'; if (Math.random() < dt * .4) this.say(v, this.rng.pick(['Fresh goods!', 'Best prices in town!', 'Bargains! Bargains!', 'Come, come!']), '📣', 2.5); return a.t > a.dur; }
+      case 'sort': { v.anim = Math.sin(a.t * .4) > 0 ? 'pickup' : 'idle'; return a.t > (a.dur ?? 25); }
     }
     return true;
   }
-
-  marketTrade(v: Villager, a: Action, walk: (x: number, z: number, r?: number) => boolean) {
-    const p = this.place(a.place ?? 'market'); if (!a._at) { if (!walk(p.x + (a.off ?? 0), p.z + .3, .5)) return false; a._at = 1; v.heading = Math.PI; }
-    v.anim = 'give';
-    if (a.t > 18 && !a._done) {
-      a._done = 1; let earned = 0, bought: string[] = [], sold: string[] = [];
-      for (const [it, n] of (a.sell ?? []) as [Item, number][]) { const k = Math.min(n, v.inv[it]); if (k <= 0) continue; const pr = Math.round(this.price(it, false) * (v.job === 'merchant' ? 1.3 : 1)) * k; v.inv[it] -= k; this.stock[it] += k; v.inv.coins += pr; v.stats.earned += pr; earned += pr; sold.push(`${k} ${it}`); }
-      for (const [it, n] of (a.buy ?? []) as [Item, number][]) { for (let i = 0; i < n; i++) { const pr = this.price(it, true); if (v.inv.coins < pr || this.stock[it] <= 0) break; v.inv.coins -= pr; this.stock[it]--; v.inv[it]++; bought.push(it); } }
-      if (earned) { this.world.fx.coinBurst(v.x, 1.4, v.z, Math.min(12, 3 + Math.round(earned / 4))); this.say(v, `+${earned} coins!`, '🪙', 2.5); this.emit('sound', 'coins', v.x, v.z); }
-      const jen = this.byId.get('jen'); if (jen && jen !== v && (earned || bought.length) && Math.hypot(jen.x - p.x, jen.z - p.z) < 7) { const c = Math.max(1, Math.round((earned + bought.length * 5) * .12)); jen.inv.coins += c; jen.stats.earned += c; }
-      if (sold.length || bought.length) this.log(`${v.first} ${sold.length ? 'sold ' + sold.join(', ') + ' at ' + p.name : ''}${sold.length && bought.length ? ' and ' : ''}${bought.length ? 'bought ' + this.countList(bought) : ''}.`.replace(/^(\w+) bought/, '$1 bought'), earned > 20 ? 3 : 2, [v.id], 'trade', '🪙');
-      if (v.inv.coins >= 100) this.achieve(v, 'tycoon', 'Tycoon', `${v.first} has 100 coins`);
-    }
-    return a.t > 26;
-  }
-  wear(v: Villager, what: string) { if (v.inv.tools > 0 && this.rng.chance(.12)) { v.inv.tools--; this.say(v, `My ${what} snapped!`, '💥', 2.5); v.emotions.surprise = .8; v.emotions.sadness += .2; this.log(`${v.first}'s ${what} snapped in half. Time to visit the smithy.`, 3, [v.id], 'work', '💥'); } }
-  countList(items: string[]) { const c: Record<string, number> = {}; for (const i of items) c[i] = (c[i] ?? 0) + 1; return Object.entries(c).map(([k, n]) => `${n} ${k}`).join(', '); }
 
   socialAct(v: Villager, a: Action, dt: number, gdt: number, walk: (x: number, z: number, r?: number) => boolean) {
     const t = this.byId.get(a.target); if (!t) return true;
@@ -277,8 +249,8 @@ export class Sim {
   caught(v: Villager, thief: Villager) {
     this.leaveSeat(thief);
     const fight = v.traits.bravery + v.traits.temper * .5 > .9 || thief.traits.temper > .6;
-    if (fight) this.startFight(v, thief, `${v.first} caught ${thief.first} and they tumbled into a scuffle`);
-    else { const item = (thief.act?.loot ?? 'coins') as Item, n = Math.min(thief.inv[item], thief.act?.lootN ?? 3); if (n > 0) this.give(thief, v, item, n); this.say(thief, 'Okay, okay! Take it back!', '😰'); thief.emotions.fear = .9; this.say(v, 'Thief!', '💢'); this.log(`${v.first} caught ${thief.first} and took back what was stolen.`, 7, [v.id, thief.id], 'theft', '🫳'); thief.act = null; thief.queue = []; }
+    if (fight) { const k = this.keepsakes.get(thief.act?.loot ?? ''); if (k && k.holder === thief.id) k.holder = k.owner; this.startFight(v, thief, `${v.first} caught ${thief.first} and they tumbled into a scuffle`); }
+    else { const k = this.keepsakes.get(thief.act?.loot ?? ''); if (k && k.holder === thief.id) k.holder = k.owner; this.say(thief, 'Okay, okay! Take it back!', '😰'); thief.emotions.fear = .9; this.say(v, 'Thief!', '💢'); this.log(`${v.first} caught ${thief.first} and snatched back ${k ? k.name.replace(/^(his|her) /, k.owner === v.id ? 'their ' : '$1 ') : 'what was stolen'}.`, 7, [v.id, thief.id], 'theft', '🫳'); thief.act = null; thief.queue = []; }
     v.opinion[thief.id] = Math.max(-100, (v.opinion[thief.id] ?? 0) - 25);
   }
   startFight(a: Villager, b: Villager, why: string) {
@@ -312,6 +284,7 @@ export class Sim {
     if (this.clock >= p.until) {
       p.done = true; const host = this.byId.get(p.host)!; const n = p.attendees.size;
       for (const id of p.attendees) { const v = this.byId.get(id)!; if (v !== host) { v.opinion[host.id] = Math.min(100, (v.opinion[host.id] ?? 0) + 6); } v.needs.social = 100; v.stats.parties++; if (v.act?.type === 'attend') v.act = null; this.leaveSeat(v); }
+      if (n >= 2) host.stats.hosted++;
       if (n >= 2) { this.log(`${p.title} wound down — ${n} villagers came${n >= 5 ? '. The whole village is talking about it' : ''}.`, n >= 5 ? 7 : 5, [host.id, ...p.attendees], 'party', '🎉', this.place(p.place).x, this.place(p.place).z); if (n >= 5) this.achieve(host, 'party', 'Life of the Party', `${host.first}'s gathering drew ${n} guests`); }
       else this.log(`Hardly anyone showed up to ${p.title}. ${host.first} looked crestfallen.`, 5, [host.id], 'party', '😞');
       if (n < 2) { host.emotions.sadness = .8; host.mem.add(this.clock, `Nobody came to my ${p.title}`, 7, [host.id], -.8); }
@@ -333,7 +306,9 @@ export class Sim {
     if (a.seat) { v.x = a.seat.x; v.z = a.seat.z; v.heading = a.seat.rot; }
     v.needs.social = Math.min(100, v.needs.social + dt * 2); v.emotions.joy = Math.min(1, v.emotions.joy + dt * .02);
     if (Math.random() < dt * .05) { const others = [...p.attendees].filter(x => x !== v.id); if (others.length) { const o = this.byId.get(this.rng.pick(others))!; v.opinion[o.id] = Math.min(100, (v.opinion[o.id] ?? 0) + 1); this.say(v, this.rng.pick(['Ha! Good one.', `Cheers, ${o.first}!`, 'Remember last spring?', 'More cider!', 'La la laaa~', ...v.def.catchphrases]), this.rng.pick(['😄', '🍻', '🎶', '😂'])); } }
-    if (v.id === host.id && !a._fed && a.t > 30) { a._fed = 1; const food = Math.min(host.inv.bread + host.inv.apples, 4); host.inv.coins = Math.max(0, host.inv.coins - 6); for (const id of p.attendees) this.byId.get(id)!.needs.food = Math.min(100, this.byId.get(id)!.needs.food + 25); this.say(host, food ? 'Food for everyone!' : 'Drinks are on me!', '🍲'); }
+    if (v.id === host.id && !a._fed && a.t > 30) { a._fed = 1; for (const id of p.attendees) this.byId.get(id)!.needs.food = Math.min(100, this.byId.get(id)!.needs.food + 35); this.say(host, this.rng.pick(['Food for everyone!', 'Drinks are on me!', 'Dig in, friends!']), '🍲'); }
+    // sweethearts sit close; crushes steal glances (romance happens at parties)
+    if (v.crush && !a._glance && a.t > 20 && p.attendees.has(v.crush) && Math.random() < dt * .02) { a._glance = 1; const c = this.byId.get(v.crush)!; v.emotions.love = Math.min(1, v.emotions.love + .5); this.icon(v, v.partner === c.id ? '💞' : '💗'); if (v.partner !== c.id) { v.opinion[c.id] = Math.min(100, (v.opinion[c.id] ?? 0) + 3); this.say(v, this.rng.pick([`${c.first} looks lovely tonight...`, 'Is it warm in here?', '*sigh*']), '💗', 2.6); } }
     return false;
   }
   scheduleParty(host: Villager, title: string, place: string, at: number, dur = 150) {
@@ -347,6 +322,13 @@ export class Sim {
   learnFact(v: Villager, f: Fact, from?: Villager) {
     const isNew = v.mem.learn(f); if (!isNew) return false;
     if (f.kind === 'invite' && f.event) { const p = this.parties.find(x => x.id === f.id); if (p && !p.done) { p.invited.add(v.id); v.replan = false; } }
+    // jealousy: hearing that someone is courting *your* crush or sweetheart
+    if ((f as any).romance && f.target && f.actor !== v.id && f.target !== v.id && (v.crush === f.target || v.partner === f.target)) {
+      const rival = this.byId.get(f.actor)!, beloved = this.byId.get(f.target)!; v.opinion[rival.id] = Math.max(-100, (v.opinion[rival.id] ?? 0) - 22); v.emotions.anger = Math.min(1, v.emotions.anger + .6); v.emotions.sadness += .3;
+      v.mem.add(this.clock, `${rival.first} is after ${beloved.first}. My ${v.partner === beloved.id ? 'sweetheart' : beloved.first}!`, 8, [rival.id, beloved.id], -.9, 'feeling', f.id);
+      const jf = this.fact('deed', `${rival.first} has been making eyes at ${beloved.first}`, rival.id, rival.id, -.5, 6, beloved.id); (jf as any).label = `${beloved.first}`; v.mem.learn(jf);
+      this.icon(v, '😤'); if (this.clock - ((this as any)._lastJealous ?? -1e9) > 180) { (this as any)._lastJealous = this.clock; this.log(`${v.first} found out about ${rival.first} and ${beloved.first} and is green with jealousy.`, 6, [v.id, rival.id, beloved.id], 'romance', '💚'); }
+    }
     return true;
   }
 }

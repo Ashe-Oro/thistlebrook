@@ -1,6 +1,5 @@
 import type { Sim } from '../sim/sim';
-import type { Villager, SimEvent, Item } from '../sim/types';
-import { ITEM_ICON } from '../sim/types';
+import type { Villager, SimEvent } from '../sim/types';
 import type { Director, Paper } from '../sim/director';
 import { JOB_INFO, GOAL_LABEL } from '../data/villagers';
 import { fmtTime } from '../core/util';
@@ -12,10 +11,11 @@ const esc = (s: string) => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;'
 export interface AppApi { sim: Sim; director: Director; setSpeed(s: number): void; speed: number; select(id: string | null): void; selected: string | null; portrait(id: string): HTMLCanvasElement; setMode(m: 'director' | 'free'): void; mode: string;
   god(kind: string): void; sound: { setMuted(m: boolean): void; muted: boolean; play(k: string, v?: number): void }; project(x: number, y: number, z: number): { x: number; y: number; on: boolean }; camDist(): number; }
 
+function sim0(v: Villager, s: any) { const f = s.villagers.filter((u: Villager) => u.crush === v.id && u.partner !== v.id && u !== v); return f.length ? `<span class="it love" title="Only you can see this">💌 ${f.map((u: Villager) => u.first).join(' & ')} ${f.length > 1 ? 'are' : 'is'} sweet on them</span>` : ''; }
 export class UI {
   root: HTMLElement; feed!: HTMLElement; card!: HTMLElement; clock!: HTMLElement; overlay!: HTMLElement; toasts!: HTMLElement; caption!: HTMLElement; lb!: HTMLElement; modal!: HTMLElement;
   tags = new Map<string, HTMLElement>(); bubbles = new Map<string, { el: HTMLElement; until: number }>(); icons: { el: HTMLElement; id: string; t: number }[] = []; convo: { who: string; text: string; emoji: string; at: number }[] = [];
-  tab = 'rel'; cardT = 0; lbKind: 'wealth' | 'popularity' | 'power' = 'wealth'; feedFilter = 'all'; autoPaper = true;
+  tab = 'rel'; cardT = 0; lbKind: 'popularity' | 'power' | 'mischief' = 'popularity'; feedFilter = 'all'; autoPaper = true;
   constructor(public app: AppApi, parent: HTMLElement) {
     this.root = h('div', 'ui'); parent.appendChild(this.root); this.build();
     const s = app.sim;
@@ -39,7 +39,7 @@ export class UI {
     fw.querySelectorAll<HTMLButtonElement>('[data-f]').forEach(b => b.onclick = () => { this.feedFilter = b.dataset.f!; fw.querySelectorAll('[data-f]').forEach(x => x.classList.toggle('on', x === b)); this.refilter(); });
     this.card = h('div', 'card hidden'); r.appendChild(this.card);
     this.lb = h('div', 'lb'); r.appendChild(this.lb);
-    const dock = h('div', 'dock'); dock.innerHTML = `<div class="grp"><span class="lbl">God powers</span><button data-g="gift">🎁<i>Drop gift</i></button><button data-g="rain">🌧️<i>Rain</i></button><button data-g="merchant">🛒<i>Merchant</i></button><button data-g="festival">🎪<i>Festival</i></button></div>
+    const dock = h('div', 'dock'); dock.innerHTML = `<div class="grp"><span class="lbl">God powers</span><button data-g="gift">🎁<i>Drop gift</i></button><button data-g="rain">🌧️<i>Rain</i></button><button data-g="traveller">🧳<i>Traveller</i></button><button data-g="festival">🎪<i>Festival</i></button></div>
       <div class="grp"><span class="lbl">Views</span><button data-v="web">🕸️<i>Relationships</i></button><button data-v="paper">📰<i>Gazette</i></button><button data-v="recap">📈<i>Recap</i></button><button data-v="villagers">👥<i>Villagers</i></button></div>`;
     r.appendChild(dock);
     dock.querySelectorAll<HTMLButtonElement>('[data-g]').forEach(b => b.onclick = () => { this.app.god(b.dataset.g!); b.classList.add('flash'); setTimeout(() => b.classList.remove('flash'), 600); });
@@ -51,7 +51,7 @@ export class UI {
   }
   name(id: string) { const v = this.app.sim.byId.get(id); return v ? `<a class="nm" data-id="${id}" style="--c:${VCOLOR[id]}">${v.first}</a>` : id; }
   linkify(text: string) { let t = esc(text); for (const v of this.app.sim.villagers) t = t.replace(new RegExp(`\\b${v.first}(?!\\w)`, 'g'), this.name(v.id)); return t; }
-  cat(e: SimEvent) { return ['theft', 'fight', 'argue', 'god', 'weather', 'merchant', 'festival', 'reconcile', 'ally'].includes(e.kind) ? 'drama' : ['talk', 'gift', 'gossip', 'invite', 'party', 'bond', 'reflect'].includes(e.kind) ? 'social' : 'work'; }
+  cat(e: SimEvent) { return ['theft', 'fight', 'argue', 'god', 'weather', 'traveller', 'festival', 'reconcile', 'ally', 'romance'].includes(e.kind) ? 'drama' : ['talk', 'gift', 'gossip', 'invite', 'party', 'bond', 'reflect'].includes(e.kind) ? 'social' : 'work'; }
   addFeed(e: SimEvent) {
     if (e.imp <= 1) return; // small talk lives in each villager's story log, not the main chronicle
     const el = h('div', `ev imp${Math.min(9, e.imp)} k-${e.kind} c-${this.cat(e)}`); el.dataset.id = String(e.id); el.dataset.cat = this.cat(e);
@@ -91,13 +91,13 @@ export class UI {
     for (let i = 0; i < shown.length; i++) { const a = shown[i]; for (let j = 0; j < i; j++) { const b = shown[j]; if (Math.abs(a.x - b.x) < (a.w + b.w) / 2 + 4 && a.y > b.y - b.h - 6 && a.y < b.y + a.h) { a.y = b.y - b.h - 8; } } a.el.style.transform = `translate(${a.x}px, ${a.y}px) translate(-50%, -100%)`; }
     for (const ic of this.icons) { ic.t += dt; const v = s.byId.get(ic.id)!; const pos = v.avatar.root.position; const p = this.app.project(pos.x, v.avatar.height + .9 + ic.t * .9, pos.z); ic.el.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, -50%) scale(${Math.min(1, ic.t * 5)})`; ic.el.style.opacity = String(Math.max(0, 1 - ic.t / 2.2)); ic.el.style.display = p.on && !v.inside ? '' : 'none'; }
     this.icons = this.icons.filter(ic => { if (ic.t > 2.2) { ic.el.remove(); return false; } return true; });
-    this.cardT -= dt; if (this.cardT <= 0) { this.cardT = .35; this.clock.innerHTML = `<b>Day ${s.day}</b> · ${fmtTime(s.clock)} ${s.rain > .4 ? '🌧️' : s.hour >= 20 || s.hour < 6 ? '🌙' : s.hour < 8 ? '🌅' : '☀️'}${s.festivalUntil > s.clock ? ' 🎪' : ''}${s.merchantUntil > s.clock ? ' 🛒' : ''}`;
+    this.cardT -= dt; if (this.cardT <= 0) { this.cardT = .35; this.clock.innerHTML = `<b>Day ${s.day}</b> · ${fmtTime(s.clock)} ${s.rain > .4 ? '🌧️' : s.hour >= 20 || s.hour < 6 ? '🌙' : s.hour < 8 ? '🌅' : '☀️'}${s.festivalUntil > s.clock ? ' 🎪' : ''}${s.visitorUntil > s.clock ? ' 🧳' : ''}`;
       this.root.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach(b => b.classList.toggle('on', +b.dataset.speed! === this.app.speed)); (this.root.querySelector('#mode') as HTMLElement).textContent = this.app.mode === 'director' ? '🎬 Director' : '🕹️ Free cam';
       this.renderCard(); this.renderLB(); }
   }
   renderLB() {
     const rows = this.app.director.ranked(this.lbKind), max = Math.max(1, ...rows.map(r => Math.abs(r.score)));
-    this.lb.innerHTML = `<div class="ph"><b>🏆 Leaderboard</b><div class="ff">${(['wealth', 'popularity', 'power'] as const).map(k => `<button data-k="${k}" class="${k === this.lbKind ? 'on' : ''}">${k === 'wealth' ? '🪙 Wealth' : k === 'popularity' ? '❤️ Liked' : '👑 Power'}</button>`).join('')}</div></div>` +
+    this.lb.innerHTML = `<div class="ph"><b>🏆 Leaderboard</b><div class="ff">${(['popularity', 'power', 'mischief'] as const).map(k => `<button data-k="${k}" class="${k === this.lbKind ? 'on' : ''}">${k === 'mischief' ? '😈 Mischief' : k === 'popularity' ? '❤️ Liked' : '👑 Influence'}</button>`).join('')}</div></div>` +
       rows.map((r, i) => `<div class="row" data-id="${r.v.id}"><span class="rk">${['🥇', '🥈', '🥉'][i] ?? i + 1}</span><span class="dot" style="background:${VCOLOR[r.v.id]}"></span><span class="n">${r.v.first}</span><span class="bar"><i style="width:${Math.max(3, Math.abs(r.score) / max * 100)}%;background:${r.score < 0 ? '#c55' : VCOLOR[r.v.id]}"></i></span><span class="sc">${r.score}</span></div>`).join('');
     this.lb.querySelectorAll<HTMLElement>('[data-k]').forEach(b => b.onclick = () => { this.lbKind = b.dataset.k as any; this.renderLB(); });
     this.lb.querySelectorAll<HTMLElement>('.row').forEach(b => b.onclick = () => this.app.select(b.dataset.id!));
@@ -108,7 +108,9 @@ export class UI {
     const id = this.app.selected; if (!id) { this.card.classList.add('hidden'); return; } const s = this.app.sim, v = s.byId.get(id)!; this.card.classList.remove('hidden');
     const al = v.alliance ? s.alliances.find(a => a.id === v.alliance) : null; const bar = (l: string, x: number, c: string) => `<div class="need"><span>${l}</span><b><i style="width:${x}%;background:${c}"></i></b></div>`;
     const traits = Object.entries(v.traits).map(([k, x]) => `<span class="tr" title="${k} ${x}">${k}<i style="width:${x * 100}%"></i></span>`).join('');
-    const inv = (Object.entries(v.inv) as [Item, number][]).filter(([, n]) => n > 0).map(([k, n]) => `<span class="it" title="${k}">${ITEM_ICON[k]} ${n}</span>`).join('') || '<span class="muted">empty pockets</span>';
+    const held = s.holding(v).map(k => `<span class="it ${k.owner !== v.id ? 'hot' : ''}" title="${k.owner !== v.id ? 'Belongs to ' + s.byId.get(k.owner)?.first : 'Treasured keepsake'}">${k.icon} ${esc(k.name.replace(/^(his|her) /, ''))}${k.owner !== v.id ? ` <em>(${s.byId.get(k.owner)?.first}'s!)</em>` : ''}</span>`).join('');
+    const lost = s.missing(v); const heart = v.partner ? `<span class="it love">💞 Sweetheart: <b>${s.byId.get(v.partner)!.first}</b></span>` : v.crush ? `<span class="it love" title="Only you can see this">💘 Secretly sweet on <b>${s.byId.get(v.crush)!.first}</b></span>` : sim0(v, s) ;
+    const inv = held + (lost ? `<span class="it miss">❓ ${esc(lost.name.replace(/^(his|her) /, ''))} is missing</span>` : '') + heart || '<span class="muted">nothing in their pockets</span>';
     let body = '';
     if (this.tab === 'rel') body = [...s.villagers].filter(u => u !== v).sort((a, b) => (v.opinion[b.id] ?? 0) - (v.opinion[a.id] ?? 0)).map(u => { const o = Math.round(v.opinion[u.id] ?? 0), back = Math.round(u.opinion[v.id] ?? 0), bel = v.mem.belief(u.id); return `<div class="rel" data-id="${u.id}"><span class="dot" style="background:${VCOLOR[u.id]}"></span><span class="n">${u.first}${v.family.includes(u.id) ? ' 👪' : ''}${u.alliance && u.alliance === v.alliance ? ' 🚩' : ''}</span><span class="ob"><i class="${o < 0 ? 'neg' : 'pos'}" style="${o < 0 ? 'right:50%' : 'left:50%'};width:${Math.abs(o) / 2}%"></i></span><span class="lab">${this.relLabel(o)}</span><span class="back" title="How ${u.first} feels about ${v.first}">${back >= 35 ? '💚' : back <= -35 ? '💢' : '·'}</span>${bel ? `<div class="bel">“${esc(bel.text)}”</div>` : ''}</div>`; }).join('');
     if (this.tab === 'plan') body = v.plan.filter(b => b.to > s.clock - 60).map(b => `<div class="pl ${s.clock >= b.from && s.clock < b.to ? 'now' : ''} ${b.act === 'event' ? 'evt' : ''}"><span class="t">${fmtTime(b.from)}–${fmtTime(b.to)}</span>${esc(b.note)}</div>`).join('') + (v.intent ? `<div class="intent">🎯 ${esc(v.intent)}</div>` : '');
@@ -138,17 +140,17 @@ export class UI {
   showPaper(p: Paper) {
     this.modal.classList.remove('hidden'); this.app.sound.play('paper');
     this.modal.innerHTML = `<div class="sheet paper"><button class="x">✕</button><div class="mast">The Thistlebrook Gazette</div><div class="dateline">Day ${p.day + 1} · Morning edition · Weather: ${p.weather} · One copper</div><h1>${this.linkify(p.headline)}</h1>
-      <div class="cols"><div>${p.stories.map(x => `<p>${x.icon} ${this.linkify(x.text)}</p>`).join('') || '<p>All quiet on the village front.</p>'}</div><div class="side"><h3>Standings</h3><p>🪙 Richest: <b>${p.leaders.wealth}</b></p><p>❤️ Best-loved: <b>${p.leaders.popular}</b></p><p>👑 Most powerful: <b>${p.leaders.power}</b></p>${p.quote ? `<h3>Overheard</h3><p class="q">“${esc(p.quote.text)}”<br>— ${p.quote.who}</p>` : ''}</div></div></div>`;
+      <div class="cols"><div>${p.stories.map(x => `<p>${x.icon} ${this.linkify(x.text)}</p>`).join('') || '<p>All quiet on the village front.</p>'}</div><div class="side"><h3>Standings</h3><p>❤️ Best-loved: <b>${p.leaders.popular}</b></p><p>👑 Most influential: <b>${p.leaders.power}</b></p><p>😈 Most mischievous: <b>${p.leaders.mischief}</b></p>${p.couples ? `<p>💞 Sweethearts: <b>${p.couples}</b></p>` : ''}${p.quote ? `<h3>Overheard</h3><p class="q">“${esc(p.quote.text)}”<br>— ${p.quote.who}</p>` : ''}</div></div></div>`;
     this.modal.querySelector('.x')?.addEventListener('click', () => this.closeModal());
   }
   showRecap() {
     const s = this.app.sim; const days = Object.keys(s.dayStats).map(Number).sort((a, b) => a - b);
     this.modal.innerHTML = `<div class="sheet recap"><button class="x">✕</button><h2>📈 The story so far</h2><canvas width="760" height="220"></canvas><div class="legend">${s.villagers.map(v => `<span><i style="background:${VCOLOR[v.id]}"></i>${v.first}</span>`).join('')}</div>
       <div class="timeline">${days.map(d => `<div class="day"><h3>Day ${d}</h3>${(s.dayStats[d] ?? []).filter(e => e.imp >= 5).slice(0, 8).map(e => `<p><span class="t">${fmtTime(e.t)}</span> ${e.icon} ${this.linkify(e.text)}</p>`).join('') || '<p class="muted">A quiet day.</p>'}</div>`).join('')}</div></div>`;
-    const c = this.modal.querySelector('canvas')!, g = c.getContext('2d')!, H = s.history; if (H.length > 1) { const max = Math.max(...H.flatMap(x => Object.values(x.wealth))); g.fillStyle = '#fbf4e4'; g.fillRect(0, 0, c.width, c.height); g.strokeStyle = '#d9cdb3'; g.font = '12px sans-serif'; g.fillStyle = '#8a7a5a';
+    const c = this.modal.querySelector('canvas')!, g = c.getContext('2d')!, H = s.history; if (H.length > 1) { const max = Math.max(1, ...H.flatMap(x => Object.values(x.pop).map(Math.abs))); g.fillStyle = '#fbf4e4'; g.fillRect(0, 0, c.width, c.height); g.strokeStyle = '#d9cdb3'; g.font = '12px sans-serif'; g.fillStyle = '#8a7a5a';
       for (const d of days) { const i = H.findIndex(x => x.t >= (d - 1) * 1440 + 360); if (i < 0) continue; const x = 30 + i / (H.length - 1) * (c.width - 40); g.beginPath(); g.moveTo(x, 10); g.lineTo(x, c.height - 20); g.stroke(); g.fillText(`Day ${d}`, x + 4, c.height - 6); }
-      for (const v of s.villagers) { g.strokeStyle = VCOLOR[v.id]; g.lineWidth = 2.5; g.beginPath(); H.forEach((x, i) => { const px = 30 + i / (H.length - 1) * (c.width - 40), py = c.height - 24 - (x.wealth[v.id] / max) * (c.height - 40); i ? g.lineTo(px, py) : g.moveTo(px, py); }); g.stroke(); }
-      g.fillStyle = '#8a7a5a'; g.fillText('Wealth', 4, 14); }
+      for (const v of s.villagers) { g.strokeStyle = VCOLOR[v.id]; g.lineWidth = 2.5; g.beginPath(); H.forEach((x, i) => { const px = 30 + i / (H.length - 1) * (c.width - 40), py = (c.height - 20) / 2 + 2 - (x.pop[v.id] / max) * ((c.height - 40) / 2); i ? g.lineTo(px, py) : g.moveTo(px, py); }); g.stroke(); }
+      g.fillStyle = '#8a7a5a'; g.fillText('How liked (village average opinion)', 4, 14); g.strokeStyle = '#cbbd9c'; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(30, (c.height - 20) / 2 + 2); g.lineTo(c.width - 10, (c.height - 20) / 2 + 2); g.stroke(); g.setLineDash([]); }
     this.modal.querySelector('.x')?.addEventListener('click', () => this.closeModal());
   }
 }

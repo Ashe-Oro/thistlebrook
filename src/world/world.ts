@@ -16,7 +16,8 @@ export class Tree {
 }
 export class Rock { hp = 8; maxHp = 8; state: 'solid' | 'gone' | 'rising' = 'solid'; t = 0; shake = 0; claimed: string | null = null; regrowAt = 0; constructor(public obj: THREE.Object3D, public x: number, public z: number, public baseScale: number) {} get available() { return this.state === 'solid'; } }
 export class Plot {
-  stage: 'empty' | 'growing' | 'ripe' = 'empty'; growth = 0; water = 0; claimed: string | null = null; crops: THREE.Object3D[] = []; wet!: THREE.Mesh; mats: THREE.MeshLambertMaterial[] = [];
+  stage: 'empty' | 'growing' | 'ripe' = 'growing'; growth = .55 + Math.random() * .4; // v1: fields are scenery (no farming economy yet)
+  water = 0; claimed: string | null = null; crops: THREE.Object3D[] = []; wet!: THREE.Mesh; mats: THREE.MeshLambertMaterial[] = [];
   constructor(public x: number, public z: number) {}
 }
 export class AppleTree { apples = 4; meshes: THREE.Mesh[] = []; claimed: string | null = null; t = 0; constructor(public obj: THREE.Object3D, public x: number, public z: number) {} }
@@ -210,7 +211,7 @@ export class World {
       if (r.state === 'rising') { r.t += gdt; const u = Math.min(1, r.t / 240); r.obj.scale.setScalar(r.baseScale * u); r.obj.position.y = -(1 - u) * .5; if (u >= 1) r.state = 'solid'; }
     }
     for (const p of this.plots) {
-      if (p.stage === 'growing') { p.growth = clamp(p.growth + gdt / (p.water > 0 ? 600 : 1800)); p.water = Math.max(0, p.water - gdt / 720); if (p.growth >= 1) p.stage = 'ripe'; }
+      p.water = Math.max(0, p.water - gdt / 720);
     }
     for (const a of this.apples) { a.t += gdt; if (a.apples < a.meshes.length && a.t > 200) { a.apples++; a.t = 0; } }
   }

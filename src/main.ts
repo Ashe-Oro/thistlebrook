@@ -10,7 +10,7 @@ import { LLMBrain, type LLMConfig } from './sim/llm';
 import { Director } from './sim/director';
 import { UI, type AppApi } from './ui/ui';
 import { Sound } from './ui/sound';
-import { dropGift, animateGifts, summonRain, spawnMerchant, tickMerchant, startFestival, tickFestival } from './sim/god';
+import { dropGift, animateGifts, summonRain, spawnTraveller, tickTraveller, startFestival, tickFestival } from './sim/god';
 import type { Villager } from './sim/types';
 import { makeAnvil } from './agents/props';
 
@@ -70,7 +70,7 @@ const api: AppApi = {
   sim, director, get speed() { return speed; }, setSpeed(s) { speed = s; }, get selected() { return selected; },
   select(id) { selected = id; follow = id; if (id) { const v = sim.byId.get(id)!; sound.play('pop'); if (mode === 'director') mode = 'free'; if (v) controls.autoRotate = false; } },
   portrait, get mode() { return mode; }, setMode(m) { mode = m; if (m === 'director') { selected = null; follow = null; } controls.autoRotate = false; },
-  god(kind) { if (kind === 'gift') { const v = selected ? sim.byId.get(selected) : null; const g = dropGift(sim, v ? v.x + 3 : undefined, v ? v.z + 2 : undefined); focusPoint(g.x, g.z); } if (kind === 'rain') summonRain(sim); if (kind === 'merchant') { spawnMerchant(sim); focusPoint(-19, 5); } if (kind === 'festival') { startFestival(sim); focusPoint(-9, 5); } },
+  god(kind) { if (kind === 'gift') { const v = selected ? sim.byId.get(selected) : null; const g = dropGift(sim, v ? v.x + 3 : undefined, v ? v.z + 2 : undefined); focusPoint(g.x, g.z); } if (kind === 'rain') summonRain(sim); if (kind === 'traveller' || kind === 'merchant') { spawnTraveller(sim); focusPoint(-19, 5); } if (kind === 'festival') { startFestival(sim); focusPoint(-9, 5); } },
   sound, project(x, y, z) { tmpV.set(x, y, z).project(camera); return { x: (tmpV.x * .5 + .5) * innerWidth, y: (-tmpV.y * .5 + .5) * innerHeight, on: tmpV.z < 1 && Math.abs(tmpV.x) < 1.1 && Math.abs(tmpV.y) < 1.1 }; },
   camDist() { return camera.position.distanceTo(controls.target); },
 };
@@ -116,7 +116,7 @@ function start() {
   loading.classList.add('done'); setTimeout(() => loading.remove(), 900);
   requestAnimationFrame(frame);
 }
-function stepSim(dtWorld: number) { const n = Math.min(400, Math.ceil(dtWorld / (1 / 30))); const h = dtWorld / n; for (let i = 0; i < n; i++) { sim.step(h); } tickMerchant(sim); tickFestival(sim); }
+function stepSim(dtWorld: number) { const n = Math.min(400, Math.ceil(dtWorld / (1 / 30))); const h = dtWorld / n; for (let i = 0; i < n; i++) { sim.step(h); } tickTraveller(sim); tickFestival(sim); }
 function frame(now: number) {
   requestAnimationFrame(frame);
   let dt = Math.min(.1, (now - last) / 1000); last = now; fpsAvg = fpsAvg * .95 + (1 / Math.max(dt, 1e-3)) * .05;
@@ -148,6 +148,6 @@ function frame(now: number) {
   forceExpr(id: string, expr: string) { forced.set(id, { expr, until: 0 }); }, clearExpr() { forced.clear(); },
   enableLLM(cfg: LLMConfig) { localStorage.setItem('terrarium.llm', JSON.stringify(cfg)); sim.brain = new LLMBrain(cfg); console.info('LLM brain enabled (plans + reflections).'); },
   disableLLM() { localStorage.removeItem('terrarium.llm'); sim.brain = new UtilityBrain(); },
-  summary() { return { day: sim.day, clock: sim.clock, events: sim.events.length, villagers: sim.villagers.map(v => ({ id: v.id, x: +v.x.toFixed(1), z: +v.z.toFixed(1), doing: v.doing, coins: v.inv.coins, food: Math.round(v.needs.food), energy: Math.round(v.needs.energy), opinions: { ...v.opinion }, alliance: v.alliance, expr: v.avatar.expr })), alliances: sim.alliances.map(a => a.name + ':' + a.members.join(',')), parties: sim.parties.map(p => `${p.title}@${p.place} invited ${p.invited.size} came ${p.attendees.size}`), kinds: sim.events.reduce((m: any, e) => (m[e.kind] = (m[e.kind] ?? 0) + 1, m), {}) }; },
+  summary() { return { day: sim.day, clock: sim.clock, events: sim.events.length, villagers: sim.villagers.map(v => ({ id: v.id, x: +v.x.toFixed(1), z: +v.z.toFixed(1), doing: v.doing, crush: v.crush, partner: v.partner, holding: sim.holding(v).map(k => k.id), food: Math.round(v.needs.food), energy: Math.round(v.needs.energy), opinions: { ...v.opinion }, alliance: v.alliance, expr: v.avatar.expr })), alliances: sim.alliances.map(a => a.name + ':' + a.members.join(',')), parties: sim.parties.map(p => `${p.title}@${p.place} invited ${p.invited.size} came ${p.attendees.size}`), kinds: sim.events.reduce((m: any, e) => (m[e.kind] = (m[e.kind] ?? 0) + 1, m), {}) }; },
 };
 boot().catch(e => { console.error(e); loading.querySelector('small')!.textContent = 'Something went wrong: ' + e.message; });

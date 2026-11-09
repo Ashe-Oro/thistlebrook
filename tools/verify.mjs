@@ -31,7 +31,7 @@ const soak = await ev(async (DAYS) => {
       still[v.id] = d < .05 && !asleep && !v.inside ? (still[v.id] || 0) + 1 : 0;
       if (still[v.id] > 5) bad.push(`${v.id} stuck at ${v.x.toFixed(1)},${v.z.toFixed(1)} (${v.doing}) day ${S.day} ${S.hour.toFixed(1)}h`);
       if (!isFinite(v.x) || !isFinite(v.z) || Math.abs(v.x) > 70 || Math.abs(v.z) > 50) bad.push(`${v.id} out of bounds ${v.x},${v.z}`);
-      for (const [k, n] of Object.entries(v.inv)) if (n < 0 || !isFinite(n)) bad.push(`${v.id} has ${n} ${k}`);
+      for (const [k, n] of Object.entries(v.needs)) if (!isFinite(n)) bad.push(`${v.id} need ${k} is ${n}`);
     });
     prev = S.villagers.map(v => [v.x, v.z]);
     await new Promise(r => setTimeout(r, 0));
@@ -39,17 +39,18 @@ const soak = await ev(async (DAYS) => {
   const kinds = {}; for (const list of Object.values(S.dayStats)) for (const e of list) kinds[e.kind] = (kinds[e.kind] || 0) + 1;
   let changed = 0, big = 0; S.villagers.forEach((v, i) => { for (const u of S.villagers) if (u !== v) { const d = Math.abs((v.opinion[u.id] ?? 0) - (start[i][u.id] ?? 0)); if (d >= 5) changed++; if (d >= 25) big++; } });
   const feed = S.events.filter(e => e.imp >= 4).slice(-40).map(e => `Day ${Math.floor(e.t / 1440) + 1} ${String(Math.floor(e.t % 1440 / 60)).padStart(2, '0')}:${String(Math.floor(e.t % 60)).padStart(2, '0')}  ${e.text}`);
-  return { day: S.day, kinds, changed, big, dist, bad: [...new Set(bad)].slice(0, 20), alliances: S.alliances.map(a => a.name + ': ' + a.members.join(', ')), parties: S.parties.map(p => `${p.title} @${p.place} day ${Math.floor(p.at / 1440) + 1} — ${p.attendees.size} came`), coins: Object.fromEntries(S.villagers.map(v => [v.id, v.inv.coins])), memories: Object.fromEntries(S.villagers.map(v => [v.id, v.mem.items.length])), beliefs: Object.fromEntries(S.villagers.map(v => [v.id, v.thought])), feed };
+  return { day: S.day, kinds, changed, big, dist, bad: [...new Set(bad)].slice(0, 20), alliances: S.alliances.map(a => a.name + ': ' + a.members.join(', ')), parties: S.parties.map(p => `${p.title} @${p.place} day ${Math.floor(p.at / 1440) + 1} — ${p.attendees.size} came`), hearts: S.villagers.map(v => `${v.id}${v.partner ? ' 💞 ' + v.partner : v.crush ? ' 💘 ' + v.crush : ''}`), keepsakes: [...S.keepsakes.values()].filter(k => k.holder !== k.owner).map(k => `${k.owner}'s ${k.name} -> ${k.holder}`), memories: Object.fromEntries(S.villagers.map(v => [v.id, v.mem.items.length])), beliefs: Object.fromEntries(S.villagers.map(v => [v.id, v.thought])), feed };
 }, DAYS);
 // 3) after the soak the renderer still runs
 await p.waitForTimeout(3000); const fps2 = await ev(() => terrarium.fps);
 const checks = [
   ['no console/page/HTTP errors', errs.length === 0, errs.slice(0, 10)],
-  ['villagers move in real time (4x, 6 s)', realMoved >= 5, `${realMoved}/8 moved`],
+  ['villagers move in real time (4x, 6 s)', realMoved >= 3, `${realMoved}/8 moved (others are indoors baking, sorting post, brewing)`],
   ['every villager travelled > 150 m', Object.values(soak.dist).every(d => d > 150), Object.fromEntries(Object.entries(soak.dist).map(([k, d]) => [k, Math.round(d)]))],
-  ['no stuck / out-of-bounds / negative inventory', soak.bad.length === 0, soak.bad],
+  ['no stuck / out-of-bounds / NaN needs', soak.bad.length === 0, soak.bad],
   ['>= 10 event kinds', Object.keys(soak.kinds).length >= 10, soak.kinds],
-  ['core kinds present (work, trade, gossip, party, gift)', ['work', 'trade', 'gossip', 'party', 'gift'].every(k => soak.kinds[k] > 0), ''],
+  ['core kinds present (gossip, party, gift, invite, romance)', ['gossip', 'party', 'gift', 'invite', 'romance'].every(k => soak.kinds[k] > 0), ''],
+  ['no economy (no trade/market events)', !soak.kinds.trade, ''],
   ['drama present (theft or argue or fight)', (soak.kinds.theft || 0) + (soak.kinds.argue || 0) + (soak.kinds.fight || 0) > 0, ''],
   ['relationships changed (>= 20 pairs moved >= 5)', soak.changed >= 20, `${soak.changed} pairs moved, ${soak.big} by >= 25`],
   ['memory streams growing', Object.values(soak.memories).every(n => n > 20), soak.memories],
@@ -57,6 +58,6 @@ const checks = [
 ];
 const ok = checks.every(c => c[1]);
 for (const [name, pass, info] of checks) console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${info === '' ? '' : '  ' + (typeof info === 'string' ? info : JSON.stringify(info))}`);
-console.log(`\nload ${loadMs} ms · simulated ${DAYS} days · seed ${SEED}\nalliances: ${soak.alliances.join(' | ') || 'none'}\nparties: ${soak.parties.join(' | ')}\ncoins: ${JSON.stringify(soak.coins)}\n\nFeed sample:\n${soak.feed.join('\n')}`);
+console.log(`\nload ${loadMs} ms · simulated ${DAYS} days · seed ${SEED}\nalliances: ${soak.alliances.join(' | ') || 'none'}\nparties: ${soak.parties.join(' | ')}\nhearts: ${soak.hearts.join(', ')}\nkeepsakes astray: ${soak.keepsakes.join('; ') || 'none'}\n\nFeed sample:\n${soak.feed.join('\n')}`);
 fs.mkdirSync('shots', { recursive: true }); fs.writeFileSync('shots/verify-report.json', JSON.stringify({ ok, seed: SEED, days: DAYS, loadMs, fps, fps2, checks, ...soak, errors: errs }, null, 2));
 await b.close(); srv.close(); process.exit(ok ? 0 : 1);

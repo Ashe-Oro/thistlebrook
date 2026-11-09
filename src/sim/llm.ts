@@ -13,9 +13,9 @@ export interface LLMConfig { endpoint: string; model: string; apiKey?: string; m
 export function describeVillager(v: Villager, sim: Sim) {
   const t = v.traits, rel = sim.villagers.filter(u => u !== v).map(u => `${u.first} (${Math.round(v.opinion[u.id] ?? 0)})`).join(', ');
   return `You are ${v.name}, the ${JOB_INFO[v.job].label.toLowerCase()} of Thistlebrook (${v.def.age}). ${v.def.bio}
-Life goal: ${GOAL_LABEL[v.goal]}. Traits (0-1): kindness ${t.kindness}, honesty ${t.honesty}, bravery ${t.bravery}, sociability ${t.sociability}, greed ${t.greed}, ambition ${t.ambition}, temper ${t.temper}.
+Life goal: ${GOAL_LABEL[v.goal]}. Traits (0-1): kindness ${t.kindness}, honesty ${t.honesty}, bravery ${t.bravery}, sociability ${t.sociability}, envy ${t.envy}, ambition ${t.ambition}, temper ${t.temper}.
 Needs: hunger ${Math.round(100 - v.needs.food)}/100, energy ${Math.round(v.needs.energy)}/100, loneliness ${Math.round(100 - v.needs.social)}/100.
-Inventory: ${Object.entries(v.inv).filter(([, n]) => n).map(([k, n]) => `${n} ${k}`).join(', ')}.
+Keepsakes held: ${sim.holding(v).map(k => k.name).join(', ') || 'none'}${sim.missing(v) ? ` (yours is missing: ${sim.missing(v)!.name})` : ''}. ${v.partner ? `Sweetheart: ${sim.byId.get(v.partner)!.first}.` : v.crush ? `Secret crush: ${sim.byId.get(v.crush)!.first}.` : ''}
 Opinions of others (-100..100): ${rel}.
 Beliefs: ${v.mem.beliefs.map(b => b.text).join(' ') || 'none yet'}.`;
 }

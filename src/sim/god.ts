@@ -1,7 +1,7 @@
 // Viewer "god powers". Each one is just a perturbation; the villagers' own brains do the rest.
 import * as THREE from 'three';
 import type { Sim } from './sim';
-import type { Item } from './types';
+import type { Villager } from './types';
 import { makeCarry } from '../agents/props';
 
 export function dropGift(sim: Sim, x?: number, z?: number) {
@@ -12,7 +12,7 @@ export function dropGift(sim: Sim, x?: number, z?: number) {
   sim.world.fx.sparkle(x, 1, z, [1, .85, .4], 30);
   sim.log('A glittering gift box fell from the sky into the village!', 6, [], 'god', '🎁', x, z);
   // greedy and nearby villagers race for it
-  const racers = sim.villagers.filter(v => !v.inside && v.doing !== 'sleeping' && v.act?.type !== 'fight' && Math.hypot(v.x - x!, v.z - z!) < 45 && (v.traits.greed > .35 || sim.rng.chance(.4)));
+  const racers = sim.villagers.filter(v => !v.inside && v.doing !== 'sleeping' && v.act?.type !== 'fight' && Math.hypot(v.x - x!, v.z - z!) < 45 && (v.traits.envy > .45 || sim.rng.chance(.4)));
   for (const v of racers) { v.act = null; v.queue = [{ type: 'claim', gift: g, run: true, t: 0, label: 'racing for the gift!' }]; v.thought = 'Is that... a present?!'; sim.leaveSeat(v); sim.icon(v, '❗'); }
   if (racers.length >= 2) sim.log(`${racers.map(r => r.first).join(', ')} dropped everything and raced for it!`, 5, racers.map(r => r.id), 'god', '🏃', x, z);
   return g;
@@ -22,15 +22,31 @@ export function animateGifts(sim: Sim, dt: number) {
   sim.gifts = sim.gifts.filter(g => { if (g.claimedBy && g.obj.parent) { g.obj.parent.remove(g.obj); } return !g.claimedBy; });
 }
 export function summonRain(sim: Sim) { sim.startRain(150, true); }
-export async function spawnMerchant(sim: Sim) {
-  if (sim.merchantUntil > sim.clock) return; sim.merchantUntil = sim.clock + 360; await sim.world.setMerchant(true);
-  sim.world.places.set('cart', { id: 'cart', kind: 'market', name: 'the merchant\u2019s cart', x: -19.3, z: 6.8, cx: -21, cz: 5, enterable: false, district: 'old-town', inside: new Set(), smokeUntil: 0 });
-  sim.log('A travelling merchant\u2019s cart rattled into the plaza. Exotic wares! Generous prices!', 6, [], 'merchant', '🛒', -21, 5);
-  for (const v of sim.villagers) { const goods = (['wood', 'ore', 'wheat', 'eggs', 'apples', 'tools'] as Item[]).filter(i => v.inv[i] > 0); if (!goods.length || v.inside || v.traits.greed + (v.goal === 'wealth' ? .3 : 0) < .45) continue;
-    v.act = null; v.queue = [{ type: 'trade_market', place: 'cart', sell: goods.map(i => [i, v.inv[i]]), buy: v.goal === 'wealth' || v.goal === 'power' ? [['trinket', 1]] : [], t: 0, label: 'hurrying to the merchant', run: true, off: sim.rng.range(-1, 1) }]; v.thought = 'The merchant pays double! Quick!'; sim.icon(v, '🤑'); }
-  sim.stock.trinket += 3;
+// A travelling storyteller rolls in. Folk gather to hear her tales... and she has heard a few things about *them*.
+export async function spawnTraveller(sim: Sim) {
+  if (sim.visitorUntil > sim.clock) return; sim.visitorUntil = sim.clock + 300; await sim.world.setMerchant(true);
+  sim.world.places.set('cart', { id: 'cart', kind: 'market', name: 'the storyteller\u2019s wagon', x: -19.3, z: 6.8, cx: -21, cz: 5, enterable: false, district: 'old-town', inside: new Set(), smokeUntil: 0 });
+  sim.log('A travelling storyteller\u2019s wagon rattled into the plaza. Tales from far away, and gossip from close by!', 6, [], 'traveller', '🧳', -21, 5);
+  // the juiciest true secret in the village (an unconfessed crush), else a tall tale about someone
+  const pining = sim.villagers.filter(v => v.crush && !v.partner); const pv = pining.length ? sim.rng.pick(pining) : null;
+  const subject = pv ?? sim.rng.pick(sim.villagers); const crushOf = pv ? sim.byId.get(pv.crush!)! : null;
+  const f = sim.fact('deed', crushOf ? `${subject.first} is sweet on ${crushOf.first}` : `${subject.first} was once ${sim.rng.pick(['chased out of the capital by a goose', 'engaged to a duke', 'a famous juggler'])}`, subject.id, subject.id, crushOf ? .1 : 0, crushOf ? 8 : 5, crushOf?.id);
+  if (crushOf) (f as any).romance = true; (f as any).label = 'the storyteller\u2019s tale';
+  let told = false; const [cx, cz] = [-20.2, 7.4];
+  for (const v of sim.villagers) {
+    if (v.inside || v.doing === 'sleeping' || v.act?.locked || !(v.traits.sociability > .45 || sim.rng.chance(.4))) continue;
+    const a = sim.rng.range(-1.2, 1.2), r = 2.4 + sim.rng.range(0, 1.4); const [x, z] = sim.world.nav.nearestFree(cx + Math.sin(a) * r, cz + Math.cos(a) * r);
+    v.act = null; sim.leaveSeat(v); v.thought = 'A storyteller! I love a good tale.'; sim.icon(v, '📜');
+    v.queue = [{ type: 'go', x, z, t: 0, label: 'hurrying to hear the storyteller' }, { type: 'idle', anim: 'idle', dur: 26, face: Math.atan2(cx - x, cz - z), t: 0, label: 'listening to tall tales', after: () => {
+      const isSubject = v === subject; v.emotions.joy += .3; v.needs.social = Math.min(100, v.needs.social + 25);
+      if (isSubject && crushOf) { v.emotions.surprise = 1; v.emotions.sadness += .3; sim.say(v, 'How does she know that?!', '😳', 3); v.mem.add(sim.clock, `The storyteller told everyone I\u2019m sweet on ${crushOf.first}!`, 9, [crushOf.id], -.5, 'feeling'); }
+      else if (sim.learnFact(v, f)) { v.mem.add(sim.clock, `The storyteller says ${f.text}`, f.imp, [subject.id], f.valence, 'heard', f.id); sim.say(v, crushOf && v === crushOf ? 'Wait... me?!' : sim.rng.pick(['Ooooh!', 'No way!', 'Ha!']), crushOf ? '😮' : '😄', 2.5); if (v === crushOf) { v.emotions.surprise = 1; v.emotions.love += .4; v.opinion[subject.id] = Math.min(100, (v.opinion[subject.id] ?? 0) + 6); } }
+      if (!told) { told = true; sim.log(crushOf ? `The storyteller wove a ballad about a shy villager pining for ${crushOf.first}, and everybody knew exactly who she meant: ${subject.first}.` : `The storyteller swore that ${f.text}. Nobody knows whether to believe it.`, crushOf ? 8 : 5, crushOf ? [subject.id, crushOf.id] : [subject.id], 'traveller', '📜', cx, cz); }
+    } } as any];
+  }
 }
-export function tickMerchant(sim: Sim) { if (sim.merchantUntil && sim.clock > sim.merchantUntil) { sim.merchantUntil = 0; sim.world.setMerchant(false); sim.world.places.delete('cart'); sim.log('The travelling merchant packed up and rolled on down the road.', 3, [], 'merchant', '👋', -21, 5); } }
+export function tickTraveller(sim: Sim) { if (sim.visitorUntil && sim.clock > sim.visitorUntil) { sim.visitorUntil = 0; sim.world.setMerchant(false); sim.world.places.delete('cart'); sim.log('The storyteller packed up her wagon and rolled on, leaving a trail of whispers behind her.', 3, [], 'traveller', '👋', -21, 5); } }
+export type { Villager };
 export async function startFestival(sim: Sim) {
   if (sim.festivalUntil > sim.clock) return; await sim.world.setFestival(true); sim.festivalUntil = sim.clock + 200;
   const host = [...sim.villagers].sort((a, b) => sim.popularity(b) - sim.popularity(a))[0];

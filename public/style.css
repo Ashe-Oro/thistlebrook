@@ -80,3 +80,7 @@ button:hover { background: #fff; transform: translateY(-1px); } button.on { back
   .feedwrap { left: 8px; right: 8px; width: auto; top: auto; bottom: 84px; height: 30vh; } .lb { display: none; }
   .card { left: 8px; right: 8px; width: auto; top: 96px; max-height: 50vh; } .dock { left: 8px; right: 8px; transform: none; overflow-x: auto; gap: 8px; } .dock .lbl { display: none; } .dock button { min-width: 52px; }
 }
+.card .it.hot { background: #fde3d6; border-color: #e7a487; }
+.card .it.hot em { color: #b4532f; font-style: normal; font-weight: 600; }
+.card .it.miss { background: #f3ecdf; color: #8a6d4a; border-style: dashed; }
+.card .it.love { background: #fde4ef; border-color: #f0a8c8; color: #9b3a68; }
