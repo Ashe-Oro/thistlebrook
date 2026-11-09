@@ -26,6 +26,9 @@ interface Animal { obj: THREE.Object3D; x: number; z: number; tx: number; tz: nu
 export class World {
   scene: THREE.Scene; nav: NavGrid; fx: FX; places = new Map<string, Place>(); seats: Seat[] = []; trees: Tree[] = []; rocks: Rock[] = []; plots: Plot[] = []; apples: AppleTree[] = [];
   animals: Animal[] = []; lamps: THREE.Sprite[] = []; lights: THREE.PointLight[] = []; campfireLight!: THREE.PointLight; forgeLight?: THREE.PointLight; private fireTime = 0; sail?: THREE.Object3D; bunting: THREE.Object3D[] = []; rng = new RNG(42);
+  private scenery: THREE.Object3D[] = [];
+  private moving = new Set<THREE.Object3D>();
+  private borderScenery: THREE.Object3D[] = [];
   feeder = new THREE.Vector3(35, 0, 10); stringLights?: THREE.Object3D; night = 0; festival = false; merchantCart?: THREE.Object3D;
   constructor(scene: THREE.Scene) { this.scene = scene; this.nav = new NavGrid(TOWN.bounds, 0.5); this.fx = new FX(scene); }
 
@@ -43,8 +46,42 @@ export class World {
     }
     this.paint();
     await this.border(); await this.windmill(); await this.critters(); this.nightLights();
+    this.finishScenery();
     // keep entries reachable
     for (const p of this.places.values()) this.nav.circle(p.x, p.z, 0.6, 0);
+  }
+
+  // Freeze local transforms only: static children still inherit moving parents.
+  private finishScenery() {
+    for (const root of this.scenery) root.traverse(o => {
+      if (!this.moving.has(o)) { o.updateMatrix(); o.matrixAutoUpdate = false; }
+    });
+    // Border plants have no simulation handles or changing visibility. Keep batches
+    // local so one visible tree does not submit the entire forest on phones.
+    const batches = new Map<string, THREE.Mesh[]>();
+    for (const root of this.borderScenery) {
+      root.updateWorldMatrix(true, true);
+      root.traverse(o => {
+        if (!(o instanceof THREE.Mesh) || o instanceof THREE.InstancedMesh || !o.visible ||
+            Array.isArray(o.material) || o.material.transparent || o.matrixWorld.determinant() <= 0) return;
+        const key = `${Math.floor(root.position.x / 24)},${Math.floor(root.position.z / 24)}:${o.geometry.uuid}:${o.material.uuid}:${o.castShadow}`;
+        const group = batches.get(key) ?? []; group.push(o); batches.set(key, group);
+      });
+    }
+    for (const meshes of batches.values()) {
+      if (meshes.length < 3) continue;
+      const first = meshes[0], batch = new THREE.InstancedMesh(first.geometry, first.material, meshes.length);
+      batch.name = 'border-plants'; batch.castShadow = first.castShadow; batch.receiveShadow = first.receiveShadow;
+      meshes.forEach((mesh, i) => { batch.setMatrixAt(i, mesh.matrixWorld); });
+      batch.instanceMatrix.needsUpdate = true; batch.computeBoundingBox(); batch.computeBoundingSphere();
+      batch.updateMatrix(); batch.matrixAutoUpdate = false; this.scene.add(batch);
+      for (const mesh of meshes) mesh.removeFromParent();
+    }
+    this.scenery.length = 0; this.borderScenery.length = 0; this.moving.clear();
+  }
+
+  private shadows(root: THREE.Object3D, cast: boolean, receive = false) {
+    root.traverse(o => { if (o instanceof THREE.Mesh) { o.castShadow = cast; o.receiveShadow = receive; } });
   }
 
   paint() {
@@ -55,7 +92,8 @@ export class World {
     ];
     for (const p of this.places.values()) { if (!p.enterable && p.kind !== 'chapel') continue; const lane = p.z < -12 ? -15.5 : -3; if (Math.abs(p.z - lane) < .5) continue; paths.push({ pts: [[p.x, p.z], [p.x, lane]], w: 1.5, kind: p.district === 'farmstead' ? 'dirt' : 'dirt' }); }
     paths.push({ pts: [[-46, -3], [20, -3]], w: 4, kind: 'cobble' }, { pts: [[-9.5, -3], [-9.5, -15.5]], w: 2.6, kind: 'cobble' });
-    this.scene.add(paintGround(paths, [{ x0: -18.5, z0: -1, x1: .5, z1: 11.5, r: 2.5 }]));
+    const ground = paintGround(paths, [{ x0: -18.5, z0: -1, x1: .5, z1: 11.5, r: 2.5 }]);
+    this.scene.add(ground); this.scenery.push(ground);
   }
   ground() {
     const g = new THREE.PlaneGeometry(260, 200, 130, 100); g.rotateX(-Math.PI / 2);
@@ -68,7 +106,7 @@ export class World {
       c.set('#78b04c').offsetHSL(n * .006, 0, n * .025 - out * .002); col.set([c.r, c.g, c.b], i * 3);
     }
     g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.computeVertexNormals();
-    const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true })); m.receiveShadow = true; m.name = 'ground'; this.scene.add(m);
+    const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true })); m.receiveShadow = true; m.name = 'ground'; this.scene.add(m); this.scenery.push(m);
   }
 
   async placeLot(district: string, l: { a: string; x: number; z: number; rot?: number; s?: number; place?: PlaceDef; solid?: boolean; tag?: string }) {
@@ -78,6 +116,11 @@ export class World {
     const cx = (box.min.x + box.max.x) / 2, cz = (box.min.z + box.max.z) / 2, hx = (box.max.x - box.min.x) / 2, hz = (box.max.z - box.min.z) / 2;
     const c = Math.cos(rot), sn = Math.sin(rot), wcx = l.x + cx * c + cz * sn, wcz = l.z - cx * sn + cz * c;
     const isProp = !l.place && hx * hz < 1.5;
+    const height = box.max.y - box.min.y;
+    const detail = /flower_bed|grass|tuft|path_stone|road|string_lights/.test(l.a);
+    this.shadows(o, !detail && Math.max(hx * 2, hz * 2, height) >= .6,
+      !detail && (!!l.place || hx * hz >= 1.5));
+    this.scenery.push(o);
     if (l.solid !== false && !l.a.includes('road') && !l.a.includes('string_lights')) this.nav.rect(wcx, wcz, Math.max(.2, hx - (isProp ? .05 : .25)), Math.max(.2, hz - (isProp ? .05 : .25)), rot);
     if (l.tag === 'bench') this.seats.push({ x: l.x + .35 * c - .05, z: l.z + .1, y: .45, rot, place: 'bench', taken: null }, { x: l.x - .35 * c, z: l.z + .1, y: .45, rot, place: 'bench', taken: null });
     if (l.tag === 'logbench') { const fx = -25 - l.x, fz = 10 - l.z, r = Math.atan2(fx, fz); for (const off of [-.42, .42]) this.seats.push({ x: l.x + Math.cos(r) * off, z: l.z - Math.sin(r) * off, y: .42, rot: r, place: 'campfire', taken: null }); }
@@ -95,23 +138,26 @@ export class World {
 
   async placeResource(r: { kind: string; a: string; x: number; z: number; rot?: number; s?: number }) {
     const s = (r.s ?? 1) * scaleOf(r.a), o = await loadAsset(r.a); o.scale.setScalar(s); o.position.set(r.x, 0, r.z); o.rotation.y = r.rot ?? this.rng.range(0, 6.28); this.scene.add(o);
+    this.scenery.push(o); this.shadows(o, r.kind !== 'plot', r.kind === 'plot');
+    if (r.kind === 'tree' || r.kind === 'rock') this.moving.add(o);
     if (r.kind === 'tree') {
       const stump = await loadAsset('nature/axe_chopping_stump'); stump.position.set(r.x, 0, r.z); stump.scale.setScalar(.85); stump.visible = false; this.scene.add(stump);
+      this.scenery.push(stump); this.shadows(stump, false);
       this.trees.push(new Tree(o, stump, r.x, r.z, s, r.a.includes('maple'))); this.nav.circle(r.x, r.z, .7);
     } else if (r.kind === 'rock') { this.rocks.push(new Rock(o, r.x, r.z, s)); const b = new THREE.Box3().setFromObject(o); this.nav.circle(r.x, r.z, Math.min(b.max.x - b.min.x, b.max.z - b.min.z) * .42); }
     else if (r.kind === 'apple') {
       const t = new AppleTree(o, r.x, r.z); const am = new THREE.MeshLambertMaterial({ color: '#d7263d', emissive: '#3a0008' }), ag = new THREE.SphereGeometry(.13, 8, 6);
-      for (let i = 0; i < 6; i++) { const m = new THREE.Mesh(ag, am); const a = i / 6 * 6.28 + .3; m.position.set(r.x + Math.cos(a) * 1.1, 2.3 + (i % 3) * .35, r.z + Math.sin(a) * .9 + .2); m.castShadow = true; this.scene.add(m); t.meshes.push(m); }
+      for (let i = 0; i < 6; i++) { const m = new THREE.Mesh(ag, am); const a = i / 6 * 6.28 + .3; m.position.set(r.x + Math.cos(a) * 1.1, 2.3 + (i % 3) * .35, r.z + Math.sin(a) * .9 + .2); m.castShadow = false; this.scene.add(m); t.meshes.push(m); }
       this.apples.push(t); this.nav.circle(r.x, r.z, .6);
     } else if (r.kind === 'plot') {
       o.rotation.y = 0; o.traverse((m: any) => { if (m.isMesh) m.castShadow = false; });
       const p = new Plot(r.x, r.z);
       const wet = new THREE.Mesh(new THREE.PlaneGeometry(3.7, 3.7), new THREE.MeshBasicMaterial({ color: '#2a1c10', transparent: true, opacity: 0, depthWrite: false }));
-      wet.rotation.x = -Math.PI / 2; wet.position.set(r.x, .62, r.z); wet.renderOrder = 1; this.scene.add(wet); p.wet = wet;
+      wet.rotation.x = -Math.PI / 2; wet.position.set(r.x, .62, r.z); wet.renderOrder = 1; this.scene.add(wet); this.scenery.push(wet); p.wet = wet;
       for (let i = 0; i < 9; i++) {
         const w = await loadAsset('farm/wheat_cluster'); const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
         w.traverse((m: any) => { if (m.isMesh) m.material = mat; }); p.mats.push(mat);
-        w.position.set(r.x + (i % 3 - 1) * 1.15 + this.rng.range(-.15, .15), .35, r.z + (Math.floor(i / 3) - 1) * 1.15 + this.rng.range(-.15, .15)); w.rotation.y = this.rng.range(0, 6.28); w.visible = false; this.scene.add(w); p.crops.push(w);
+        w.position.set(r.x + (i % 3 - 1) * 1.15 + this.rng.range(-.15, .15), .35, r.z + (Math.floor(i / 3) - 1) * 1.15 + this.rng.range(-.15, .15)); w.rotation.y = this.rng.range(0, 6.28); w.visible = false; this.scene.add(w); this.scenery.push(w); this.moving.add(w); this.shadows(w, false); p.crops.push(w);
       }
       this.plots.push(p);
     }
@@ -126,20 +172,21 @@ export class World {
       const out = Math.max(0, Math.max(b.minX - x, x - b.maxX, b.minZ - z, z - b.maxZ) - 2), y = Math.min(14, out * out * .02 + out * .12) * (0.75 + .25 * Math.sin(x * .1 + z * .13));
       const k = rng.next(), o = await loadAsset(k < .55 ? 'cozy/tree_pine_01' : k < .85 ? 'cozy/tree_oak_01' : 'cozy/bush_round_01');
       o.position.set(x, y - .1, z); o.scale.setScalar(rng.range(1.2, 2.1)); o.rotation.y = rng.range(0, 6.28); o.traverse((m: any) => { if (m.isMesh) m.receiveShadow = false; }); this.scene.add(o);
+      this.scenery.push(o); this.borderScenery.push(o);
     }
   }
   async windmill() {
     const p = this.places.get('windmill'); if (!p?.obj) return;
     const sail = await loadAsset('cozy/windmill_sail_01'); sail.scale.setScalar(1.6);
     const hub = new THREE.Group(); hub.position.set(0, 4.25, 1.85); hub.add(sail); p.obj.add(hub); this.sail = hub;
-    sail.scale.setScalar(1);
+    sail.scale.setScalar(1); this.moving.add(hub); this.shadows(sail, true);
   }
   async critters() {
     const pen: [number, number, number, number] = [32, 4, 45, 14];
     const spec: [string, number, number][] = [['farm/chicken', 6, 1.2], ['farm/cow', 1, .5], ['farm/sheep', 2, .45], ['farm/pig', 1, .5]];
     for (const [a, n, sp] of spec) for (let i = 0; i < n; i++) {
       const o = await loadAsset(a); const x = this.rng.range(pen[0] + 1, pen[2] - 1), z = this.rng.range(pen[1] + 1, pen[3] - 1);
-      o.position.set(x, 0, z); this.scene.add(o); this.animals.push({ obj: o, x, z, tx: x, tz: z, speed: sp, pen, t: this.rng.range(0, 5), kind: a.split('/')[1], hop: 0 });
+      o.position.set(x, 0, z); this.scene.add(o); this.scenery.push(o); this.moving.add(o); this.shadows(o, a !== 'farm/chicken'); this.animals.push({ obj: o, x, z, tx: x, tz: z, speed: sp, pen, t: this.rng.range(0, 5), kind: a.split('/')[1], hop: 0 });
     }
     this.nav.rect(38.5, 9, 7, 5.2, 0, 1); // paddock interior blocked for villagers except feeder spot
     this.nav.circle(35, 10, 1.2, 0); this.nav.rect(33.5, 6.5, 1.5, 3.6, 0, 0);
@@ -163,7 +210,7 @@ export class World {
   }
   async setFestival(on: boolean) {
     this.festival = on;
-    if (on && !this.bunting.length) for (const [x, z, r] of [[-15, 0, 0], [-3, 0, 0], [-17.5, 6, Math.PI / 2], [-.5, 6, Math.PI / 2]] as [number, number, number][]) { const o = await loadAsset('cozy/festival_bunting_01'); o.scale.setScalar(1.4); o.position.set(x, 0, z); o.rotation.y = r; this.scene.add(o); this.bunting.push(o); }
+    if (on && !this.bunting.length) for (const [x, z, r] of [[-15, 0, 0], [-3, 0, 0], [-17.5, 6, Math.PI / 2], [-.5, 6, Math.PI / 2]] as [number, number, number][]) { const o = await loadAsset('cozy/festival_bunting_01'); o.scale.setScalar(1.4); o.position.set(x, 0, z); o.rotation.y = r; this.shadows(o, false); this.scene.add(o); this.bunting.push(o); }
     for (const b of this.bunting) b.visible = on;
   }
   async setMerchant(on: boolean) {

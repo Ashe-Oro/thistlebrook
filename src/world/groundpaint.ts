@@ -19,8 +19,9 @@ export function paintGround(paths: { pts: [number, number][]; w: number; kind: '
     g.save(); clip(); g.clip(); g.fillStyle = '#8f8676'; g.fillRect(X(bx0), Z(bz0), (bx1 - bx0) * PPM, (bz1 - bz0) * PPM);
     const s = .42; for (let z = bz0; z < bz1; z += s * .86) for (let x = bx0 + ((Math.round(z / s) % 2) * s / 2); x < bx1; x += s) {
       const cx = X(x + rng.range(-.04, .04)), cz = Z(z + rng.range(-.04, .04)), r = s * PPM * rng.range(.36, .46), v = rng.range(-14, 14);
-      g.fillStyle = `rgb(${178 + v},${168 + v},${148 + v})`; g.beginPath(); for (let a = 0; a < 6; a++) { const aa = a / 6 * 6.283 + rng.range(-.2, .2), rr = r * rng.range(.85, 1.1); g.lineTo(cx + Math.cos(aa) * rr, cz + Math.sin(aa) * rr * .9); } g.fill();
-      g.fillStyle = 'rgba(255,255,240,.18)'; g.beginPath(); g.arc(cx - r * .25, cz - r * .25, r * .45, 0, 6.283); g.fill(); }
+      // Bring stone-to-mortar contrast down 30%, retaining the warm palette.
+      g.fillStyle = `rgb(${143 + (35 + v) * .7},${134 + (34 + v) * .7},${118 + (30 + v) * .7})`; g.beginPath(); for (let a = 0; a < 6; a++) { const aa = a / 6 * 6.283 + rng.range(-.2, .2), rr = r * rng.range(.85, 1.1); g.lineTo(cx + Math.cos(aa) * rr, cz + Math.sin(aa) * rr * .9); } g.fill();
+      g.fillStyle = 'rgba(255,255,240,.126)'; g.beginPath(); g.arc(cx - r * .25, cz - r * .25, r * .45, 0, 6.283); g.fill(); }
     g.restore();
   };
   for (const p of paths.filter(p => p.kind === 'dirt')) { stroke(p.pts, p.w + .5, '#9c8a5e', .3); stroke(p.pts, p.w, '#c2a874', .18); }
