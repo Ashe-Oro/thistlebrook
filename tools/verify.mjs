@@ -11,8 +11,8 @@ const t0 = Date.now();
 await p.goto(`http://127.0.0.1:5182/?nopaper&seed=${SEED}`); await p.waitForFunction(() => window.terrarium && document.querySelector('.loading.done'), null, { timeout: 180000 });
 const loadMs = Date.now() - t0;
 const ev = (c, arg) => p.evaluate(c, arg);
-// 1) real-time sanity: villagers move on screen at 1x (mid-morning, everyone up)
-await ev(() => terrarium.fastForward(9 * 60 - terrarium.sim.clock));
+// 1) real-time sanity: villagers move on screen at 1x (late morning, heading to lunch)
+await ev(() => terrarium.fastForward(11 * 60 + 50 - terrarium.sim.clock));
 const a0 = await ev(() => terrarium.summary().villagers.map(v => [v.x, v.z]));
 await ev(() => terrarium.setSpeed(4)); await p.waitForTimeout(6000); await ev(() => terrarium.setSpeed(1));
 const a1 = await ev(() => terrarium.summary().villagers.map(v => [v.x, v.z]));

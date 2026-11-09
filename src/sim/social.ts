@@ -66,7 +66,7 @@ export function resolveSocial(sim: Sim, v: Villager, t: Villager, a: Action): nu
       return convo(sim, [[v, say(sim, v, romantic ? 'giftGiveRomantic' : 'giftGiveNormal', { t: t.first }), icon], [t, say(sim, t, romantic ? 'giftReceiveRomantic' : 'giftReceiveNormal', { v: v.first }), romantic ? '😳' : '🥰'], [v, romantic ? '...' : 'Anytime.', '😊']]);
     }
     case 'flirt': {
-      soc(v, 20); soc(t, 15); const recept = op(t, v) + (t.crush === v.id ? 30 : 0) + t.traits.sociability * 20 - (t.partner && t.partner !== v.id ? 60 : 0) + R.range(-15, 15);
+      (v as any)._flirted = sim.clock; (v as any)._flirtWith = t.id; soc(v, 20); soc(t, 15); const recept = op(t, v) + (t.crush === v.id ? 30 : 0) + t.traits.sociability * 20 - (t.partner && t.partner !== v.id ? 60 : 0) + R.range(-15, 15);
       const lines: Line[] = [[v, say(sim, v, 'flirt', { t: t.first }), '💗']];
       if (recept > 30) { bump(sim, t, v, 7); bump(sim, v, t, 4); t.emotions.love = Math.min(1, t.emotions.love + .5); v.emotions.love = Math.min(1, v.emotions.love + .6); sim.icon(v, '💗'); sim.icon(t, '😊'); lines.push([t, say(sim, t, 'flirtWarm'), '😊']); if (op(t, v) > 55 && !t.crush && !t.partner && !t.family.includes(v.id) && t.def.age !== 'teen') t.crush = v.id; }
       else { bump(sim, v, t, -2); v.emotions.sadness += .2; lines.push([t, say(sim, t, 'flirtAwkward'), '😅']); }
@@ -144,6 +144,8 @@ export function resolveSocial(sim: Sim, v: Villager, t: Villager, a: Action): nu
     }
     case 'argue': {
       if (a.factId) ((v as any)._confronted ??= new Set()).add(a.factId);
+      if (a.snipe) (v as any)._sniped = sim.clock;
+      if (a.jealous) { sim.icon(v, '😤'); sim.log(`${v.first} is green with jealousy and let ${t.first} know it.`, 6, [v.id, t.id], 'romance', '😤'); }
       bump(sim, v, t, -6); bump(sim, t, v, -8); v.emotions.anger = Math.min(1, v.emotions.anger + .4); t.emotions.anger = Math.min(1, t.emotions.anger + .5); sim.icon(v, '💢'); sim.icon(t, '💢');
       const grudge = a.why ?? 'old grudges';
       const lines: Line[] = [[v, say(sim, v, 'argueOpener', { t: t.first }), '😠'], [t, say(sim, t, 'argueRetort'), '🙄'], [v, say(sim, v, 'fightTaunt'), '💢'], [t, say(sim, t, 'fightTaunt'), '😡']];
