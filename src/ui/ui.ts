@@ -18,8 +18,8 @@ function sim0(v: Villager, s: any) { const f = s.villagers.filter((u: Villager) 
 const cleanLie = (t: string) => t.replace(/\s*\(It isn't true\.\)/gi, '').replace(/\.\s*,/g, ',').replace(/\s+/g, ' ').trim();
 export class UI {
   root: HTMLElement; feed!: HTMLElement; card!: HTMLElement; clock!: HTMLElement; overlay!: HTMLElement; toasts!: HTMLElement; caption!: HTMLElement; lb!: HTMLElement; modal!: HTMLElement;
-  marks: { el: HTMLElement; x: number; z: number }[] = []; markT = 0;
-  tags = new Map<string, HTMLElement>(); bubbles = new Map<string, { el: HTMLElement; until: number }>(); icons: { el: HTMLElement; id: string; t: number }[] = []; convo: { who: string; text: string; emoji: string; at: number }[] = [];
+  marks: { el: HTMLElement; x: number; z: number }[] = []; markT = 0; cardRect: { l: number; r: number; t: number; b: number } | null = null;
+  tags = new Map<string, HTMLElement>(); bubbles = new Map<string, { el: HTMLElement; until: number; t0: number }>(); icons: { el: HTMLElement; id: string; t: number }[] = []; convo: { who: string; text: string; emoji: string; at: number }[] = [];
   tab = 'rel'; cardT = 0; lbKind: 'popularity' | 'power' | 'mischief' = 'popularity'; feedFilter = 'all'; autoPaper = true;
   feedDay = 0; safeTop = 70;
   constructor(public app: AppApi, parent: HTMLElement) {
@@ -107,8 +107,8 @@ export class UI {
   toastQ: [string, string][] = []; quiet = false;
   toast(title: string, desc: string) { if (this.quiet) return; if (this.toasts.children.length >= 2) { if (this.toastQ.length < 6) this.toastQ.push([title, desc]); return; } const t = h('div', 'toast', `<b>${title}</b><span>${this.linkify(desc)}</span>`); this.toasts.appendChild(t); this.app.sound.play('toast'); setTimeout(() => t.classList.add('out'), 4200); setTimeout(() => { t.remove(); const n = this.toastQ.shift(); if (n) this.toast(n[0], n[1]); }, 5000); }
   bubble(id: string, text: string, emoji: string, dur: number) {
-    let b = this.bubbles.get(id); if (!b) { const el = h('div', 'bubble'); this.overlay.appendChild(el); b = { el, until: 0 }; this.bubbles.set(id, b); }
-    b.el.innerHTML = `${emoji ? `<span class="em">${emoji}</span>` : ''}${esc(text)}`; b.el.classList.remove('pop'); void b.el.offsetWidth; b.el.classList.add('pop'); b.until = performance.now() + dur * 1000 / Math.max(1, Math.sqrt(this.app.speed || 1));
+    let b = this.bubbles.get(id); if (!b) { const el = h('div', 'bubble'); this.overlay.appendChild(el); b = { el, until: 0, t0: 0 }; this.bubbles.set(id, b); }
+    b.el.innerHTML = `${emoji ? `<span class="em">${emoji}</span>` : ''}${esc(text)}`; b.el.classList.remove('pop'); void b.el.offsetWidth; b.el.classList.add('pop'); b.t0 = performance.now(); b.until = performance.now() + dur * 1000 / Math.max(1, Math.sqrt(this.app.speed || 1));
   }
   icon(id: string, emoji: string) { const el = h('div', 'icon', emoji); this.overlay.appendChild(el); this.icons.push({ el, id, t: 0 }); if (this.icons.length > 40) { this.icons.shift()!.el.remove(); } }
 
@@ -137,19 +137,36 @@ export class UI {
           bx = Math.max(bw / 2 + 4, Math.min(W - bw / 2 - 4, bx));
           if (b.el.classList.contains('below') !== below) b.el.classList.toggle('below', below); b.el.style.transform = `translate(${bx}px, ${by}px) translate(-50%, ${below ? '0%' : '-100%'})`; } }
     }
-    // keep simultaneous speech bubbles from stacking on top of each other, then clamp clear of the safe inset
-    const shown: { el: HTMLElement; x: number; y: number; w: number; h: number; off: string; below: boolean }[] = [];
-    for (const [, b] of this.bubbles) { if (b.el.style.display === 'none') continue; const m = /translate\(([-\d.]+)px, ([-\d.]+)px\) translate\(-50%, ([^)]+)\)/.exec(b.el.style.transform); if (!m) continue; const z = this.sz(b.el); shown.push({ el: b.el, x: +m[1], y: +m[2], w: z.w, h: z.h, off: m[3], below: m[3].trim() === '0%' }); }
-    shown.sort((a, b) => b.y - a.y);
-    for (let i = 0; i < shown.length; i++) { const a = shown[i]; for (let j = 0; j < i; j++) { const b = shown[j]; if (Math.abs(a.x - b.x) < (a.w + b.w) / 2 + 4 && a.y > b.y - b.h - 6 && a.y < b.y + a.h) { a.y = b.y - b.h - 8; } }
+    // Declutter: the selected villager and the newest speakers win; each bubble may stack at most twice above a
+    // neighbour; at most 3 bubbles per crowd; anything that still collides (or sits under the open villager card) fades out.
+    const shown: { id: string; el: HTMLElement; x: number; y: number; ax: number; ay: number; w: number; h: number; off: string; below: boolean; pri: number }[] = [];
+    for (const [id, b] of this.bubbles) { if (b.el.style.display === 'none') continue; const m = /translate\(([-\d.]+)px, ([-\d.]+)px\) translate\(-50%, ([^)]+)\)/.exec(b.el.style.transform); if (!m) continue; const z = this.sz(b.el); shown.push({ id, el: b.el, x: +m[1], y: +m[2], ax: +m[1], ay: +m[2], w: z.w, h: z.h, off: m[3], below: m[3].trim() === '0%', pri: id === this.app.selected ? 1e15 : b.t0 }); }
+    shown.sort((a, b) => b.pri - a.pri);
+    const rect = (a: { x: number; y: number; w: number; h: number; below: boolean }) => ({ l: a.x - a.w / 2 - 3, r: a.x + a.w / 2 + 3, t: a.below ? a.y - 3 : a.y - a.h - 3, b: a.below ? a.y + a.h + 3 : a.y + 3 });
+    const hit = (p: { l: number; r: number; t: number; b: number }, q: { l: number; r: number; t: number; b: number }) => p.l < q.r && q.l < p.r && p.t < q.b && q.t < p.b;
+    const obst: { l: number; r: number; t: number; b: number }[] = [];
+    if (this.app.selected && this.cardRect) obst.push(this.cardRect);
+    const placed: typeof shown = [];
+    for (const a of shown) {
       if (a.below) { if (a.y < HT) a.y = HT; } else if (a.y - a.h < HT) a.y = HT + a.h;
-      a.el.style.transform = `translate(${a.x}px, ${a.y}px) translate(-50%, ${a.off})`; }
+      let ok = false;
+      for (let tries = 0; tries < 3; tries++) {
+        const ra = rect(a), blocker = placed.find(b => hit(ra, rect(b)));
+        if (!blocker) { ok = true; break; }
+        if (a.below) break; a.y = blocker.y - blocker.h - 8; if (a.y - a.h < HT) break;
+      }
+      const crowd = placed.filter(b => Math.abs(b.ax - a.ax) < 170 && Math.abs(b.ay - a.ay) < 130).length;
+      if (ok && a.pri < 1e15 && (crowd >= 3 || obst.some(o => hit(rect(a), o)))) ok = false;
+      if (ok) { placed.push(a); a.el.style.transform = `translate(${a.x}px, ${a.y}px) translate(-50%, ${a.off})`; }
+      const op = ok ? '' : '0'; if (a.el.style.opacity !== op) a.el.style.opacity = op;
+    }
     for (const ic of this.icons) { ic.t += dt; const v = s.byId.get(ic.id)!; const pos = v.avatar.root.position; const bub = this.bubbles.get(ic.id), talking = !!bub && bub.until > performance.now(); const p = this.app.project(pos.x, v.avatar.height + (talking ? 1.9 : .9) + ic.t * .9, pos.z); const ix = Math.max(16, Math.min(W - 16, p.x)), iy = Math.max(HT, p.y); ic.el.style.transform = `translate(${ix}px, ${iy}px) translate(-50%, -50%) scale(${Math.min(1, ic.t * 5)})`; ic.el.style.opacity = String(Math.max(0, 1 - ic.t / 2.2)); this.setDisp(ic.el, p.on && !v.inside); }
     this.icons = this.icons.filter(ic => { if (ic.t > 2.2) { ic.el.remove(); return false; } return true; });
     this.cardT -= dt; if (this.cardT <= 0) { this.cardT = .35; setHTML(this.clock, `<b>Day ${s.day}</b> · ${fmtTime(s.clock)} ${s.rain > .4 ? '🌧️' : s.hour >= 20 || s.hour < 6 ? '🌙' : s.hour < 8 ? '🌅' : '☀️'}${s.festivalUntil > s.clock ? ' 🎪' : ''}${s.visitorUntil > s.clock ? ' 🧳' : ''}`);
       this.measureChrome();
       this.root.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach(b => b.classList.toggle('on', +b.dataset.speed! === this.app.speed)); (this.root.querySelector('#mode') as HTMLElement).textContent = this.app.mode === 'director' ? '🎬 Director' : '🕹️ Free cam';
-      this.renderCard(); this.renderLB(); }
+      this.renderCard(); this.renderLB();
+      { const r = this.card.classList.contains('hidden') ? null : this.card.getBoundingClientRect(); this.cardRect = r && r.width ? { l: r.left, r: r.right, t: r.top, b: r.bottom } : null; } }
   }
   // measure real topbar/dock heights so overlays and panels never assume a fixed chrome size
   measureChrome() {

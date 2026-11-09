@@ -213,7 +213,17 @@ export function tellGossip(sim: Sim, v: Villager, t: Villager, f: Fact, lines: L
   (v as any)._lastGossip = sim.clock; const hopN = (f as any).hops as number;
   sim.log(`${v.first} told ${t.first} that ${lowerFirst(f.text)}.`, hopN <= 2 ? (f.valence < 0 ? 4 : 3) : 1, [v.id, t.id, f.about], 'gossip', '🗣️');
   const reach = sim.villagers.filter(x => x.mem.known.has(f.id)).length;
-  if (reach >= 5 && !(f as any).viral) { (f as any).viral = true; sim.log(sim.rng.pick([`Word travels fast: ${reach} villagers now know that ${lowerFirst(f.text)}.`, `The whole village is whispering: ${lowerFirst(f.text)}.`, `It's all over Thistlebrook by now: ${lowerFirst(f.text)}.`]) as string, 6, [f.about], 'gossip', '📣'); sim.achieve(null, `viral-${f.id}`, 'The Grapevine', `A story reached ${reach} villagers`); }
+  if (reach >= 5 && !(f as any).viral) { (f as any).viral = true;
+    // one grapevine line per stretch of the day: a second story going viral within two hours folds into the same entry
+    const V = ((sim as any)._viral ??= { ev: null as any, facts: [] as string[] }), last = V.ev;
+    if (last && sim.clock - last.t < 120 && V.facts.length < 4 && sim.events.includes(last)) {
+      V.facts.push(lowerFirst(f.text)); const n = V.facts.length;
+      last.text = `The grapevine is buzzing: ${n} stories are doing the rounds — ${V.facts.slice(0, -1).join('; ')}; and now, ${V.facts[n - 1]}.`;
+      last.actors = [...new Set([...last.actors, f.about])]; last.imp = Math.max(last.imp, 6); sim.emit('eventUpdate', last);
+    } else {
+      V.facts = [lowerFirst(f.text)];
+      V.ev = sim.log(sim.rng.pick([`Word travels fast: ${reach} villagers now know that ${lowerFirst(f.text)}.`, `The whole village is whispering: ${lowerFirst(f.text)}.`, `It's all over Thistlebrook by now: ${lowerFirst(f.text)}.`]) as string, 6, [f.about], 'gossip', '📣');
+    } sim.achieve(null, `viral-${f.id}`, 'The Grapevine', `A story reached ${reach} villagers`); }
   return 6;
 }
 export function tellInvite(sim: Sim, v: Villager, t: Villager, f: Fact, lines: Line[]) {

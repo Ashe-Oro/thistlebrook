@@ -64,7 +64,7 @@ button:hover { background: #fff; transform: translateY(-1px); } button.on { back
 .dock button.flash { animation: flash .6s; } @keyframes flash { 50% { background: #ffd27a; transform: scale(1.1); } }
 .overlay { position: fixed; inset: 0; pointer-events: none; z-index: 3; overflow: hidden; }
 .tag { position: absolute; left: 0; top: 0; pointer-events: auto; cursor: pointer; background: rgba(40, 30, 20, .62); color: #fff; font-size: 11px; font-weight: 600; padding: 1px 7px 1px 5px; border-radius: 10px; white-space: nowrap; display: flex; gap: 4px; align-items: center; } .tag span { width: 8px; height: 8px; border-radius: 50%; } .tag.sel { background: var(--accent); }
-.bubble { position: absolute; left: 0; top: 0; max-width: 200px; background: #fff; color: var(--ink); padding: 6px 10px; border-radius: 14px; font-size: 13px; font-weight: 500; box-shadow: 0 3px 10px rgba(0, 0, 0, .25); white-space: normal; text-align: center; }
+.bubble { transition: opacity .25s; position: absolute; left: 0; top: 0; max-width: 200px; background: #fff; color: var(--ink); padding: 6px 10px; border-radius: 14px; font-size: 13px; font-weight: 500; box-shadow: 0 3px 10px rgba(0, 0, 0, .25); white-space: normal; text-align: center; }
 .bubble::after { content: ''; position: absolute; left: 50%; bottom: -7px; margin-left: -7px; border: 7px solid transparent; border-top-color: #fff; border-bottom: 0; } .bubble .em { margin-right: 4px; font-size: 15px; }
 .bubble.below::after { bottom: auto; top: -7px; border-top: 0; border-bottom: 7px solid #fff; }
 .bubble.pop { animation: pop .3s cubic-bezier(.3, 1.6, .5, 1); } @keyframes pop { from { scale: .3; opacity: 0; } }
