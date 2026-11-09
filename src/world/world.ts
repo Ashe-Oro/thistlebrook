@@ -25,7 +25,7 @@ interface Animal { obj: THREE.Object3D; x: number; z: number; tx: number; tz: nu
 
 export class World {
   scene: THREE.Scene; nav: NavGrid; fx: FX; places = new Map<string, Place>(); seats: Seat[] = []; trees: Tree[] = []; rocks: Rock[] = []; plots: Plot[] = []; apples: AppleTree[] = [];
-  animals: Animal[] = []; lamps: THREE.Sprite[] = []; lights: THREE.PointLight[] = []; campfireLight!: THREE.PointLight; sail?: THREE.Object3D; bunting: THREE.Object3D[] = []; rng = new RNG(42);
+  animals: Animal[] = []; lamps: THREE.Sprite[] = []; lights: THREE.PointLight[] = []; campfireLight!: THREE.PointLight; forgeLight?: THREE.PointLight; private fireTime = 0; sail?: THREE.Object3D; bunting: THREE.Object3D[] = []; rng = new RNG(42);
   feeder = new THREE.Vector3(35, 0, 10); stringLights?: THREE.Object3D; night = 0; festival = false; merchantCart?: THREE.Object3D;
   constructor(scene: THREE.Scene) { this.scene = scene; this.nav = new NavGrid(TOWN.bounds, 0.5); this.fx = new FX(scene); }
 
@@ -150,7 +150,14 @@ export class World {
   addLamp(x: number, y: number, z: number, size = 2.2) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glowTex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 })); s.position.set(x, y, z); s.scale.setScalar(size); this.scene.add(s); this.lamps.push(s); return s; }
   nightLights() {
     const mk = (x: number, y: number, z: number, d: number, col = '#ffb36b') => { const l = new THREE.PointLight(col, 0, d, 1.6); l.position.set(x, y, z); this.scene.add(l); this.lights.push(l); return l; };
-    mk(-9, 3.2, 4, 16); mk(-9.5, 3, -5.5, 12); this.campfireLight = mk(-25, 1.4, 10, 15, '#ff9a4a');
+    mk(-9, 3.2, 4, 16); mk(-9.5, 3, -5.5, 12); this.campfireLight = mk(-25, 1.4, 10, 10, '#ff9a4a');
+    this.campfireLight.decay = 2; this.campfireLight.castShadow = false;
+    const smithy = this.places.get('smithy');
+    if (smithy) {
+      this.forgeLight = new THREE.PointLight('#ffae62', 0, 9, 2);
+      this.forgeLight.position.set(smithy.x, 1.5, smithy.z);
+      this.forgeLight.castShadow = false; this.scene.add(this.forgeLight);
+    }
     for (let i = 0; i < 7; i++) this.addLamp(-11.4 + i * .64, 2.55 - Math.sin(i / 6 * Math.PI) * .45, -5.2, .9);
     const p = this.places.get('campfire'); if (p) { p.x = -25; p.z = 10; }
   }
@@ -169,7 +176,14 @@ export class World {
     this.night = night; const t = clock;
     if (this.sail) this.sail.rotation.z -= dt * .45;
     for (const s of this.lamps) (s.material as THREE.SpriteMaterial).opacity = night * (0.85 + Math.sin(t * .37 + s.position.x) * .08);
-    this.lights[0].intensity = night * 10; this.lights[1].intensity = night * 8; this.campfireLight.intensity = (night * 24 + 3) * (0.8 + Math.random() * .35);
+    this.lights[0].intensity = night * 10; this.lights[1].intensity = night * 8;
+    this.fireTime += dt;
+    const flicker = .9 + Math.sin(this.fireTime * 9.7) * .06 + Math.sin(this.fireTime * 17.3) * .04;
+    this.campfireLight.intensity = (3 + clamp(night) * 24) * (this.festival ? 1.3 : 1) * flicker;
+    if (this.forgeLight) {
+      const smithy = this.places.get('smithy');
+      this.forgeLight.intensity = (2 + clamp(night) * 12 + (smithy && smithy.smokeUntil > clock ? 10 : 0)) * flicker;
+    }
     // campfire flames always (bigger at night)
     if (Math.random() < dt * (12 + night * 30)) this.fx.flame(-25, .35, 10, .8 + night * .5); if (Math.random() < dt * 3 * night) this.fx.ember(-25, .8, 10);
     for (const p of this.places.values()) if (p.chimney && (p.smokeUntil > clock || p.inside.size > 0 && (night > .2 || p.kind === 'bakery')) && Math.random() < dt * 3) this.fx.smoke(p.chimney.x, p.chimney.y, p.chimney.z);

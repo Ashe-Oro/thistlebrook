@@ -4,7 +4,7 @@ import type { VillagerDef } from '../data/villagers';
 import { RNG, clamp } from '../core/util';
 import { makeTool, makeCarry, makeBanner } from './props';
 
-export type Anim = 'idle' | 'walk' | 'run' | 'chop' | 'mine' | 'hoe' | 'water' | 'sit' | 'talk' | 'fight' | 'cheer' | 'dance' | 'pickup' | 'feed' | 'give' | 'hammer' | 'knead' | 'drink' | 'sad' | 'wave' | 'point';
+export type Anim = 'idle' | 'walk' | 'run' | 'chop' | 'mine' | 'hoe' | 'water' | 'sit' | 'talk' | 'fight' | 'cheer' | 'dance' | 'pickup' | 'feed' | 'give' | 'hammer' | 'knead' | 'drink' | 'sad' | 'wave' | 'point' | 'laugh';
 const EXPR_MAP: Record<string, string> = { happy: 'happy', grin: 'grin', sad: 'sad', angry: 'angry', scared: 'scared', surprised: 'surprised', sleepy: 'sleepy', love: 'love', smirk: 'smirk', determined: 'determined', dizzy: 'dizzy', neutral: 'neutral', knockedOut: 'knockedOut' };
 
 export function generateOutfit(def: VillagerDef, seed: number) {
@@ -18,6 +18,8 @@ export function generateOutfit(def: VillagerDef, seed: number) {
 export class Avatar {
   root = new THREE.Group(); body: THREE.Group; handle: any; bones: Record<string, THREE.Bone>; bind = new Map<THREE.Bone, THREE.Quaternion>();
   anim: Anim = 'idle'; phase = Math.random() * 10; expr = 'neutral'; heading = 0; targetHeading = 0; alpha = 1; targetAlpha = 1; seatY = 0;
+  // Set while physically seated, including upper-body gestures; clear on leaving the seat.
+  seated = false;
   tool: THREE.Object3D | null = null; toolKind = ''; carry: THREE.Object3D | null = null; carryKind = ''; banner: THREE.Object3D | null = null; bannerColor = '';
   hitPhase = 0; onHit: (() => void) | null = null; height: number; mats: THREE.Material[] = []; hips: THREE.Bone; hipsY: number; hipM = 1; sitH = .5; outfit: any; bob = 0;
   constructor(public def: VillagerDef, seed: number) {
@@ -36,7 +38,10 @@ export class Avatar {
     // Hand local X runs down the arm; point the handle across the fist (local -Z toward the front when arm hangs).
     const upright = kind === 'mug' || kind === 'can' || kind === 'basket';
     if (upright) this.tool.rotation.set(0, 0, -Math.PI / 2); else this.tool.rotation.set(Math.PI / 2, 0, 0); // tools: handle points forward out of the fist
-    this.tool.position.set(.06, 0, 0); this.tool.scale.setScalar(1 / this.worldScaleOf(hand));
+    const scale = 1 / this.worldScaleOf(hand);
+    const striking = kind === 'hammer' || kind === 'axe' || kind === 'pickaxe';
+    // Move the grip forward so the raised handle stays ahead of the face.
+    this.tool.position.set(.06, 0, striking ? -.10 * scale : 0); this.tool.scale.setScalar(scale);
   }
   setCarry(kind: string) {
     if (kind === this.carryKind) return; if (this.carry) this.carry.parent?.remove(this.carry); this.carry = null; this.carryKind = kind; if (!kind) return;
@@ -85,8 +90,9 @@ export class Avatar {
       }
       case 'chop': case 'mine': case 'hammer': {
         const cyc = A === 'hammer' ? 1.0 : 1.35, u = (p % cyc) / cyc, raise = u < .62 ? Math.sin(u / .62 * Math.PI / 2) : u < .9 ? 1 - Math.pow((u - .62) / .28, 2) : 0;
-        const up = A === 'hammer' ? .4 + raise * 1.6 : .5 + raise * 2.4;
-        this.arm('R', up, .1, .3 + (1 - raise) * .2); this.arm('L', A === 'hammer' ? .5 : up * .95, .25, .5);
+        // Swing beside the head rather than folding the tool back over the crown.
+        const up = A === 'hammer' ? .4 + raise * 1.1 : .5 + raise * 1.35;
+        this.arm('R', up, .35 + raise * .25, .2 + (1 - raise) * .3); this.arm('L', A === 'hammer' ? .5 : up * .95, .35, .4);
         spineX = .1 + (1 - raise) * .35; hipY = -.03; this.leg('L', .25, .25); this.leg('R', -.15, .1);
         this.hitPhase = u; if (!changed && (prevHit < .9 && u >= .9 || prevHit > u && prevHit < .9)) this.onHit?.(); break;
       }
@@ -112,6 +118,7 @@ export class Avatar {
       }
       case 'sit': { this.leg('L', 1.5, 1.45); this.leg('R', 1.5, 1.45); this.arm('L', .55, .12, .65); this.arm('R', .55, .12, .65); hipY = -(this.hipM - this.sitH); spineX = -.05 + breathe; headX = Math.sin(p * .7) * .05; headY = Math.sin(p * .4) * .25; break; }
       case 'talk': { const g = Math.sin(p * 3.1), reply = .5 + .5 * Math.sin(p * .9); this.arm('R', .4 + g * .25, .22, .8 + g * .25); this.arm('L', .15 + reply * .4, .15, .4 + reply * .5); leanZ = Math.sin(p * 1.4) * .025; headX = Math.sin(p * 5) * .06; headY = Math.sin(p * 1.3) * .15; hipY = breathe; break; }
+      case 'laugh': { const chuckle = Math.sin(p * 10); this.arm('L', .5, .18, 1); this.arm('R', .6, .2, 1.1); spineX = -.08 + chuckle * .04; headX = -.12 + chuckle * .04; hipY = Math.abs(chuckle) * .025; break; }
       case 'drink': { const u = (p % 4) / 4, sip = Math.min(clamp((u - .25) / .2), clamp((.9 - u) / .15)); this.arm('R', .6 + sip * .9, .1, 1.9 - sip * .2); this.arm('L', .1, .05, .2); headX = -sip * .3; break; }
       case 'fight': { const a = Math.sin(p * 14), b = Math.cos(p * 13); this.arm('L', 1.1 + a * .55, .35, .95 - a * .4); this.arm('R', 1.1 - a * .55, .35, .95 + a * .4); leanZ = b * .07; hipRot = a * .16; hipY = Math.abs(Math.sin(p * 9)) * .12; spineX = .2; this.leg('L', .3 + b * .2, .3); this.leg('R', -.3 - b * .2, .3); headY = a * .2; break; }
       case 'dance': { const beat = p * 6, sway = Math.sin(beat * .5); this.arm('L', .9 + Math.sin(beat) * .6, .35, .8); this.arm('R', .9 - Math.sin(beat) * .6, .35, .8); this.leg('L', .15 + sway * .25, .15 + Math.max(0, -sway) * .4); this.leg('R', .15 - sway * .25, .15 + Math.max(0, sway) * .4); hipY = .025 * Math.cos(beat * 2) - .025; hipRot = sway * .28; leanZ = sway * .09; headY = -hipRot * .5; break; }
@@ -119,6 +126,13 @@ export class Avatar {
       case 'wave': { this.arm('R', 2.6, .6, .65 + Math.sin(p * 9) * .3); this.arm('L', .05, .05, .2); hipY = breathe; break; }
       case 'sad': { this.arm('L', .12, .03, .18); this.arm('R', .12, .03, .18); spineX = .28 + breathe; headX = .3; headY = Math.sin(p * .45) * .08; hipY = -.035; this.leg('L', .05, .08); this.leg('R', .05, .08); break; }
       default: { this.arm('L', .05 + breathe, .05, .15); this.arm('R', .05 - breathe, .05, .15); hipY = breathe * .35; leanZ = Math.sin(p * .65) * .025; const glance = Math.pow(Math.max(0, Math.sin(p * .37)), 4); headY = Math.sin(p * .71) * .45 * glance; headX = Math.sin(p * .33) * .04; this.leg('L', 0, .025 + Math.max(0, leanZ)); this.leg('R', 0, .025 + Math.max(0, -leanZ)); }
+    }
+    // Layer seating after the gesture, replacing every lower-body contribution.
+    // seatY remains the existing body elevation offset; sitH is the seat's hip height.
+    if (A === 'sit' || (this.seated || this.seatY !== 0) &&
+      (A === 'idle' || A === 'talk' || A === 'drink' || A === 'cheer' || A === 'laugh' || A === 'wave' || A === 'point' || A === 'give' || A === 'sad')) {
+      this.leg('L', 1.5, 1.45); this.leg('R', 1.5, 1.45);
+      hipY = -(this.hipM - this.sitH); hipRot = 0;
     }
     if (A === 'idle' && this.carry) { this.arm('L', .1, .05, .2); this.arm('R', .1, .05, .2); }
     this.pose('Spine', spineX * .5, hipRot * .5, leanZ); this.pose('Spine1', spineX * .5, 0, 0); this.pose('Head', headX, headY, 0); this.pose('Hips', 0, hipRot, 0);
