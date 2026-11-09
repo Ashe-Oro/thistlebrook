@@ -125,7 +125,7 @@ let last = performance.now(), fpsAvg = 60, simMsAvg = 0;
 function start() {
   ui = new UI(api, document.body);
   sim.on('sound', (k: string, x: number, z: number) => sound.play(k, Math.max(0, 1 - Math.hypot(x - controls.target.x, z - controls.target.z) / 40)));
-  sim.on('dawn', () => { const p = director.papers[director.papers.length - 1]; if (p && ui.autoPaper && !params.has('nopaper')) { ui.showPaper(p); setTimeout(() => { if (ui.modal.querySelector('.paper')) ui.closeModal(); }, 9000); } });
+  sim.on('dawn', () => { const p = director.papers[director.papers.length - 1]; if (p && ui.autoPaper && !params.has('nopaper')) { ui.showPaper(p); setTimeout(() => { if (ui.modal.querySelector('.paper')) ui.closeModal(); }, 20000); } });
   loading.classList.add('done'); setTimeout(() => loading.remove(), 900);
   requestAnimationFrame(frame);
 }

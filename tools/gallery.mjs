@@ -55,7 +55,7 @@ for (const [k, n] of [['web', '14_relationship_web'], ['recap', '15_recap'], ['v
 // God powers
 await run('terrarium.god("festival")'); await run('terrarium.setSpeed(4)'); await wait(3500); await run('terrarium.setSpeed(1); terrarium.look(-9,5,22,.5,.55)'); await wait(3000); await shot('17_festival');
 await ffTo(48 + 18.5); await run('terrarium.god("traveller")'); await run('terrarium.setSpeed(4)'); await wait(3500); await run('terrarium.setSpeed(1); terrarium.look(-17.5, 2.6, 12, 1.35, .42)'); await wait(2500); await shot('18_storyteller');
-await ffTo(72 + 10); await run('terrarium.god("rain")'); await wait(4500); await run('terrarium.look(-9,0,30,.6,.6)'); await wait(2500); await shot('19_rain');
+await ffTo(72 + 10); await run('terrarium.god("rain"); terrarium.fastForward(45)'); await wait(3500); await run('terrarium.look(-9,0,30,.6,.6)'); await wait(2500); await shot('19_rain');
 // Scuffle: two villagers who dislike each other, staged next to each other
 await ffTo(72 + 14); await run(`const S=terrarium.sim; let best=null; for (const a of S.villagers) for (const c of S.villagers) if (a!==c && !a.inside && !c.inside && (!best || (a.opinion[c.id]??0) < (best[0].opinion[best[1].id]??0))) best=[a,c]; const [a,c]=best; c.x=a.x+1.2; c.z=a.z; S.startFight(a,c,a.first+' finally had it out with '+c.first); terrarium.look(a.x,a.z,9,.6,.45); return [a.id,c.id]`);
 await wait(1500); await shot('20_scuffle'); await wait(2500); await shot('21_scuffle_after');
