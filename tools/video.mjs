@@ -19,12 +19,12 @@ await p.addInitScript(() => {
   window.__step = (ms) => { const end = vt + ms; for (;;) { timers.sort((a, b) => a.at - b.at); const t = timers[0]; if (!t || t.at > end) break; timers.shift(); vt = Math.max(vt, t.at); try { t.f(...t.a); } catch (e) { console.error(e); } } vt = end; const c = rafs; rafs = []; for (const f of c) { try { f(vt); } catch (e) { console.error(e); } } };
   window.__pump = () => { window.__step(16); return realNow(); };
 });
-let frameN = 0, recording = false; const FPS = 30;
+let frameN = 0, recording = false; const FPS = 24; let cdp;
 p.on('pageerror', e => errs.push(e.message)); p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
 await p.goto('http://127.0.0.1:5184/?nopaper&capture&seed=' + (process.env.SEED || 7)); for (let k = 0; k < 4000; k++) { const ok = await p.evaluate(() => { for (let i = 0; i < 5; i++) window.__step(16); return !!(window.terrarium && document.querySelector('.loading.done')); }); if (ok) break; }
 await p.evaluate(() => { for (let i = 0; i < 60; i++) window.__step(16); });
 const run = async (code, arg) => p.evaluate(async ([c, a]) => { const F = Object.getPrototypeOf(async function () {}).constructor; return await new F('arg', c)(a); }, [code, arg]);
-const wait = async ms => { const n = Math.max(1, Math.round(ms / 1000 * FPS)); for (let k = 0; k < n; k++) { await p.evaluate(d => window.__step(d), 1000 / FPS); if (recording) await p.screenshot({ path: `${TMP}/f${String(frameN++).padStart(5, '0')}.jpg`, type: 'jpeg', quality: 90 }); } };
+const wait = async ms => { const n = Math.max(1, Math.round(ms / 1000 * FPS)); for (let k = 0; k < n; k++) { await p.evaluate(d => window.__step(d), 1000 / FPS); if (recording) { cdp ??= await ctx.newCDPSession(p); const r = await cdp.send('Page.captureScreenshot', { format: 'jpeg', quality: 90, optimizeForSpeed: true }); fs.writeFileSync(`${TMP}/f${String(frameN++).padStart(5, '0')}.jpg`, Buffer.from(r.data, 'base64')); } } };
 const ffTo = h => run(`const S=terrarium.sim; while (S.clock < ${h * 60}) terrarium.fastForward(Math.min(60, ${h * 60} - S.clock + .01));`);
 // cinematic helpers living in the page: caption lower-third and a slow camera glide
 await run(`
