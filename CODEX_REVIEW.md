@@ -1,3 +1,5 @@
+> **Round 2 status (Nov 9, 2026, 4:31 PM ET):** the round-2 Codex critique could not run. `codex exec` returned "You've hit your usage limit … try again at Nov 11th, 2026 5:14 AM" (it also logged an expired auth token). The round-1 Codex review below is unchanged. Round 2's perf and wow work followed CLAUDE_REVIEW.md (round 2) plus our own profiling (tools/perf.mjs).
+
 Thistlebrook already has an appealing miniature-village identity: the architecture, parchment UI, and campfire lighting make it inviting to watch. Its strongest emerging story—Jen’s thefts, damaged reputation, and unreturned affection—is more compelling in the chronicle than in the world, where framing, broken portraits, and ambiguous reactions hide the causes and consequences. Prioritize reliable character presentation, readable event staging, and causal storytelling before adding more systems; this was a read-only review, `licensed/` was excluded, and `verify-report.json` was absent.
 
 ## Top 15 suggestions
