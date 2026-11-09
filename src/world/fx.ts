@@ -62,20 +62,20 @@ export class FX {
       void main(){
         vUv = uv;
         float age = fract(seed.y + time * ${splash ? '1.8' : '.85'});
-        vec3 center = vec3((seed.x-.5)*76., ${splash ? '.035' : '(1.-age)*28.'}, (seed.z-.5)*76.);
+        vec3 center = vec3((seed.x-.5)*${splash ? '40.' : '64.'}, ${splash ? '.035' : '(1.-age)*24.'}, (seed.z-.5)*${splash ? '40.' : '64.'});
         ${splash ? 'float radius = .08 + age * .38; center.xz += position.xy * radius * 2.; fade = (1.-age)*(1.-age); gl_Position = projectionMatrix * modelViewMatrix * vec4(center,1.);' : `center.x += (1.-age)*2.4;
         vec4 mv = modelViewMatrix * vec4(center,1.);
         vec3 streak = mat3(modelViewMatrix) * vec3(.12,1.1,.04);
-        mv.xyz += streak * position.y; mv.x += position.x * .085;
+        mv.xyz += streak * position.y * 1.25; mv.x += position.x * max(.05, -mv.z * .0045);
         fade = smoothstep(0.,.08,age)*(1.-smoothstep(.85,1.,age));
         gl_Position = projectionMatrix * mv;`}
       }`,
       fragmentShader: `uniform float strength; varying vec2 vUv; varying float fade;
       void main(){ ${splash ? 'float d = length(vUv-.5); float a = (1.-smoothstep(.44,.5,d))*smoothstep(.33,.4,d);' : 'float a = (1.-abs(vUv.x-.5)*2.) * sin(vUv.y*3.14159);'}
-      gl_FragColor = vec4(.72,.85,1.,a*fade*strength*${splash ? '.45' : '.78'}); }`
+      gl_FragColor = vec4(.8,.9,1.,min(1.,a*fade*strength*${splash ? '.6' : '1.25'})); }`
     });
-    this.rain = new THREE.Mesh(geometry(1100), material(false));
-    this.splashes = new THREE.Mesh(geometry(180), material(true));
+    this.rain = new THREE.Mesh(geometry(2600), material(false));
+    this.splashes = new THREE.Mesh(geometry(260), material(true));
     this.rain.frustumCulled = this.splashes.frustumCulled = false;
     scene.add(this.rain, this.splashes);
   }
@@ -97,7 +97,7 @@ export class FX {
     let n = 0;
     for (const c of this.coinState) { c.life += dt; if (c.life > 1.6) continue; c.vy -= 11 * dt; c.x += c.vx * dt; c.y += c.vy * dt; c.z += c.vz * dt; if (c.y < .05) { c.y = .05; c.vy *= -.4; } this.dummy.position.set(c.x, c.y, c.z); this.dummy.rotation.set(0, c.spin + c.life * 12, 0); const s = c.life > 1.3 ? (1.6 - c.life) / .3 : 1; this.dummy.scale.setScalar(s); this.dummy.updateMatrix(); this.coins.setMatrixAt(n++, this.dummy.matrix); }
     let alive = 0; for (const c of this.coinState) if (c.life <= 1.6) this.coinState[alive++] = c; this.coinState.length = alive; this.coins.count = n; if (n) this.coins.instanceMatrix.needsUpdate = true;
-    this.rainOn += (this.rainTarget - this.rainOn) * Math.min(1, dt * .5);
+    this.rainOn += (this.rainTarget - this.rainOn) * Math.min(1, dt * 1.2);
     this.weather.time.value = this.t; this.weather.strength.value = this.rainOn;
     this.rain.visible = this.splashes.visible = this.rainOn > .02;
     // Snap the weather volume so small camera pans do not drag every drop.

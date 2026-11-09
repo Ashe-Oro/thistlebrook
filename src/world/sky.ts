@@ -36,7 +36,7 @@ export class Sky {
     this.top.copy(ca[0]).lerp(cb[0], t).lerp(this.grey, rain * .6);
     this.bot.copy(ca[1]).lerp(cb[1], t).lerp(this.grey, rain * .5);
     const sunCol = this.sunTint.copy(ca[2]).lerp(cb[2], t);
-    const sunI = lerp(a[4], b[4], t) * (1 - rain * .55), hemiI = lerp(a[5], b[5], t) * (1 - rain * .2);
+    const sunI = lerp(a[4], b[4], t) * (1 - rain * .78), hemiI = lerp(a[5], b[5], t) * (1 - rain * .28);
     const day = hour > 6 && hour < 19.5; this.night = clamp(hour < 12 ? (6.5 - hour) / 1.5 : (hour - 18.5) / 1.5);
     // Sun by day, moon by night (both from the south-ish so the default camera sees lit fronts).
     const ang = day ? (hour - 6) / 13.5 * Math.PI : ((hour + 24 - 19.5) % 24) / 10.5 * Math.PI;
@@ -45,6 +45,6 @@ export class Sky {
     this.hemi.color.set('#eaf4ff').lerp(this.nightSky, this.night * .8); this.hemi.groundColor.set('#56663f').lerp(this.nightGround, this.night);
     this.stars.visible = this.night > .01 && rain < .99;
     (this.stars.material as THREE.PointsMaterial).opacity = this.night * (1 - rain) * .8;
-    (this.scene.fog as THREE.Fog).color.copy(this.bot); this.dome.position.copy(focus); this.stars.position.copy(focus);
+    { const f = this.scene.fog as THREE.Fog; f.color.copy(this.bot); f.near = lerp(90, 35, rain); f.far = lerp(230, 150, rain); } this.dome.position.copy(focus); this.stars.position.copy(focus);
   }
 }
