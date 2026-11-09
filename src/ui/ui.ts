@@ -52,8 +52,8 @@ export class UI {
     if (matchMedia('(max-width: 700px), (pointer: coarse)').matches) ftog.click(); // phones start with the chronicle folded to a one-line strip
     this.card = h('div', 'card hidden'); r.appendChild(this.card);
     this.lb = h('div', 'lb'); r.appendChild(this.lb);
-    const dock = h('div', 'dock'); dock.innerHTML = `<div class="grp"><span class="lbl">God powers</span><button data-g="gift">🎁<i>Drop gift</i></button><button data-g="rain">🌧️<i>Rain</i></button><button data-g="traveller">🧳<i>Traveller</i></button><button data-g="festival">🎪<i>Festival</i></button></div>
-      <div class="grp"><span class="lbl">Views</span><button data-v="web">🕸️<i>Relationships</i></button><button data-v="paper">📰<i>Gazette</i></button><button data-v="recap">📈<i>Recap</i></button><button data-v="villagers">👥<i>Villagers</i></button></div>`;
+    const dock = h('div', 'dock'); dock.innerHTML = `<div class="grp"><span class="lbl">God powers</span><button data-g="gift">🎁<i>Drop gift</i><b class="s">Gift</b></button><button data-g="rain">🌧️<i>Rain</i><b class="s">Rain</b></button><button data-g="traveller">🧳<i>Traveller</i><b class="s">Visitor</b></button><button data-g="festival">🎪<i>Festival</i><b class="s">Fest</b></button></div>
+      <div class="grp"><span class="lbl">Views</span><button data-v="web">🕸️<i>Relationships</i><b class="s">Web</b></button><button data-v="paper">📰<i>Gazette</i><b class="s">Paper</b></button><button data-v="recap">📈<i>Recap</i><b class="s">Recap</b></button><button data-v="villagers">👥<i>Villagers</i><b class="s">People</b></button></div>`;
     r.appendChild(dock);
     // god powers cool down (a sweep fills the button) so spamming can't flood the chronicle
     const COOL: Record<string, number> = { gift: 8, rain: 25, traveller: 30, festival: 30 };
@@ -70,7 +70,7 @@ export class UI {
     const measure = () => { this.root.style.setProperty('--top-h', `${top.offsetHeight}px`); this.root.style.setProperty('--dock-h', `${dock.offsetHeight}px`); };
     addEventListener('resize', measure); requestAnimationFrame(measure); setTimeout(measure, 500);
     // first-visit tip: goes away on the first villager click (or when tapped)
-    if (!localStorage.getItem('thistlebrook.hinted')) { const hint = h('div', 'hint', '👆 Click a villager to read their mind'); hint.onclick = () => hint.classList.add('gone'); r.appendChild(hint); this.hint = hint; }
+    if (!localStorage.getItem('thistlebrook.hinted')) { const hint = h('div', 'hint', '👆 Click a villager to read their mind'); hint.onclick = () => hint.classList.add('gone'); r.appendChild(hint); this.hint = hint; setTimeout(() => hint.classList.add('gone'), 45000); }
     window.addEventListener('keydown', e => { if (e.key === 'Escape') { this.closeModal(); this.app.select(null); } if (e.key === ' ') { this.app.togglePause(); e.preventDefault(); } });
   }
   name(id: string) { const v = this.app.sim.byId.get(id); return v ? `<a class="nm" data-id="${id}" style="--c:${VCOLOR[id]}">${v.first}</a>` : id; }
@@ -188,7 +188,7 @@ export class UI {
     this.icons = this.icons.filter(ic => { if (ic.t > 2.2) { ic.el.remove(); return false; } return true; });
     this.cardT -= dt; if (this.cardT <= 0) { this.cardT = .35; setHTML(this.clock, `<b>Day ${s.day}</b> · ${fmtTime(s.clock)} ${s.rain > .4 ? '🌧️' : s.hour >= 20 || s.hour < 6 ? '🌙' : s.hour < 8 ? '🌅' : '☀️'}${s.festivalUntil > s.clock ? ' 🎪' : ''}${s.visitorUntil > s.clock ? ' 🧳' : ''}`);
       this.measureChrome();
-      this.root.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach(b => b.classList.toggle('on', +b.dataset.speed! === this.app.speed)); (this.root.querySelector('#mode') as HTMLElement).textContent = this.app.mode === 'director' ? '🎬 Director' : '🕹️ Free cam';
+      this.root.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach(b => b.classList.toggle('on', +b.dataset.speed! === this.app.speed)); { const m = this.root.querySelector('#mode') as HTMLElement, html = this.app.mode === 'director' ? '🎬<span> Director</span>' : '🕹️<span> Free cam</span>'; if (m.innerHTML !== html) m.innerHTML = html; }
       this.renderCard(); this.renderLB();
       { const r = this.card.classList.contains('hidden') ? null : this.card.getBoundingClientRect(); this.cardRect = r && r.width ? { l: r.left, r: r.right, t: r.top, b: r.bottom } : null; } }
   }

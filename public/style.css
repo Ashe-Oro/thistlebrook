@@ -166,3 +166,28 @@ body.intro .feedwrap, body.intro .lb, body.intro .card, body.intro .dock, body.i
 }
 @media (orientation: landscape) and (max-height: 500px) { .feedwrap { max-height: 34vh; } .card { max-height: 70vh; } }
 .sheet.web canvas { display: block; margin: 0 auto; height: min(560px, calc(88vh - 160px)); width: auto; max-width: 100%; }
+.dock button b.s { display: none; }
+@media (max-width: 700px), (pointer: coarse) {
+  /* one-row top bar: logo, clock, ⏸ 1× 16×, icon toggles */
+  .topbar { flex-wrap: nowrap; gap: 4px; padding: 4px 6px; }
+  .brand > div, .brand small { display: none; } .brand .logo { font-size: 18px; }
+  .clock { font-size: 12px; padding: 3px 6px; white-space: nowrap; }
+  .speeds { gap: 3px; } .speeds button[data-speed="4"] { display: none; }
+  .speeds button, .toggles button, .topbar button { min-width: 40px; padding: 0 6px; }
+  .toggles { gap: 3px; } #mode span { display: none; }
+  /* one-row dock with short labels */
+  .dock { flex-wrap: nowrap; gap: 3px; padding: 4px; left: 4px; right: 4px; } .dock .grp { gap: 3px; }
+  .dock button { min-width: 0; flex: 1 1 0; padding: 4px 2px; font-size: 18px; min-height: 48px; }
+  .dock button i { display: none; } .dock button b.s { display: block; font-size: 9.5px; font-weight: 600; margin-top: 2px; opacity: .85; }
+  .dock .grp { flex: 1 1 0; display: flex; }
+  /* compact villager sheet: small portrait, no trait chips, needs as slim bars */
+  .card { padding: 10px 12px; max-height: 46vh; } .card .pt { width: 56px; height: 56px; }
+  .card .traits { display: none; } .card .need { margin: 1px 0; font-size: 11px; } .card .thought { margin: 6px 0 4px; padding: 6px 10px; font-size: 13px; }
+  .card .nmb { font-size: 18px; } .card .gl, .card .jb { font-size: 11.5px; }
+  .card .tabs { position: sticky; top: -10px; z-index: 1; background: inherit; }
+}
+@media (max-width: 700px), (pointer: coarse) {
+  .brand { display: none; } .topbar { left: 4px; right: 4px; justify-content: space-between; } .clock { font-size: 11.5px; }
+  .card .need { display: none; } .card .doing { margin: 0 0 4px; font-size: 12.5px; }
+}
+@media (max-width: 700px), (pointer: coarse) { .paper .cols p { text-align: left; } .paper .dateline { letter-spacing: 1px; } }
