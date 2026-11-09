@@ -193,7 +193,16 @@ function startBeat(e: SimEvent, force = false) {
   return true;
 }
 function endBeat() { if (!beat) return; const b = beat; beat = null; cine.classList.remove('on'); beatCool = performance.now() + 9000; if (mode === 'director') { follow = b.ids[0] ?? null; if (b.fixed) focusPoint(b.fixed[0], b.fixed[1], 16); director.focus = { id: b.ids[0] ?? null, until: sim.clock + 30, reason: b.e.text }; } }
-const bT = new THREE.Vector3(), bP = new THREE.Vector3();
+const bT = new THREE.Vector3(), bP = new THREE.Vector3(), rc = new THREE.Raycaster(), rDir = new THREE.Vector3();
+// pick a yaw offset whose camera spot has a clear line of sight to the subject (no walls, trees or stalls in the way)
+function clearYaw(yaw: number, dist: number, h: number): number {
+  for (const off of [0, .45, -.45, .9, -.9, Math.PI, Math.PI + .5, Math.PI - .5, 1.4, -1.4]) {
+    bP.set(bT.x + Math.sin(yaw + off) * dist, h + bT.y * .3, bT.z + Math.cos(yaw + off) * dist); rDir.copy(bP).sub(bT); const L = rDir.length(); rDir.divideScalar(L);
+    rc.set(bT, rDir); rc.far = L + .3; const hit = rc.intersectObjects(scene.children, true).some(i => (i.object as any).isMesh && !(i.object as any).isSkinnedMesh && i.object.visible && i.distance > .9 && !(i.object.parent && (i.object.parent as any).isBone));
+    if (!hit) return off;
+  }
+  return 0;
+}
 function beatCamera(dt: number) {
   if (!beat) return; const b = beat; b.t += dt; if (b.t >= b.dur || mode !== 'director' || selected) { endBeat(); return; }
   const vs = b.ids.map(id => sim.byId.get(id)!).filter(v => v && !v.inside);
@@ -202,6 +211,7 @@ function beatCamera(dt: number) {
   else if (vs.length >= 2) { const [a, c] = vs; bT.set((a.x + c.x) / 2, 1.15, (a.z + c.z) / 2); const line = Math.atan2(c.x - a.x, c.z - a.z); let p = line + Math.PI / 2; if (Math.cos(p - b.side) < 0) p += Math.PI; yaw = p + .25 + b.t * .03; dist = Math.max(4.8, Math.hypot(c.x - a.x, c.z - a.z) * 1.5 + 5.4) - b.t * .22; h = 1.9; }
   else if (vs.length) { const a = vs[0]; bT.set(a.x, 1.2, a.z); yaw = a.avatar.heading + .55 + b.t * .04; dist = 5.2 - b.t * .2; h = 1.75; }
   else { endBeat(); return; }
+  if ((b as any).yawOff === undefined) (b as any).yawOff = clearYaw(yaw, dist, h); yaw += (b as any).yawOff;
   bP.set(bT.x + Math.sin(yaw) * dist, h + bT.y * .3, bT.z + Math.cos(yaw) * dist);
   const k = Math.min(1, b.t / .9), e = k * k * (3 - 2 * k); // ease in from where the camera was
   controls.target.lerpVectors(b.from.t, bT, e); camera.position.lerpVectors(b.from.p, bP, e);
