@@ -18,6 +18,7 @@ function sim0(v: Villager, s: any) { const f = s.villagers.filter((u: Villager) 
 const cleanLie = (t: string) => t.replace(/\s*\(It isn't true\.\)/gi, '').replace(/\.\s*,/g, ',').replace(/\s+/g, ' ').trim();
 export class UI {
   root: HTMLElement; feed!: HTMLElement; card!: HTMLElement; clock!: HTMLElement; overlay!: HTMLElement; toasts!: HTMLElement; caption!: HTMLElement; lb!: HTMLElement; modal!: HTMLElement;
+  marks: { el: HTMLElement; x: number; z: number }[] = []; markT = 0;
   tags = new Map<string, HTMLElement>(); bubbles = new Map<string, { el: HTMLElement; until: number }>(); icons: { el: HTMLElement; id: string; t: number }[] = []; convo: { who: string; text: string; emoji: string; at: number }[] = [];
   tab = 'rel'; cardT = 0; lbKind: 'popularity' | 'power' | 'mischief' = 'popularity'; feedFilter = 'all'; autoPaper = true;
   feedDay = 0; safeTop = 70;
@@ -54,6 +55,9 @@ export class UI {
     dock.querySelectorAll<HTMLButtonElement>('[data-v]').forEach(b => b.onclick = () => this.view(b.dataset.v!));
     this.overlay = h('div', 'overlay'); r.appendChild(this.overlay); this.toasts = h('div', 'toasts'); r.appendChild(this.toasts); this.caption = h('div', 'caption'); r.appendChild(this.caption);
     this.modal = h('div', 'modal hidden'); r.appendChild(this.modal); this.modal.onclick = (e) => { if (e.target === this.modal) this.closeModal(); };
+    // landmark labels: shown when the camera pulls back far enough to see the whole village
+    const PIC: Record<string, string> = { bakery: '🥖', store: '✉️', tavern: '🍺', smithy: '⚒️', market: '🧺', well: '🪣', field: '🌾', coop: '🐔', orchard: '🍎', forest: '🌲', quarry: '⛏️', campfire: '🔥', plaza: '⛲', pond: '🦆', barn: '🐄', chapel: '⛪', windmill: '🌬️', pasture: '🐑' };
+    for (const pl of this.app.sim.world.places.values() as Iterable<any>) { if (!PIC[pl.kind]) continue; const el = h('div', 'landmark', `<i>${PIC[pl.kind]}</i>${esc(pl.name.replace(/^the /, ''))}`); el.style.display = 'none'; this.overlay.appendChild(el); this.marks.push({ el, x: pl.x, z: pl.z }); }
     for (const v of this.app.sim.villagers) { const t = h('div', 'tag', `<span style="background:${VCOLOR[v.id]}"></span>${v.first}`); t.onclick = () => this.app.select(v.id); this.overlay.appendChild(t); this.tags.set(v.id, t); }
     window.addEventListener('keydown', e => { if (e.key === 'Escape') { this.closeModal(); this.app.select(null); } if (e.key === ' ') { this.app.setSpeed(this.app.speed ? 0 : 1); e.preventDefault(); } });
   }
@@ -118,6 +122,7 @@ export class UI {
     while (this.convo.length && this.convo[0].at <= s.clock) { const c = this.convo.shift()!; const v = s.byId.get(c.who); if (v && !v.inside) this.bubble(c.who, c.text, c.emoji, 3); }
     if (this.convo.length > 60) this.convo.splice(0, this.convo.length - 60);
     const close = this.app.camDist() < 30, W = window.innerWidth, HT = this.safeTop;
+    { const far = this.app.camDist() > 42; this.markT += dt; for (const m of this.marks) { if (!far) { this.setDisp(m.el, false); continue; } const p = this.app.project(m.x, 5, m.z); const on = p.on && p.y > HT + 10; this.setDisp(m.el, on); if (on) m.el.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, -100%)`; } }
     for (const v of s.villagers) {
       const pos = v.avatar.root.position, hh = v.avatar.height, tag = this.tags.get(v.id)!, p = this.app.project(pos.x, hh + .55, pos.z);
       const vis = p.on && !v.inside && v.avatar.alpha > .3;
