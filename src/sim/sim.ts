@@ -131,7 +131,7 @@ export class Sim {
     if (this.clock > this.nextWeather) { this.nextWeather = this.clock + this.rng.range(8, 20) * 60; if (this.rain < .5 && this.rng.chance(.3)) this.startRain(this.rng.range(90, 200)); }
     const target = this.clock < this.rainUntil ? 1 : 0; this.rain += (target - this.rain) * Math.min(1, gdt / 30);
   }
-  startRain(mins: number, byViewer = false) { this.rainUntil = this.clock + mins; this.log(byViewer ? 'A summoned storm rolled over Thistlebrook. Everyone ran for cover.' : 'Rain clouds rolled in over Thistlebrook.', byViewer ? 6 : 3, [], 'weather', '🌧️', -9, 0); for (const v of this.villagers) { v.replan = true; if (!v.inside) { v.emotions.sadness += .2; } } }
+  startRain(mins: number, byViewer = false) { this.rainUntil = this.clock + mins; this.log(byViewer ? 'A summoned storm rolled over Thistlebrook. Villagers scurried for shelter.' : 'Rain clouds rolled in over Thistlebrook.', byViewer ? 6 : 3, [], 'weather', '🌧️', -9, 0); for (const v of this.villagers) { v.replan = true; if (!v.inside) { v.emotions.sadness += .2; } } }
 
   tickVillager(v: Villager, dt: number, gdt: number) {
     const n = v.needs, asleep = v.inside && v.doing === 'sleeping';
@@ -152,7 +152,7 @@ export class Sim {
         else if ((a.type === 'enter' && v.doing !== 'sleeping') || a.type === 'sit') { a.interrupt = true; v.queue = []; } } }
     if (this.clock < v.busyUntil) { v.anim = v.anim === 'walk' || v.anim === 'run' ? 'talk' : v.anim; return; }
     if (!v.act) { v.act = v.queue.shift() ?? null; if (!v.act) { this.brain.choose(v, this); v.act = v.queue.shift() ?? null; } if (v.act) { v.act.t = 0; v.doing = v.act.label; } }
-    if (v.act) { const done = this.run(v, v.act, dt, gdt); if (done) { v.act = null; } }
+    if (v.act) { const cur = v.act; const done = this.run(v, cur, dt, gdt); if (done && v.act === cur) { v.act = null; } }
   }
 
   // ---- action executor ------------------------------------------------------------------------
@@ -184,7 +184,7 @@ export class Sim {
         if (a.t > 50 || t.inside) { this.say(v, 'Coward! I know it was you!', '💢'); v.emotions.anger = 1; this.log(`${t.first} got away from ${v.first}.`, 5, [t.id, v.id], 'theft', '💨'); return true; }
         return false;
       }
-      case 'fight': { v.anim = 'fight'; if (a.t >= a.dur) return true; if (Math.random() < dt * 6) this.world.fx.dust(v.x + (Math.random() - .5), v.z + (Math.random() - .5), 3, 1.1); return false; }
+      case 'fight': { v.anim = 'fight'; if (a.t >= a.dur) { a.outcome?.(); return true; } if (Math.random() < dt * 4) this.world.fx.dust(v.x + (Math.random() - .5) * 1.4, v.z + (Math.random() - .5) * 1.4, 2, .8); return false; }
       case 'attend': return this.attend(v, a, dt, walk);
       case 'claim': {
         const g = this.gifts.find(x => x === a.gift); if (!g || g.claimedBy) { if (g?.claimedBy && g.claimedBy !== v.id) { v.emotions.sadness += .2; v.emotions.anger += .2; this.say(v, 'Aww, too slow!', '😤', 2); } return true; }
@@ -206,6 +206,8 @@ export class Sim {
     const W = this.world, fx = W.fx, av = v.avatar;
     if (!a._at) { if (!walk(a.x, a.z, .35)) return false; a._at = 1; v.heading = Math.atan2(a.fx - v.x, a.fz - v.z); av.onHit = null; }
     v.heading = Math.atan2(a.fx - v.x, a.fz - v.z);
+    if (!a._quip && a.t > 8) { a._quip = 1; const Q: Record<string, string[]> = { chop: ['Timber! ...just kidding.', 'Swing, and swing again.', 'Good honest oak, this.'], mine: ['Clink. Clink. Clink.', 'Something sparkly in here...', 'Solid rock, solid work.'], forge: ['Hot iron waits for no one!', 'Mind the sparks!', 'Clang! Lovely.'], forge0: ['Bellows, do your thing.'], tend: ['Grow, my beauties.', 'Who planted weeds here?!'], water: ['Drink up, little sprouts.'], feed: ['Here, chook chook chook!', 'One at a time, ladies!'], serve: ['Who\u2019s thirsty?', 'Another round?'], sort: ['Letters for half the village today!', 'Who writes to a goat?', 'This one smells of perfume...'], bake: ['Mind the oven, it\u2019s hot!', 'Smell that? Fresh loaves!'] };
+      const q = Q[a.kind]; if (q && this.rng.chance(.45)) this.say(v, this.rng.pick(q), '', 2.6); }
     // strikes are driven by game time (not by animation frames) so work output is identical at any speed or headless
     const strike = (every: number) => { a._h = (a._h ?? 0) + gdtW; if (a._h >= every) { a._h -= every; av.onHit?.(); av.phase = Math.floor(av.phase / 1.35) * 1.35 + 1.2; } };
     const amb = (text: string, icon: string) => { if (this.rng.chance(.35)) this.log(text, 1, [v.id], 'work', icon); };
@@ -261,14 +263,24 @@ export class Sim {
   }
   startFight(a: Villager, b: Villager, why: string) {
     for (const x of [a, b]) { x.act = { type: 'fight', dur: 14, t: 0, label: 'scuffling', target: x === a ? b.id : a.id, locked: true }; x.queue = []; x.path = null; x.emotions.anger = 1; this.leaveSeat(x); }
+    { // square off on clear ground (not wrapped around a lamp post), about an arm's length apart
+      const nav = this.world.nav, cx = (a.x + b.x) / 2, cz = (a.z + b.z) / 2; let dx = b.x - a.x, dz = b.z - a.z; const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
+      const ok = (x: number, z: number) => nav.isFree(x - dx * .8, z - dz * .8) && nav.isFree(x + dx * .8, z + dz * .8) && nav.isFree(x - dz * .8, z + dx * .8) && nav.isFree(x + dz * .8, z - dx * .8) && nav.isFree(x, z);
+      let best: [number, number] | null = ok(cx, cz) ? [cx, cz] : null;
+      for (let r = .5; !best && r < 6; r += .5) for (let k = 0; k < 12 && !best; k++) { const t = k / 12 * Math.PI * 2, x = cx + Math.cos(t) * r, z = cz + Math.sin(t) * r; if (ok(x, z)) best = [x, z]; }
+      if (best) { a.x = best[0] - dx * .55; a.z = best[1] - dz * .55; b.x = best[0] + dx * .55; b.z = best[1] + dz * .55; }
+    }
     a.heading = Math.atan2(b.x - a.x, b.z - a.z); b.heading = Math.atan2(a.x - b.x, a.z - b.z); a.avatar.targetHeading = a.heading; b.avatar.targetHeading = b.heading;
-    const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2; this.world.fx.dust(mx, mz, 30, 1.6); this.emit('sound', 'scuffle', mx, mz);
+    const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2; this.world.fx.dust(mx, mz, 14, 1.2); this.emit('sound', 'scuffle', mx, mz);
     this.say(a, this.rng.pick(['That\u2019s it!', 'You asked for it!', 'Come here!']), '💢'); this.say(b, this.rng.pick(['Get off me!', 'Hey!', 'Oof!']), '💥');
     const sa = a.traits.bravery + a.def.height * .3 + this.rng.range(0, .6), sb = b.traits.bravery + b.def.height * .3 + this.rng.range(0, .6), [w, l] = sa >= sb ? [a, b] : [b, a];
-    const ev = this.log(`${why}. A cloud of dust later, ${w.first} came out on top.`, 8, [a.id, b.id], 'fight', '💥', mx, mz);
+    const ev = this.log(`${why}. Fists and dust are flying!`, 8, [a.id, b.id], 'fight', '💥', mx, mz);
     a.stats.fights++; b.stats.fights++; this.achieve(null, 'first-fight', 'Village Brawl', `${a.first} vs ${b.first}`);
-    this.dizzy.set(l.id, this.clock + 60); l.emotions.sadness = .7; l.emotions.anger = .8; w.emotions.joy = .4;
-    l.queue.push({ type: 'idle', anim: 'sad', dur: 20, t: 0, label: 'nursing bruised pride' });
+    a.act!.outcome = () => { // the result lands when the dust settles, not before
+      this.log(`The dust settled: ${w.first} came out on top, and ${l.first} limped off with bruised pride.`, 7, [w.id, l.id], 'fight', '🏆', l.x, l.z);
+      this.dizzy.set(l.id, this.clock + 60); l.emotions.sadness = .7; l.emotions.anger = .8; w.emotions.joy = .4; this.icon(w, '😤'); this.icon(l, '😵');
+      l.queue.push({ type: 'idle', anim: 'sad', dur: 20, t: 0, label: 'nursing bruised pride' });
+    };
     const f = this.fact('deed', `${a.first} and ${b.first} came to blows (${w.first} won)`, a.id, b.id, -.6, 7, b.id); (f as any).label = 'the brawl';
     this.witness(`${a.first} and ${b.first} got into a fight`, 7, [a.id, b.id], { [a.id]: -.8, [b.id]: -.8, '*': -.3 }, mx, mz, f, 16);
     a.opinion[b.id] = Math.max(-100, (a.opinion[b.id] ?? 0) - 20); b.opinion[a.id] = Math.max(-100, (b.opinion[a.id] ?? 0) - 20);
@@ -285,7 +297,7 @@ export class Sim {
       for (const id of p.invited) { const v = this.byId.get(id)!; if (p.attendees.has(id) || v.act?.type === 'attend' || v.act?.locked) continue;
         if (!(p as any).decided) (p as any).decided = new Map<string, boolean>(); const dec = (p as any).decided as Map<string, boolean>;
         if (!dec.has(id)) dec.set(id, id === p.host || this.festivalUntil > this.clock || this.rng.chance(.35 + v.traits.sociability * .45 + (v.opinion[p.host] ?? 0) / 120 - (v.needs.energy < 25 ? .3 : 0)));
-        if (dec.get(id)) { if (v.act && v.act.type !== 'enter') { this.leaveSeat(v); } if (v.act?.type === 'enter' && v.doing === 'sleeping') continue; v.act = null; v.queue = [{ type: 'attend', party: p.id, t: 0, label: `at ${p.title}` }]; } }
+        if (dec.get(id)) { if (v.act && v.act.type !== 'enter') { this.leaveSeat(v); } if (v.act?.type === 'enter' && v.doing === 'sleeping') continue; if (v.act?.type === 'enter' && v.act._in) v.act.interrupt = true; else v.act = null; v.queue = [{ type: 'attend', party: p.id, t: 0, label: `at ${p.title}` }]; } }
     }
     if (this.clock >= p.until) {
       p.done = true; const host = this.byId.get(p.host)!; const n = p.attendees.size;

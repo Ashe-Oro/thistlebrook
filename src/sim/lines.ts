@@ -58,7 +58,7 @@ const LIB: Record<string, Variant[]> = {
     'A parcel came for someone today.', 'I’m waiting on a letter myself.', ['Jen reads the mail, you know.', sly],
   ],
   woods: [
-    'Pip’s been felling trees all day.', 'The woods are lovely this time o’ year.', 'Mind the old path, it’s muddy.',
+    'Pip’s been out in the woods all day.', 'The woods are lovely this time o’ year.', 'Mind the old path, it’s muddy.',
     'Heard an owl out past the treeline.', 'Good firewood coming in lately.', ['I don’t go in the woods after dark.', timid],
   ],
   quarry: [
@@ -257,7 +257,10 @@ export function say(sim: Sim, sp: Villager, sit: string, vars: Record<string, st
   const text = typeof chosen === 'string' ? chosen : chosen[0];
   const p = pr(sp);
   const ctx: Record<string, string> = { sub: p.sub, obj: p.obj, pos: p.pos, Sub: p.Sub, ...vars };
-  return text.replace(/\{(\w+)\}/g, (_, k) => ctx[k] ?? '');
+  const h = sim.hour, part = h < 12 ? 'Morning' : h < 17.5 ? 'Afternoon' : 'Evening';
+  let out = text.replace(/\{(\w+)\}/g, (_, k) => ctx[k] ?? '').replace(/\b(Morning|Afternoon|Evening)\b/, part).replace(/\bFine day\b/, sim.rain > .4 ? 'Wet one today' : h >= 19.5 || h < 6 ? 'Fine night' : 'Fine day');
+  if (sit === 'weather' && sim.rain > .4 && !/rain|wet|drizzl|puddle|damp/i.test(out)) out = (['Some rain, eh?', 'Rain’s good for the gardens, at least.', 'I’m soaked to the bone.', 'My boots are full of puddle.'] as string[])[Math.floor(sim.rng.next() * 4)];
+  return out;
 }
 
 // A random piece of village small-talk, flavoured by the speaker.

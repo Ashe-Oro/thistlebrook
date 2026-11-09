@@ -50,7 +50,8 @@ export type { Villager };
 export async function startFestival(sim: Sim) {
   if (sim.festivalUntil > sim.clock) return; await sim.world.setFestival(true); sim.festivalUntil = sim.clock + 200;
   const host = [...sim.villagers].sort((a, b) => sim.popularity(b) - sim.popularity(a))[0];
-  const p = sim.scheduleParty(host, 'the Thistlebrook Festival', 'plaza', sim.clock + 10, 180);
+  if (sim.rainUntil > sim.clock) { sim.rainUntil = sim.clock; sim.log('The clouds parted, as if on cue.', 3, [], 'weather', '🌤️', -9, 5); }
+  const p = sim.scheduleParty(host, 'the Thistlebrook Festival', 'plaza', sim.clock + 1, 180);
   for (const v of sim.villagers) { sim.learnFact(v, p.fact); p.invited.add(v.id); if (v.doing === 'sleeping') continue; sim.icon(v, '🎪'); }
   sim.log(`Festival! Bunting went up over the plaza and ${host.first} was chosen to lead the dancing.`, 7, [host.id], 'festival', '🎪', -9, 5);
 }

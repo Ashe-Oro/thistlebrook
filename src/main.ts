@@ -56,17 +56,26 @@ async function boot() {
 
 let speed = 1, mode: 'director' | 'free' = params.get('cam') === 'free' ? 'free' : 'director', selected: string | null = null; let acc = 0; let follow: string | null = null; let dirT = 0;
 const director = new Director(sim);
-const rt = new THREE.WebGLRenderTarget(192, 192, { colorSpace: THREE.SRGBColorSpace } as any); const pcam = new THREE.PerspectiveCamera(30, 1, .05, 40); const pbuf = new Uint8Array(192 * 192 * 4); const portraits = new Map<string, HTMLCanvasElement>(); const pTime = new Map<string, number>();
+const pcam = new THREE.PerspectiveCamera(15, 1, .3, 40); const portraits = new Map<string, HTMLCanvasElement>(); const pTime = new Map<string, number>();
+// Portraits are shot in a tiny studio scene (cream backdrop, key + fill), so a villager indoors, at night or
+// behind a lamp post still gets a clean, recognisable headshot.
+const pscene = new THREE.Scene(); pscene.background = new THREE.Color('#efe3c8');
+{ pscene.add(new THREE.HemisphereLight('#ffffff', '#b8a07a', 1.7)); const key = new THREE.DirectionalLight('#fff1dc', 2.4); key.position.set(1.6, 2.6, 2.4); pscene.add(key); const fill = new THREE.DirectionalLight('#dfe9ff', .9); fill.position.set(-2, 1.2, 1.5); pscene.add(fill); }
+const pSave = new THREE.Vector3();
 function portrait(id: string) {
   let c = portraits.get(id); if (!c) { c = document.createElement('canvas'); c.width = c.height = 192; c.className = 'portrait'; portraits.set(id, c); }
-  const v = sim.byId.get(id)!; const now = performance.now(); if (v.inside && pTime.has(id)) return c; if (now - (pTime.get(id) ?? 0) < 300) return c; pTime.set(id, now);
-  const head = new THREE.Vector3(); v.avatar.bones.Head.getWorldPosition(head); head.y += .12; const hd = v.avatar.root.rotation.y;
-  const wasVis = v.avatar.root.visible, oldA = v.avatar.alpha; if (!wasVis) { v.avatar.root.visible = true; for (const m of v.avatar.mats) { m.opacity = 1; m.transparent = false; } }
-  pcam.position.set(head.x + Math.sin(hd + .35) * 1.15, head.y + .08, head.z + Math.cos(hd + .35) * 1.15); pcam.lookAt(head.x, head.y - .02, head.z); pcam.updateMatrixWorld();
-  const tags = ui ? null : null; void tags;
-  renderer.setRenderTarget(rt); renderer.render(scene, pcam); renderer.readRenderTargetPixels(rt, 0, 0, 192, 192, pbuf); renderer.setRenderTarget(null);
-  if (!wasVis) { v.avatar.root.visible = false; for (const m of v.avatar.mats) { m.opacity = oldA; m.transparent = true; } }
-  const g = c.getContext('2d')!, img = g.createImageData(192, 192); for (let y = 0; y < 192; y++) img.data.set(pbuf.subarray((191 - y) * 768, (192 - y) * 768), y * 768); g.putImageData(img, 0, 0);
+  const v = sim.byId.get(id)!; const now = performance.now(); if (now - (pTime.get(id) ?? 0) < 400) return c; pTime.set(id, now);
+  const r = v.avatar.root as THREE.Object3D, parent = r.parent, rotY = r.rotation.y, wasVis = r.visible, oldA = v.avatar.alpha; pSave.copy(r.position);
+  ((window as any)._pmain ? scene : pscene).add(r); r.position.set(0, 0, 0); r.rotation.y = 0; r.visible = true; for (const m of v.avatar.mats) { m.opacity = 1; m.transparent = false; } r.updateMatrixWorld(true);
+  const head = new THREE.Vector3(); v.avatar.bones.Head.getWorldPosition(head); head.y += .12;
+  pcam.position.set(Math.sin(.35) * 2.4, head.y + .12, Math.cos(.35) * 2.4); pcam.lookAt(head.x, head.y - .02, head.z); pcam.updateMatrixWorld();
+  // drawn straight into a corner of the main canvas and copied out in the same task (the next main render paints over it);
+  // render targets lose the face decal's blending, which left every portrait with a black face
+  const pr = renderer.getPixelRatio(), cs = 192 / pr, H = renderer.domElement.height;
+  renderer.setScissorTest(true); renderer.setScissor(0, 0, cs, cs); renderer.setViewport(0, 0, cs, cs); const ol = (r as any).getObjectByName('CharacterOutline'); if (ol) ol.visible = false; renderer.render((window as any)._pmain ? scene : pscene, pcam); if (ol) ol.visible = true;
+  (parent ?? scene).add(r); r.position.copy(pSave); r.rotation.y = rotY; r.visible = wasVis; if (oldA < 1) for (const m of v.avatar.mats) { m.opacity = oldA; m.transparent = true; } r.updateMatrixWorld(true);
+  c.getContext('2d')!.drawImage(renderer.domElement, 0, H - 192, 192, 192, 0, 0, 192, 192);
+  renderer.setScissorTest(false); renderer.setViewport(0, 0, renderer.domElement.width / pr, renderer.domElement.height / pr);
   return c;
 }
 const tmpV = new THREE.Vector3();

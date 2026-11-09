@@ -3,9 +3,9 @@ import { clamp, lerp } from '../core/util';
 // Day/night cycle + weather: sun arc, hemisphere tint, gradient sky dome, stars, fog.
 const KEYS: [number, string, string, string, number, number][] = [
   // hour, skyTop, skyBottom, sunColor, sunIntensity, hemi
-  [0, '#0b1430', '#1d2b52', '#9fb4ff', 0.65, .72], [5, '#1a2350', '#5a4f7a', '#ff9e6b', 0.45, .58], [6.5, '#6f9fd8', '#ffc08a', '#ffb070', 1.4, .85],
-  [9, '#5fa0e0', '#cfe6f5', '#fff1d6', 2.6, 1.15], [15, '#5a9be0', '#d4e9f5', '#fff4dd', 2.7, 1.15], [18, '#6d86c8', '#ffb07a', '#ff9a55', 1.6, .85],
-  [19.5, '#2b2f66', '#c06a6a', '#ff7a45', .55, .62], [21, '#0f1838', '#2a2f5a', '#9fb4ff', .65, .72], [24, '#0b1430', '#1d2b52', '#9fb4ff', 0.65, .72],
+  [0, '#0b1430', '#1d2b52', '#9fb4ff', 0.65, .82], [5, '#1a2350', '#5a4f7a', '#ff9e6b', 0.45, .74], [6.5, '#6f9fd8', '#ffc08a', '#ffb070', 1.4, .98],
+  [9, '#5fa0e0', '#cfe6f5', '#fff1d6', 2.6, 1.15], [15, '#5a9be0', '#d4e9f5', '#fff4dd', 2.7, 1.15], [18, '#6d86c8', '#ffb07a', '#ff9a55', 1.6, .95],
+  [19.5, '#2b2f66', '#c06a6a', '#ff7a45', .55, .78], [21, '#0f1838', '#2a2f5a', '#9fb4ff', .65, .82], [24, '#0b1430', '#1d2b52', '#9fb4ff', 0.65, .82],
 ];
 const COLORS = KEYS.map(k => [new THREE.Color(k[1]), new THREE.Color(k[2]), new THREE.Color(k[3])]);
 export class Sky {

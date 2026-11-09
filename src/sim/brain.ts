@@ -70,7 +70,7 @@ export class UtilityBrain implements Brain {
     if (n.energy < 10 && b.act !== 'sleep') { think('I can barely keep my eyes open...'); q.push(A('enter', 'napping at home', { place: v.def.home, dur: 90 })); v.doing = 'napping'; return; }
     if (sim.rain > .6 && b.act !== 'sleep' && b.act !== 'event' && R.chance(.75 - v.traits.diligence * .4)) {
       const tav = sim.place('tavern'), useTav = Math.hypot(tav.x - v.x, tav.z - v.z) < Math.hypot(home.x - v.x, home.z - v.z) + 6;
-      think('Ugh, this rain! Better get inside.'); q.push(A('enter', useTav ? 'sheltering in the Tipsy Thistle' : 'sheltering at home', { place: useTav ? 'tavern' : v.def.home, dur: 40, run: true })); return;
+      think('Ugh, this rain! Better get inside.'); q.push(A('enter', useTav ? 'sheltering in the Tipsy Thistle' : 'sheltering at home', { place: useTav ? 'tavern' : v.def.home, dur: 40, run: true, onEnter: (x: Villager) => { x.thought = R.pick(useTav ? ['Cosier in here with the rain drumming outside.', 'Nothing beats a warm tavern on a wet day.', 'Who else got caught in that downpour?'] : ['Dry at last. Listen to that rain.', 'A cup of something warm and a window to watch from.', 'Rain on the roof. Lovely, from in here.']) as string; } })); return;
     }
     switch (b.act) {
       case 'sleep': {

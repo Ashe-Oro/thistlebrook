@@ -1,7 +1,9 @@
 // The storyteller: picks what the camera should look at, writes the dawn newspaper, ranks the village.
 import type { Sim } from './sim';
 import type { SimEvent, Villager } from './types';
-import { fmtTime } from '../core/util';
+import { fmtTime, RNG } from '../core/util';
+// presentation randomness lives apart from sim.rng, so watching (camera, paper) never changes what villagers do
+const ED = new RNG(4242);
 
 export interface Paper { day: number; headline: string; stories: { icon: string; text: string }[]; weather: string; quote: { who: string; text: string } | null; leaders: { popular: string; power: string; mischief: string }; couples: string; whispers?: string; }
 export class Director {
@@ -17,7 +19,7 @@ export class Director {
     const stories = evs.slice(1, 5).map(e => ({ icon: e.icon, text: e.text }));
     const quoter = [...s.villagers].sort((a, b) => b.mem.impSinceReflect - a.mem.impSinceReflect)[0];
     const r = (k: any) => this.ranked(k)[0].v.first;
-    return { day, headline, stories, weather: s.rain > .4 ? 'Showers expected' : s.rng.pick(['Sunny spells', 'Clear skies', 'A light breeze', 'Mild and bright']), quote: quoter ? { who: quoter.name, text: quoter.thought } : null, leaders: { popular: r('popularity'), power: r('power'), mischief: r('mischief') }, couples: s.couples.map(([a, b]) => `${s.byId.get(a)!.first} & ${s.byId.get(b)!.first}`).join(', '), whispers: this.whispers() };
+    return { day, headline, stories, weather: s.rain > .4 ? 'Showers expected' : ED.pick(['Sunny spells', 'Clear skies', 'A light breeze', 'Mild and bright']), quote: quoter ? { who: quoter.name, text: quoter.thought } : null, leaders: { popular: r('popularity'), power: r('power'), mischief: r('mischief') }, couples: s.couples.map(([a, b]) => `${s.byId.get(a)!.first} & ${s.byId.get(b)!.first}`).join(', '), whispers: this.whispers() };
   }
   // A cheeky "Lonely hearts" / "Village whispers" sidebar line about the current romantic weather.
   whispers(): string {
@@ -29,7 +31,7 @@ export class Director {
     }
     for (const [a, b] of s.couples) { const af = s.byId.get(a), bf = s.byId.get(b); if (af && bf) cands.push(`${af.first} and ${bf.first} were spotted strolling, hand in hand.`); }
     if (!cands.length) cands.push('All hearts quiet in Thistlebrook… for now.', 'Who will be first to lose their heart this season?', 'The well wishes are running low on romance.');
-    return s.rng.pick(cands);
+    return ED.pick(cands);
   }
   // Pick the most interesting villager to watch right now.
   pick(now: number, current: string | null): { id: string; reason: string } | null {
@@ -37,13 +39,13 @@ export class Director {
     const hot = this.recentImportant.filter(e => now - e.t < 40 && e.actors.length).sort((a, b) => b.imp - a.imp)[0];
     if (hot && (this.focus.reason !== hot.text)) { const id = hot.actors.find(a => !s.byId.get(a)?.inside) ?? hot.actors[0]; this.focus = { id, until: now + 50, reason: hot.text }; return { id, reason: hot.text }; }
     if (now < this.focus.until && this.focus.id) return { id: this.focus.id, reason: this.focus.reason };
-    const score = (v: Villager) => (v.inside ? -5 : 0) + (v.act?.type === 'social' || v.act?.type === 'steal' ? 3 : 0) + (v.act?.type === 'chase' || v.act?.type === 'fight' ? 6 : 0) + (v.act?.type === 'work' ? 1.5 : 0) + (v.act?.type === 'attend' ? 2 : 0) + (v.id === current ? -1.2 : 0) + s.rng.range(0, 1.5);
-    const best = [...s.villagers].sort((a, b) => score(b) - score(a))[0]; this.focus = { id: best.id, until: now + 35, reason: best.doing }; return { id: best.id, reason: best.doing };
+    const score = (v: Villager) => (v.inside ? -5 : 0) + (v.act?.type === 'social' || v.act?.type === 'steal' ? 3 : 0) + (v.act?.type === 'chase' || v.act?.type === 'fight' ? 6 : 0) + (v.act?.type === 'work' ? 1.5 : 0) + (v.act?.type === 'attend' ? 2 : 0) + (v.id === current ? -1.2 : 0) + ED.range(0, 1.5);
+    const sc = new Map(s.villagers.map(v => [v, score(v)])); const best = [...s.villagers].sort((a, b) => sc.get(b)! - sc.get(a)!)[0]; this.focus = { id: best.id, until: now + 35, reason: best.doing }; return { id: best.id, reason: best.doing };
   }
 }
 function headlineOf(e: SimEvent, s: Sim) {
   const k = e.kind, a = s.byId.get(e.actors[0])?.first ?? 'Someone', b = s.byId.get(e.actors[1])?.first ?? '';
-  const pick = (arr: string[]) => s.rng.pick(arr);
+  const pick = (arr: string[]) => ED.pick(arr);
   // punchy small-town tabloid headlines — several per event kind, chosen deterministically via sim.rng
   const H: Record<string, string[]> = {
     fight: [`FISTICUFFS! ${a} and ${b} Brawl in Broad Daylight`, `PUNCH-UP IN THE PLAZA: ${a} vs ${b}`, `${a} and ${b} Come to Blows!`, `BLACK EYES ALL ROUND as ${a} Clashes With ${b}`],
