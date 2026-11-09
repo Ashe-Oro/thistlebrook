@@ -30,6 +30,10 @@ export class World {
   private moving = new Set<THREE.Object3D>();
   private borderScenery: THREE.Object3D[] = [];
   feeder = new THREE.Vector3(35, 0, 10); stringLights?: THREE.Object3D; night = 0; festival = false; merchantCart?: THREE.Object3D;
+  // Village pets. `crowd` is the live villager list (set each sim step) so the dog can trot after the nearest one.
+  crowd: { x: number; z: number; inside: string | null }[] = [];
+  dog?: { obj: THREE.Object3D; legs: THREE.Object3D; tail: THREE.Object3D; x: number; z: number; tx: number; tz: number; t: number; ph: number; wag: number; trot: boolean };
+  ducks: { obj: THREE.Object3D; x: number; z: number; tx: number; tz: number; t: number; cx: number; cz: number; r: number }[] = [];
   constructor(scene: THREE.Scene) { this.scene = scene; this.nav = new NavGrid(TOWN.bounds, 0.5); this.fx = new FX(scene); }
 
   async build(onProgress?: (n: number, t: number) => void) {
@@ -45,7 +49,7 @@ export class World {
       for (const s of d.spots ?? []) this.places.set(s.id, { id: s.id, kind: s.kind, name: s.name, x: s.x, z: s.z, cx: s.x, cz: s.z, enterable: false, district: d.id, inside: new Set(), smokeUntil: 0 });
     }
     this.paint();
-    await this.border(); await this.windmill(); await this.critters(); this.nightLights();
+    await this.border(); await this.windmill(); await this.critters(); this.pets(); this.nightLights();
     this.finishScenery();
     // keep entries reachable
     for (const p of this.places.values()) this.nav.circle(p.x, p.z, 0.6, 0);
@@ -90,8 +94,10 @@ export class World {
       { pts: [[-22, -3], [-24, 6.5]], w: 1.8, kind: 'dirt' }, { pts: [[-30, -3], [-34, 9]], w: 1.6, kind: 'dirt' }, { pts: [[-1, 9], [2, 13]], w: 1.8, kind: 'dirt' }, { pts: [[18, -3], [18, 4.5]], w: 2, kind: 'dirt' },
       { pts: [[-46, -3], [-36, -4]], w: 2.2, kind: 'dirt' }, { pts: [[-36, -4], [-41, -8]], w: 1.5, kind: 'dirt' }, { pts: [[35, -3], [33.4, 8]], w: 1.6, kind: 'dirt' },
     ];
-    for (const p of this.places.values()) { if (!p.enterable && p.kind !== 'chapel') continue; const lane = p.z < -12 ? -15.5 : -3; if (Math.abs(p.z - lane) < .5) continue; paths.push({ pts: [[p.x, p.z], [p.x, lane]], w: 1.5, kind: p.district === 'farmstead' ? 'dirt' : 'dirt' }); }
+    for (const p of this.places.values()) { if (!p.enterable && p.kind !== 'chapel') continue; const lane = p.z > 18 ? 23 : p.z < -12 ? -15.5 : -3; if (Math.abs(p.z - lane) < .5) continue; paths.push({ pts: [[p.x, p.z], [p.x, lane]], w: 1.5, kind: p.district === 'farmstead' ? 'dirt' : 'dirt' }); }
     paths.push({ pts: [[-46, -3], [20, -3]], w: 4, kind: 'cobble' }, { pts: [[-9.5, -3], [-9.5, -15.5]], w: 2.6, kind: 'cobble' });
+    // Riverside: an east-west lane and a connector up to the plaza
+    paths.push({ pts: [[-26, 23], [8, 23]], w: 2.6, kind: 'dirt' }, { pts: [[-9, 6], [-11, 23]], w: 2, kind: 'dirt' });
     const ground = paintGround(paths, [{ x0: -18.5, z0: -1, x1: .5, z1: 11.5, r: 2.5 }]);
     this.scene.add(ground); this.scenery.push(ground);
   }
@@ -193,6 +199,38 @@ export class World {
     const coop = this.places.get('coop'); if (coop) { coop.x = 33; coop.z = 8.5; }
     this.places.set('feeder', { id: 'feeder', kind: 'coop', name: 'the hen yard', x: 33.4, z: 9.6, cx: 35, cz: 10, enterable: false, district: 'farmstead', inside: new Set(), smokeUntil: 0 });
   }
+  // Cheap procedural pets: a plaza dog and a few pond ducks. Few draw calls, no shadows.
+  pets() {
+    const M = (c: string) => new THREE.MeshLambertMaterial({ color: c, flatShading: true });
+    const box = (w: number, h: number, d: number, m: THREE.Material, x: number, y: number, z: number) => { const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); b.position.set(x, y, z); b.castShadow = false; return b; };
+    // --- dog: a scruffy low-poly terrier that trots around the plaza ---
+    const fur = M('#8a5a32'), furD = M('#6f471f'), g = new THREE.Group();
+    g.add(box(.3, .26, .62, fur, 0, .34, 0));            // body
+    const legs = new THREE.Group();
+    for (const [lx, lz] of [[-.1, .22], [.1, .22], [-.1, -.22], [.1, -.22]] as [number, number][]) legs.add(box(.08, .24, .08, furD, lx, .12, lz));
+    g.add(legs);
+    const head = new THREE.Group(); head.position.set(0, .42, .36); head.add(box(.22, .22, .22, fur, 0, 0, 0)); head.add(box(.12, .1, .14, furD, 0, -.03, .14)); // snout
+    head.add(box(.06, .12, .02, furD, -.1, .14, -.02)); head.add(box(.06, .12, .02, furD, .1, .14, -.02));  // ears
+    g.add(head);
+    const tail = box(.05, .05, .26, fur, 0, .44, -.34); tail.geometry.translate(0, 0, .13); tail.position.z = -.47; g.add(tail);
+    g.traverse(o => { if (o instanceof THREE.Mesh) o.castShadow = false; }); g.position.set(-9, 0, 8); this.scene.add(g);
+    this.dog = { obj: g, legs, tail, x: -9, z: 8, tx: -9, tz: 8, t: 0, ph: 0, wag: 0, trot: false };
+    // --- ducks: bob about on the Riverside mill pond ---
+    const pond = this.places.get('rivpond'); const pcx = pond?.cx ?? 2, pcz = pond?.cz ?? 27, pr = 1.7;
+    const bodyM = M('#4f5a52'), headM = M('#1f6b3a'), beakM = M('#e0a53a');
+    for (let i = 0; i < 4; i++) {
+      const d = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.SphereGeometry(.17, 7, 5), bodyM); body.scale.set(1, .7, 1.4); body.position.y = .08; d.add(body);
+      const h = new THREE.Mesh(new THREE.SphereGeometry(.1, 6, 5), headM); h.position.set(0, .2, .18); d.add(h);
+      d.add(box(.05, .04, .1, beakM, 0, .18, .28));
+      const tl = box(.08, .05, .12, bodyM, 0, .12, -.2); tl.rotation.x = .5; d.add(tl);
+      d.traverse(o => { if (o instanceof THREE.Mesh) o.castShadow = false; });
+      const a = i / 4 * 6.28, x = pcx + Math.cos(a) * pr * .6, z = pcz + Math.sin(a) * pr * .6;
+      d.position.set(x, .22, z); this.scene.add(d);
+      this.ducks.push({ obj: d, x, z, tx: x, tz: z, t: this.rng.range(0, 4), cx: pcx, cz: pcz, r: pr });
+    }
+  }
+
   glowTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d')!; const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,230,170,1)'); gr.addColorStop(.25, 'rgba(255,190,110,.55)'); gr.addColorStop(1, 'rgba(255,160,80,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
   addLamp(x: number, y: number, z: number, size = 2.2) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glowTex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 })); s.position.set(x, y, z); s.scale.setScalar(size); this.scene.add(s); this.lamps.push(s); return s; }
   nightLights() {
@@ -259,6 +297,25 @@ export class World {
       if (d > .1) { const sp = an.speed * (an.hop > 0 ? 2.2 : 1) * Math.min(1, d); an.x += dx / d * sp * dt; an.z += dz / d * sp * dt; const ty = Math.atan2(dx, dz); an.obj.rotation.y += Math.atan2(Math.sin(ty - an.obj.rotation.y), Math.cos(ty - an.obj.rotation.y)) * Math.min(1, dt * 4); an.obj.position.y = an.kind === 'chicken' ? Math.abs(Math.sin(t * 14 + an.x)) * .05 : 0; }
       else if (an.kind === 'chicken') an.obj.rotation.x = Math.max(0, Math.sin(t * 6 + an.z)) * .4;
       an.hop = Math.max(0, an.hop - dt); an.obj.position.x = an.x; an.obj.position.z = an.z;
+    }
+    // village dog: trots after the nearest villager on foot, else pootles around the plaza
+    if (this.dog) {
+      const dg = this.dog; dg.t -= dt; let best: { x: number; z: number } | null = null, bd = 16;
+      for (const c of this.crowd) { if (c.inside) continue; const d = Math.hypot(c.x - dg.x, c.z - dg.z); if (d < bd) { bd = d; best = c; } }
+      if (best) { dg.trot = true; const d = Math.max(.001, bd); dg.tx = best.x - (best.x - dg.x) / d * 1.7; dg.tz = best.z - (best.z - dg.z) / d * 1.7; }
+      else { dg.trot = false; if (dg.t <= 0) { dg.tx = clamp(-9 + (Math.random() - .5) * 22, -20, 4); dg.tz = clamp(5 + (Math.random() - .5) * 16, -2, 15); dg.t = this.rng.range(2, 5); } }
+      const dx = dg.tx - dg.x, dz = dg.tz - dg.z, dd = Math.hypot(dx, dz), moving = dd > .3;
+      if (moving) { const sp = dg.trot ? 2.7 : 1.4; dg.x += dx / dd * sp * dt; dg.z += dz / dd * sp * dt; const ty = Math.atan2(dx, dz); dg.obj.rotation.y += Math.atan2(Math.sin(ty - dg.obj.rotation.y), Math.cos(ty - dg.obj.rotation.y)) * Math.min(1, dt * 6); dg.ph += dt * (dg.trot ? 16 : 9); }
+      dg.obj.position.set(dg.x, moving ? Math.abs(Math.sin(dg.ph)) * .03 : 0, dg.z);
+      dg.legs.children.forEach((l, i) => { (l as THREE.Object3D).rotation.x = moving ? Math.sin(dg.ph + (i % 2) * Math.PI) * .6 : 0; });
+      dg.wag += dt * (dg.trot || !moving ? 13 : 6); dg.tail.rotation.y = Math.sin(dg.wag) * .5;
+    }
+    // ducks: drift lazily about the mill pond
+    for (const dk of this.ducks) {
+      dk.t -= dt; if (dk.t <= 0) { const a = Math.random() * 6.28, rr = Math.random() * dk.r; dk.tx = dk.cx + Math.cos(a) * rr; dk.tz = dk.cz + Math.sin(a) * rr; dk.t = this.rng.range(3, 7); }
+      const dx = dk.tx - dk.x, dz = dk.tz - dk.z, d = Math.hypot(dx, dz);
+      if (d > .05) { dk.x += dx / d * .35 * dt; dk.z += dz / d * .35 * dt; const ty = Math.atan2(dx, dz); dk.obj.rotation.y += Math.atan2(Math.sin(ty - dk.obj.rotation.y), Math.cos(ty - dk.obj.rotation.y)) * Math.min(1, dt * 3); }
+      dk.obj.position.set(dk.x, .2 + Math.sin(t * 2 + dk.x) * .02, dk.z);
     }
   }
   // time-based state (called from the sim step so it is correct at any speed, including headless fast-forward)

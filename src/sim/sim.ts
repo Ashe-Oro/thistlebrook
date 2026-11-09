@@ -45,6 +45,12 @@ export class Sim {
     o('tom', 'edgar', -18); o('edgar', 'tom', -10); o('rosa', 'jen', -22); o('jen', 'rosa', -8); o('pip', 'tom', 28); o('mara', 'wren', 42); o('wren', 'mara', 40);
     // seeds of romance: Jen is sweet on Ollie; Tom has quietly admired Mara for years
     o('jen', 'ollie', 48); o('ollie', 'jen', 22); o('tom', 'mara', 44); o('mara', 'tom', 18);
+    // Riverside newcomers: the miller resents the smith (both want to lead); Posy pines for Ollie (a triangle with Jen);
+    // the schoolteacher tuts at the gossips; the village eyes the quiet newcomer with mild suspicion.
+    o('bram', 'tom', -22); o('tom', 'bram', -16); o('bram', 'mara', -10); o('bram', 'edgar', 12);
+    o('posy', 'ollie', 50); o('ollie', 'posy', 16); o('jen', 'posy', -8);
+    o('agnes', 'jen', -16); o('agnes', 'edgar', -18); o('edgar', 'agnes', -8);
+    o('edgar', 'sol', -6); o('tom', 'sol', -8); o('sol', 'wren', 16);
   }
 
   // ---- narration -------------------------------------------------------------------------------
@@ -107,7 +113,7 @@ export class Sim {
   step(dt: number) {
     const gdt = dt * MIN_PER_SEC; this.clock += gdt;
     const d = this.day; if (d !== this.lastDay && this.hour >= 6) { if (this.lastDay) { this.emit('dawn', this.lastDay); } this.lastDay = d; for (const v of this.villagers) v.replan = true; this.snapshot(); }
-    this.weather(gdt); this.world.simTick(gdt, this.clock);
+    this.weather(gdt); this.world.simTick(gdt, this.clock); this.world.crowd = this.villagers;
     for (const p of this.parties) this.partyTick(p);
     for (const g of this.gifts) g.t += gdt;
     for (const v of this.villagers) this.tickVillager(v, dt, gdt);
@@ -206,7 +212,7 @@ export class Sim {
     const W = this.world, fx = W.fx, av = v.avatar;
     if (!a._at) { if (!walk(a.x, a.z, .35)) return false; a._at = 1; v.heading = Math.atan2(a.fx - v.x, a.fz - v.z); av.onHit = null; }
     v.heading = Math.atan2(a.fx - v.x, a.fz - v.z);
-    if (!a._quip && a.t > 8) { a._quip = 1; const Q: Record<string, string[]> = { chop: ['Timber! ...just kidding.', 'Swing, and swing again.', 'Good honest oak, this.'], mine: ['Clink. Clink. Clink.', 'Something sparkly in here...', 'Solid rock, solid work.'], forge: ['Hot iron waits for no one!', 'Mind the sparks!', 'Clang! Lovely.'], forge0: ['Bellows, do your thing.'], tend: ['Grow, my beauties.', 'Who planted weeds here?!'], water: ['Drink up, little sprouts.'], feed: ['Here, chook chook chook!', 'One at a time, ladies!'], serve: ['Who\u2019s thirsty?', 'Another round?'], sort: ['Letters for half the village today!', 'Who writes to a goat?', 'This one smells of perfume...'], bake: ['Mind the oven, it\u2019s hot!', 'Smell that? Fresh loaves!'] };
+    if (!a._quip && a.t > 8) { a._quip = 1; const Q: Record<string, string[]> = { chop: ['Timber! ...just kidding.', 'Swing, and swing again.', 'Good honest oak, this.'], mine: ['Clink. Clink. Clink.', 'Something sparkly in here...', 'Solid rock, solid work.'], forge: ['Hot iron waits for no one!', 'Mind the sparks!', 'Clang! Lovely.'], forge0: ['Bellows, do your thing.'], tend: ['Grow, my beauties.', 'Who planted weeds here?!'], water: ['Drink up, little sprouts.'], feed: ['Here, chook chook chook!', 'One at a time, ladies!'], serve: ['Who\u2019s thirsty?', 'Another round?'], sort: ['Letters for half the village today!', 'Who writes to a goat?', 'This one smells of perfume...'], bake: ['Mind the oven, it\u2019s hot!', 'Smell that? Fresh loaves!'], haul: ['No flour, no bread.', 'These sacks don\u2019t lift themselves.', 'The stones are hungry today.'], fish: ['Come on, bite...', 'Easy... easy...', 'Just me and the water.'], herb: ['Chamomile, mint, a little sage.', 'Mind the nettles.', 'This one\u2019s good for a cough.'], teach: ['Posture, please!', 'Now, your letters.', 'Attention at the back!'] };
       const q = Q[a.kind]; if (q && this.rng.chance(.45)) this.say(v, this.rng.pick(q), '', 2.6); }
     // strikes are driven by game time (not by animation frames) so work output is identical at any speed or headless
     const strike = (every: number) => { a._h = (a._h ?? 0) + gdtW; if (a._h >= every) { a._h -= every; av.onHit?.(); av.phase = Math.floor(av.phase / 1.35) * 1.35 + 1.2; } };
@@ -229,6 +235,10 @@ export class Sim {
         if (a.t > (a.dur ?? 55)) { av.onHit = null; av.setTool(''); amb(`${v.first} hammered out ${this.rng.pick(['a new gate hinge', 'horseshoes', 'a lantern bracket', 'a weathervane rooster'])} at the anvil.`, '⚒️'); return true; } return false; }
       case 'serve': { v.anim = a.t % 30 < 15 ? 'talk' : 'wave'; return a.t > a.dur; }
       case 'sort': { v.anim = Math.sin(a.t * .4) > 0 ? 'pickup' : 'idle'; return a.t > (a.dur ?? 25); }
+      case 'haul': { v.anim = Math.sin(a.t * .5) > 0 ? 'pickup' : 'idle'; av.setTool('basket'); if (a.t > (a.dur ?? 50)) { av.setTool(''); amb(`${v.first} hauled sacks of flour at the mill.`, '🌾'); return true; } return false; }
+      case 'fish': { v.anim = 'point'; if (Math.random() < dt * 1.1) fx.water(a.fx + (Math.random() - .5) * 1.6, .35, a.fz + (Math.random() - .5) * 1.6, 0, 0); if (a.t > (a.dur ?? 55)) { amb(`${v.first} sat casting a line off the dock, watching the water.`, '🎣'); return true; } return false; }
+      case 'herb': { v.anim = 'feed'; av.setTool('basket'); av.onHit = null; if (Math.random() < dt * 2) fx.chips(a.fx + (Math.random() - .5) * 1.2, .35, a.fz + (Math.random() - .5) * 1.2, [.4, .6, .3], 3); if (a.t > (a.dur ?? 45)) { av.setTool(''); amb(`${v.first} gathered a basket of herbs in the Riverside garden.`, '🌿'); return true; } return false; }
+      case 'teach': { v.anim = a.t % 20 < 12 ? 'talk' : 'point'; if (a.t > (a.dur ?? 50)) { amb(`${v.first} drilled the village children on their letters at the school green.`, '📖'); return true; } return false; }
     }
     return true;
   }

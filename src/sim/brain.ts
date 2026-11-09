@@ -89,8 +89,8 @@ export class UtilityBrain implements Brain {
         q.push(A('go', 'heading to lunch in the plaza', { x, z })); q.push(A('idle', 'lunch in the plaza', { dur: 18, anim: R.chance(.5) ? 'drink' : 'talk', face: anchor ? Math.atan2(anchor.x - x, anchor.z - z) : undefined })); return;
       }
       case 'work': { if (R.chance(.1 + v.traits.sociability * .1) && this.social(v, sim, n.social < 35 ? 0 : -.3)) return; this.work(v, sim); return; }
-      case 'stroll': { if (this.letter(v, sim)) return; if (this.social(v, sim, .15)) return; this.stroll(v, sim); return; }
-      case 'social': { if (this.social(v, sim, -.1)) return; this.stroll(v, sim); return; }
+      case 'stroll': { if (this.letter(v, sim)) return; if (this.social(v, sim, .15)) return; if (R.chance(.5) && this.ambient(v, sim)) return; this.stroll(v, sim); return; }
+      case 'social': { if (this.social(v, sim, -.1)) return; if (R.chance(.45) && this.ambient(v, sim)) return; this.stroll(v, sim); return; }
       case 'event': { const p = sim.parties.find(x => x.id === b.eventId); if (p && sim.clock >= p.at - 30) { q.push(A('go', `heading to ${p.title}`, { ...this.near(sim, p.place, 3) })); return; } if (this.social(v, sim, -.3)) return; this.work(v, sim); return; }
       case 'evening': {
         if (v.job === 'tavernkeeper') { const t = sim.place('tavern'); q.push(A('work', 'serving drinks', { kind: 'serve', dur: 40, x: t.x + 1.5, z: t.z + 1.2, fx: t.x, fz: t.z + 4 })); if (R.chance(.3)) this.social(v, sim, .3); return; }
@@ -98,6 +98,7 @@ export class UtilityBrain implements Brain {
         if (this.social(v, sim, -.05)) return;
         if (v.partner && R.chance(.4)) { const p = sim.byId.get(v.partner)!; if (!p.inside) { const seat = sim.takeSeat(v, 'campfire'); if (seat) { q.push(A('sit', `stargazing with ${p.first}`, { seat, dur: 40, anim2: 'talk' })); return; } } }
         if (b.where === 'tavern' || R.chance(.3)) { this.tavern(v, sim); return; }
+        if (sim.hour < 20 && R.chance(.3) && this.ambient(v, sim)) return;
         if (R.chance(.4)) { const seat = sim.takeSeat(v, R.chance(.5) ? 'campfire' : 'bench'); if (seat) { q.push(A('sit', 'relaxing', { seat, dur: 40 })); return; } }
         q.push(A('enter', 'relaxing at home', { place: v.def.home, dur: 60 })); return;
       }
@@ -116,6 +117,43 @@ export class UtilityBrain implements Brain {
     const R = sim.rng, spots: [string, string][] = [['well', 'by the well'], ['orchard', 'in the orchard'], ['pond', 'by the pond'], ['campfire', 'at the campfire'], ['plaza', 'in the plaza']].filter(([p]) => sim.world.places.has(p)) as [string, string][];
     const [p, where] = R.pick(spots.length ? spots : [['plaza', 'in the plaza']]); v.thought = R.pick(['What a lovely afternoon.', 'I could use some fresh air.', 'Let\u2019s see who\u2019s about.', ...v.def.catchphrases]);
     v.queue.push(A('go', `wandering ${where}`, { ...this.near(sim, p, 3.5) })); v.queue.push(A('idle', `enjoying the view ${where}`, { dur: 12, anim: R.chance(.3) ? 'wave' : 'idle' }));
+  }
+  // Interactions with the setting: short visits to a prop (well, notice board, pond, laundry, stall, the dog).
+  // Each produces a fitting thought and — now and then — a low-importance chronicle line or bubble. Not spammy.
+  ambient(v: Villager, sim: Sim): boolean {
+    if (sim.clock - ((v as any)._ambient ?? -1e9) < 300) return false;
+    const R = sim.rng, W = sim.world, P = W.places;
+    // [x, z, where, doing, anim, icon, chronicle, thought, ripple?, notice?]
+    type Opt = { x: number; z: number; where: string; doing: string; anim: string; icon: string; line: string; thought: string; ripple?: boolean; notice?: boolean };
+    const opts: Opt[] = []; const at = (id: string) => P.get(id);
+    let p = at('well'); if (p) opts.push({ x: p.x, z: p.z, where: 'at the well', doing: 'drawing water at the well', anim: 'pickup', icon: '🪣', line: `${v.first} drew a pail of water at the well.`, thought: 'Fresh water for the day.', ripple: true });
+    p = at('notices'); if (p) opts.push({ x: p.x, z: p.z, where: 'at the notice board', doing: 'reading the notice board', anim: 'point', icon: '📌', line: `${v.first} stopped to read the notices.`, thought: 'Anything new on the board?', notice: true });
+    const pid = P.has('rivpond') ? 'rivpond' : P.has('pond') ? 'pond' : ''; p = pid ? at(pid) : undefined;
+    if (p) opts.push({ x: p.cx, z: p.cz, where: `by ${p.name}`, doing: `skipping stones on ${p.name}`, anim: 'wave', icon: '🪨', line: `${v.first} skipped stones across ${p.name}.`, thought: 'Four skips. Not bad.', ripple: true });
+    p = at('laundry'); if (p) opts.push({ x: p.x, z: p.z, where: 'at the laundry line', doing: 'hanging out the washing', anim: 'pickup', icon: '🧺', line: `${v.first} pegged out the washing.`, thought: 'Good drying weather, this.' });
+    p = at('market'); if (p) opts.push({ x: p.x, z: p.z, where: 'at the market stall', doing: 'browsing the market stall', anim: 'talk', icon: '🧺', line: `${v.first} browsed the market stall.`, thought: 'Just looking, thank you.' });
+    if (W.dog) opts.push({ x: W.dog.x, z: W.dog.z, where: 'with the village dog', doing: 'petting the village dog', anim: 'feed', icon: '🐕', line: `${v.first} crouched to ruffle the village dog’s ears.`, thought: 'Good dog. Who’s a good dog?' });
+    if (!opts.length) return false;
+    const pick = opts.map(o => ({ o, s: 1 / (1 + Math.hypot(o.x - v.x, o.z - v.z) / 18) + R.range(0, .5) })).sort((a, b) => b.s - a.s)[0].o;
+    (v as any)._ambient = sim.clock; v.thought = pick.thought;
+    const [gx, gz] = W.nav.nearestFree(pick.x + R.range(-.6, .6), pick.z + (pick.ripple ? 1.5 : .9));
+    v.queue.push(A('go', `heading ${pick.where}`, { x: gx, z: gz }));
+    v.queue.push(A('idle', pick.doing, { dur: R.range(10, 16), anim: pick.anim, face: Math.atan2(pick.x - gx, pick.z - gz), after: (s: Sim) => {
+      if (pick.ripple) s.world.fx.water(pick.x + R.range(-.6, .6), .5, pick.z + R.range(-.4, .4), 0, 1);
+      if (pick.notice) this.readNotice(v, s);
+      v.needs.social = Math.min(100, v.needs.social + 6);
+      if (R.chance(.45)) s.log(pick.line, R.chance(.3) ? 2 : 1, [v.id], 'ambient', pick.icon);
+      else s.say(v, R.pick(v.def.catchphrases), pick.icon, 2.4);
+    } }));
+    return true;
+  }
+  // Reading the board is a quiet vector for gossip: a schemer leaves a pointed note the neighbours pick up.
+  readNotice(v: Villager, sim: Sim) {
+    if (!(v.traits.honesty < .5 || v.goal === 'power') || !sim.rng.chance(.5)) return;
+    const known = [...v.mem.known.values()].filter(f => f.kind === 'deed' && sim.clock - f.t < 60 * 48);
+    if (!known.length) return; const f = sim.rng.pick(known);
+    let spread = 0; for (const w of sim.villagers) if (w !== v && !w.inside && Math.hypot(w.x - v.x, w.z - v.z) < 7 && sim.learnFact(w, f)) spread++;
+    if (spread) sim.log(`${v.first} left a pointed little note pinned to the board.`, 2, [v.id], 'gossip', '📌');
   }
   // Shy hearts write instead of speaking. Letters go through the post office... and through Jen's hands.
   letter(v: Villager, sim: Sim) {
@@ -165,6 +203,10 @@ export class UtilityBrain implements Brain {
         q.push(A('enter', 'sorting the post', { place: 'store', dur: 30 })); return;
       }
       case 'tavernkeeper': { v.thought = 'A good brew takes patience.'; q.push(A('enter', 'brewing ale', { place: 'tavern', dur: 60, smoke: true })); return; }
+      case 'miller': { const m = sim.place('windmill'); const s = spotNear(m.cx, m.cz, 2.4); v.thought = R.pick(['No flour, no bread — remember that.', 'The stones want feeding.', 'Grind, grind, grind.']); q.push(A('work', 'grinding grain at the mill', { kind: 'haul', ...s, fx: m.cx, fz: m.cz, dur: R.range(40, 60) })); return; }
+      case 'fisher': { const dk = sim.place('dock'), pond = sim.place('rivpond'); const [x, z] = W.nav.nearestFree(dk.x, dk.z); v.thought = R.pick(['The fish don’t ask questions.', 'Patience. Always patience.', 'Something’s biting today.']); q.push(A('work', 'casting a line off the dock', { kind: 'fish', x, z, fx: pond.cx, fz: pond.cz, dur: R.range(45, 70) })); return; }
+      case 'herbalist': { const gd = sim.place('garden'); const s = spotNear(gd.cx, gd.cz, 1.4); v.thought = R.pick(['A little chamomile for that.', 'Mind the nettles.', 'The mint’s coming on well.']); q.push(A('work', 'gathering herbs in the garden', { kind: 'herb', ...s, fx: gd.cx, fz: gd.cz, dur: R.range(35, 55) })); return; }
+      case 'schoolteacher': { const sc = sim.place('school'); v.thought = R.pick(['Posture, please.', 'Letters first, then sums.', 'Attention at the back!']); q.push(A('work', 'teaching at the school green', { kind: 'teach', x: sc.x + .6, z: sc.z + 1.2, fx: sc.cx, fz: sc.cz, dur: R.range(40, 60) })); return; }
     }
     q.push(A('idle', 'idle', { dur: 10 }));
   }

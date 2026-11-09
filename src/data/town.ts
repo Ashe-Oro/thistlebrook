@@ -18,7 +18,8 @@ export const SCALE_OVERRIDE: Record<string, number> = {
 export const scaleOf = (a: AssetKey) => SCALE_OVERRIDE[a] ?? ASSET_SCALE[a.split('/')[0]] ?? 1;
 
 export type PlaceKind = 'home' | 'bakery' | 'store' | 'tavern' | 'smithy' | 'market' | 'well' | 'field' | 'coop' | 'orchard'
-  | 'forest' | 'quarry' | 'campfire' | 'plaza' | 'pond' | 'barn' | 'chapel' | 'windmill' | 'bench' | 'pasture';
+  | 'forest' | 'quarry' | 'campfire' | 'plaza' | 'pond' | 'barn' | 'chapel' | 'windmill' | 'bench' | 'pasture'
+  | 'dock' | 'school' | 'garden' | 'notice' | 'laundry';
 export interface PlaceDef { id: string; kind: PlaceKind; name: string; enterable?: boolean; chimney?: [number, number, number]; }
 export interface LotDef { a: AssetKey; x: number; z: number; rot?: number; s?: number; place?: PlaceDef; solid?: boolean; tag?: string; }
 export interface ResourceDef { kind: 'tree' | 'rock' | 'plot' | 'apple'; a: AssetKey; x: number; z: number; rot?: number; s?: number; hero?: boolean; }
@@ -27,7 +28,7 @@ export interface DistrictDef { id: string; name: string; lots: LotDef[]; resourc
 const H = Math.PI;
 export const TOWN = {
   name: 'Thistlebrook',
-  bounds: { minX: -50, maxX: 50, minZ: -34, maxZ: 28 },
+  bounds: { minX: -50, maxX: 50, minZ: -34, maxZ: 42 },
   districts: [
     {
       id: 'old-town', name: 'Old Town',
@@ -49,7 +50,7 @@ export const TOWN = {
         { a: 'cozy/well_01', x: -9, z: 6, place: { id: 'well', kind: 'well', name: 'the well' } },
         { a: 'cozy/market_stall_01', x: -15, z: 2.5, place: { id: 'market', kind: 'market', name: 'the market' } },
         { a: 'cozy/market_stall_01', x: -3, z: 2.5, tag: 'stall2' },
-        { a: 'cozy/notice_board_01', x: 1.5, z: 1.8 },
+        { a: 'cozy/notice_board_01', x: 1.5, z: 1.8, place: { id: 'notices', kind: 'notice', name: 'the notice board' } },
         { a: 'cozy/bench_01', x: -15, z: 10, rot: 0, tag: 'bench', solid: false },
         { a: 'cozy/bench_01', x: -3, z: 10, rot: 0, tag: 'bench', solid: false },
         { a: 'cozy/flower_bed_01', x: -9, z: 11 }, { a: 'cozy/flower_cart_01', x: 4, z: 6, rot: -0.5 },
@@ -60,7 +61,7 @@ export const TOWN = {
         { a: 'cozy/firewood_stack_01', x: -3.4, z: -7.2, rot: H / 2 }, { a: 'cozy/hay_bale_01', x: 4.3, z: -6.8 },
         { a: 'cozy/aframe_chalkboard_01', x: -24.5, z: -6.4, rot: 0.3 }, { a: 'cozy/plant_potted_01', x: -16.3, z: -6.8 },
         { a: 'cozy/village_entrance_sign_01', x: -40, z: -1.2, rot: H / 2 }, { a: 'cozy/directional_post_01', x: 16, z: -1.2 },
-        { a: 'cozy/laundry_line_01', x: -24, z: -16.3 }, { a: 'cozy/picket_fence_01', x: -31.5, z: -17.3 }, { a: 'cozy/picket_fence_01', x: -15, z: -17.3 },
+        { a: 'cozy/laundry_line_01', x: -24, z: -16.3, place: { id: 'laundry', kind: 'laundry', name: 'the laundry line' }, solid: false }, { a: 'cozy/picket_fence_01', x: -31.5, z: -17.3 }, { a: 'cozy/picket_fence_01', x: -15, z: -17.3 },
         { a: 'cozy/veh_hand_cart_01', x: -12, z: 1.5, rot: 0.7 },
         // Campfire green (night gatherings)
         { a: 'nature/stone_ring_campfire', x: -25, z: 10, place: { id: 'campfire', kind: 'campfire', name: 'the campfire' } },
@@ -117,11 +118,42 @@ export const TOWN = {
       ],
       spots: [{ id: 'quarry', kind: 'quarry', name: 'the quarry', x: 39, z: -21 }],
     },
+    {
+      // Riverside: the newcomers' quarter down by the mill pond — homes, a school green, an herb garden and a fishing dock.
+      id: 'riverside', name: 'Riverside',
+      lots: [
+        // Homes (doors face north, back toward the old town)
+        { a: 'cozy/home_thatched_house_01', x: -22, z: 31, rot: H, place: { id: 'home-penny', kind: 'home', name: 'Pennythorn Cottage', enterable: true, chimney: [1.6, 5.6, 0.3] } },
+        { a: 'cozy/home_cottage_01', x: -12, z: 31, rot: H, place: { id: 'home-pike', kind: 'home', name: 'Pike’s Rest', enterable: true, chimney: [-0.9, 4.9, 0.6] } },
+        { a: 'farm/farmhand_cottage', x: -2, z: 31, rot: H, place: { id: 'home-mill', kind: 'home', name: 'Oakes Cottage', enterable: true } },
+        // School green (west): a chalkboard, benches and a lamp
+        { a: 'cozy/aframe_chalkboard_01', x: -22, z: 24, place: { id: 'school', kind: 'school', name: 'the school green' } },
+        { a: 'cozy/bench_01', x: -24.5, z: 25.5, rot: 0.4, tag: 'bench', solid: false }, { a: 'cozy/bench_01', x: -19.5, z: 25.5, rot: -0.4, tag: 'bench', solid: false },
+        { a: 'cozy/flower_bed_01', x: -22, z: 26.8 }, { a: 'cozy/bush_round_01', x: -26, z: 23 }, { a: 'cozy/streetlamp_01', x: -17, z: 23, tag: 'lamp' },
+        // Herb garden (middle)
+        { a: 'cozy/pumpkin_patch_01', x: -10, z: 24, place: { id: 'garden', kind: 'garden', name: 'the herb garden' } },
+        { a: 'cozy/flower_bed_01', x: -12.5, z: 25.5 }, { a: 'cozy/plant_potted_01', x: -7.6, z: 25.4 }, { a: 'cozy/bush_round_01', x: -6, z: 23 },
+        // Mill pond & fishing dock (east) — crates make a little jetty
+        { a: 'cozy/water_pond_01', x: 2, z: 27, place: { id: 'rivpond', kind: 'pond', name: 'the mill pond' } },
+        { a: 'cozy/crate_01', x: 1.2, z: 22.6 }, { a: 'cozy/barrel_01', x: 2.6, z: 22.4 }, { a: 'cozy/streetlamp_01', x: -2, z: 22.5, tag: 'lamp' },
+        { a: 'cozy/directional_post_01', x: -14, z: 20 }, { a: 'cozy/hay_bale_01', x: -4.5, z: 28.5 },
+        { a: 'cozy/laundry_line_01', x: -27, z: 30, solid: false },
+      ],
+      resources: [
+        { kind: 'tree', a: 'nature/maple_autumn', x: -30, z: 27 }, { kind: 'tree', a: 'cozy/tree_oak_01', x: 9, z: 24 },
+        { kind: 'tree', a: 'cozy/tree_fruit_01', x: 6, z: 32 }, { kind: 'tree', a: 'cozy/tree_pine_01', x: -32, z: 34 },
+      ],
+      spots: [
+        { id: 'dock', kind: 'dock', name: 'the fishing dock', x: 2, z: 22.8 },
+        { id: 'riverside', kind: 'plaza', name: 'Riverside', x: -11, z: 23 },
+      ],
+    },
   ] as DistrictDef[],
   roads: [
     // [asset, x0, z, x1, axis] — straight tile runs on the 4 m grid
     { a: 'cozy/road_cobble_straight_01', from: -42, to: 18, z: -3, axis: 'x' },
     { a: 'cozy/road_dirt_road_01', from: -32, to: 16, z: -15.5, axis: 'x' },
     { a: 'farm/track_straight', from: 22, to: 42, z: -3, axis: 'x' },
+    { a: 'cozy/road_dirt_road_01', from: -26, to: 8, z: 23, axis: 'x' },
   ],
 };
