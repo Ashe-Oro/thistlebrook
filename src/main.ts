@@ -65,10 +65,13 @@ const pcam = new THREE.PerspectiveCamera(15, 1, .3, 40); const portraits = new M
 // framed against the sky dome), so indoor, night-time or occluded villagers still get a clean headshot.
 const pSave = new THREE.Vector3(); const PBG = new THREE.Color('#efe3c8');
 const pKey = new THREE.DirectionalLight('#fff1dc', 0); scene.add(pKey, pKey.target);
+// at most two studio renders per frame: opening the Villagers or Relationships view queues the rest over the next frames instead of hitching
+let pBudget = 2; const pQueue = new Set<string>();
 function portrait(id: string) {
   let c = portraits.get(id); if (!c) { c = document.createElement('canvas'); c.width = c.height = 192; c.className = 'portrait'; portraits.set(id, c); }
-  const v = sim.byId.get(id)!; const now = performance.now(); if (now - (pTime.get(id) ?? 0) < 400) return c; pTime.set(id, now);
-  const r = v.avatar.root as THREE.Object3D, rotY = r.rotation.y, wasVis = r.visible, oldA = v.avatar.alpha; pSave.copy(r.position);
+  const v = sim.byId.get(id)!; const now = performance.now(); if (now - (pTime.get(id) ?? 0) < 400) return c;
+  if (pBudget <= 0) { pQueue.add(id); return c; } pBudget--; pQueue.delete(id); pTime.set(id, now);
+  const r = v.avatar.root as THREE.Object3D, rotY = r.rotation.y, wasVis = r.visible, oldA = v.avatar.alpha, body = v.avatar.body as THREE.Object3D, bodyVis = body.visible; body.visible = true; // the perf governor may have culled it pSave.copy(r.position);
   const st = controls.target; r.position.set(st.x, 80, st.z); r.rotation.y = 0; r.visible = true; const tf = v.avatar.mats.map((m: THREE.Material) => [m.transparent, m.opacity, m.depthWrite] as const); if (oldA < 1) for (const m of v.avatar.mats) { m.opacity = 1; m.transparent = m.name === 'face'; m.depthWrite = m.name !== 'face'; } r.updateMatrixWorld(true);
   const head = new THREE.Vector3(); v.avatar.bones.Head.getWorldPosition(head); head.y += .12;
   pcam.position.set(head.x + Math.sin(.35) * 2.7, head.y + .14, head.z + Math.cos(.35) * 2.7); pcam.lookAt(head.x, head.y + .02, head.z); pcam.updateMatrixWorld();
@@ -76,7 +79,7 @@ function portrait(id: string) {
   // render targets lose the face decal's blending, which left every portrait with a black face
   const pr = renderer.getPixelRatio(), cs = 192 / pr, H = renderer.domElement.height;
   renderer.setScissorTest(true); renderer.setScissor(0, 0, cs, cs); renderer.setViewport(0, 0, cs, cs); const ol = (r as any).getObjectByName('CharacterOutline'); if (ol) ol.visible = false; const bg = scene.background; scene.background = PBG; sky.dome.visible = false; sky.stars.visible = false; pKey.position.set(head.x + 1.6, head.y + 2.4, head.z + 2.6); pKey.target.position.copy(head); pKey.target.updateMatrixWorld(); pKey.intensity = 1.2 + sky.night * 1.6; renderer.render(scene, pcam); pKey.intensity = 0; scene.background = bg; sky.dome.visible = true; sky.stars.visible = sky.night > .01; if (ol) ol.visible = true;
-  r.position.copy(pSave); r.rotation.y = rotY; r.visible = wasVis; v.avatar.mats.forEach((m: THREE.Material, i: number) => { m.transparent = tf[i][0]; m.opacity = tf[i][1]; m.depthWrite = tf[i][2]; }); r.updateMatrixWorld(true);
+  r.position.copy(pSave); r.rotation.y = rotY; r.visible = wasVis; body.visible = bodyVis; v.avatar.mats.forEach((m: THREE.Material, i: number) => { m.transparent = tf[i][0]; m.opacity = tf[i][1]; m.depthWrite = tf[i][2]; }); r.updateMatrixWorld(true);
   c.getContext('2d')!.drawImage(renderer.domElement, 0, H - 192, 192, 192, 0, 0, 192, 192);
   renderer.setScissorTest(false); renderer.setViewport(0, 0, renderer.domElement.width / pr, renderer.domElement.height / pr);
   return c;
@@ -255,6 +258,7 @@ function frame(now: number) {
   sky.update(sim.hour, sim.rain, controls.target, dt * Math.max(speed, .0001)); renderer.toneMappingExposure = 1.05 + sky.golden * .1 + sky.flash * .45; world.fx.setRain(sim.rain > .35); world.fx.update(dt, controls.target);
   sound.ambient(sky.night, sim.rain, dt);
   ui.frame(dt);
+  pBudget = 2; for (const id of [...pQueue].slice(0, 2)) portrait(id); pBudget = 2;
   perf.beforeRender();
   renderer.render(scene, camera); cpuMsAvg += ((performance.now() - cpu0) - cpuMsAvg) * .1;
 }
