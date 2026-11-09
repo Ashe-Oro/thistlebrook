@@ -54,11 +54,15 @@ await p.click('[data-f="drama"]'); await wait(400); await shot('13_feed_drama', 
 for (const [k, n] of [['web', '14_relationship_web'], ['recap', '15_recap'], ['villagers', '16_villagers']]) { await run(`terrarium.ui().view('${k}')`); await wait(1200); await shot(n); await run('terrarium.ui().closeModal()'); }
 // God powers
 await run('terrarium.god("festival")'); await run('terrarium.setSpeed(4)'); await wait(3500); await run('terrarium.setSpeed(1); terrarium.look(-9,5,22,.5,.55)'); await wait(3000); await shot('17_festival');
-await ffTo(48 + 18.5); await run('terrarium.god("traveller")'); await run('terrarium.setSpeed(4)'); await wait(3500); await run('terrarium.setSpeed(1); terrarium.look(-17.5, 2.6, 12, 1.35, .42)'); await wait(2500); await shot('18_storyteller');
-await ffTo(72 + 10); await run('terrarium.god("rain"); terrarium.fastForward(45)'); await wait(3500); await run('terrarium.look(-9,0,30,.6,.6)'); await wait(2500); await shot('19_rain');
+await ffTo(48 + 16.5); await run("terrarium.setSpeed(1); terrarium.setMode('director'); terrarium.god('traveller')"); await wait(1200); await run('terrarium.ui().quiet = true; terrarium.fastForward(14); terrarium.ui().quiet = false; terrarium.beat()'); await wait(3500); await shot('18_storyteller_beat'); await run("terrarium.setMode('free')");
+// Golden hour over the plaza
+await ffTo(48 + 18.1); await run('terrarium.look(-9,4,30,.5,.42)'); await wait(2500); await shot('23_golden_hour');
+await ffTo(72 + 10); await run('terrarium.god("rain"); terrarium.fastForward(45)'); await wait(3500); await run('terrarium.look(-9,0,30,.6,.6)'); await wait(2500); await shot('19_rain'); await run('terrarium.strike()'); await wait(120); await shot('19b_lightning');
 // Scuffle: two villagers who dislike each other, staged next to each other
-await ffTo(72 + 14); await run(`const S=terrarium.sim; let best=null; for (const a of S.villagers) for (const c of S.villagers) if (a!==c && !a.inside && !c.inside && (!best || (a.opinion[c.id]??0) < (best[0].opinion[best[1].id]??0))) best=[a,c]; const [a,c]=best; c.x=a.x+1.2; c.z=a.z; S.startFight(a,c,a.first+' finally had it out with '+c.first); terrarium.look(a.x,a.z,9,.6,.45); return [a.id,c.id]`);
-await wait(1500); await shot('20_scuffle'); await wait(2500); await shot('21_scuffle_after');
+await ffTo(72 + 14); await run(`const S=terrarium.sim; let best=null; for (const a of S.villagers) for (const c of S.villagers) if (a!==c && !a.inside && !c.inside && (!best || (a.opinion[c.id]??0) < (best[0].opinion[best[1].id]??0))) best=[a,c]; const [a,c]=best; c.x=a.x+1.2; c.z=a.z; terrarium.look(a.x,a.z,14,.6,.5); terrarium.setMode('director'); S.startFight(a,c,a.first+' finally had it out with '+c.first); if(!terrarium.beatOn) terrarium.beat(); return [a.id,c.id]`);
+await wait(2600); await shot('20_brawl_beat'); await wait(9000); await run("terrarium.setMode('free'); const S=terrarium.sim; const e=[...S.events].reverse().find(e=>e.kind==='fight'); terrarium.look(e.x,e.z,11,.6,.45)"); await wait(1500); await shot('21_brawl_after');
+// Establishing crane shot (plays on first load for real visitors)
+{ const q = await b.newPage({ viewport: { width: 1600, height: 900 } }); watch(q); await q.goto('http://127.0.0.1:5183/?nopaper&capture&dynres=0&intro&seed=7'); await q.waitForFunction(() => window.terrarium && document.querySelector('.loading.done'), null, { timeout: 180000 }); await q.waitForTimeout(5000); await q.screenshot({ path: `${OUT}/00_intro.png` }); console.log('shot 00_intro'); await q.close(); }
 // Mobile layout
 const m = await b.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }); watch(m);
 await m.goto('http://127.0.0.1:5183/?nopaper&seed=7'); await m.waitForFunction(() => window.terrarium && document.querySelector('.loading.done'), null, { timeout: 180000 });

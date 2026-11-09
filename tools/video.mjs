@@ -28,9 +28,9 @@ const wait = async ms => { const n = Math.max(1, Math.round(ms / 1000 * FPS)); f
 const ffTo = h => run(`const S=terrarium.sim; while (S.clock < ${h * 60}) terrarium.fastForward(Math.min(60, ${h * 60} - S.clock + .01));`);
 // cinematic helpers living in the page: caption lower-third and a slow camera glide
 await run(`
-  const st=document.createElement('style'); st.textContent='.cine{position:fixed;left:50%;bottom:54px;transform:translateX(-50%);background:rgba(34,24,14,.82);color:#fff3dc;font:600 26px/1.25 Georgia,serif;padding:12px 26px;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.35);opacity:0;transition:opacity .5s;z-index:999;text-align:center;max-width:80vw}.cine small{display:block;font:500 16px system-ui;opacity:.8;margin-top:4px}.cine.on{opacity:1}.cine.title{bottom:auto;top:38%;font-size:46px;padding:20px 40px}';
-  document.head.appendChild(st); const c=document.createElement('div'); c.className='cine'; document.body.appendChild(c);
-  window.cap=(t,s,title)=>{ c.className='cine'+(title?' title':''); if(!t) return; c.innerHTML=t+(s?'<small>'+s+'</small>':''); requestAnimationFrame(()=>c.classList.add('on')); };
+  const st=document.createElement('style'); st.textContent='.vcap{position:fixed;left:50%;bottom:54px;transform:translateX(-50%);background:rgba(34,24,14,.82);color:#fff3dc;font:600 26px/1.25 Georgia,serif;padding:12px 26px;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.35);opacity:0;transition:opacity .5s;z-index:999;text-align:center;max-width:80vw}.vcap small{display:block;font:500 16px system-ui;opacity:.8;margin-top:4px}.vcap.on{opacity:1}.vcap.title{bottom:auto;top:38%;font-size:46px;padding:20px 40px}';
+  document.head.appendChild(st); const c=document.createElement('div'); c.className='vcap'; document.body.appendChild(c);
+  window.cap=(t,s,title)=>{ c.className='vcap'+(title?' title':''); if(!t) return; c.innerHTML=t+(s?'<small>'+s+'</small>':''); requestAnimationFrame(()=>c.classList.add('on')); };
   window.glide=(x,z,d0,d1,y0,y1,p0,p1,ms)=>{ const T=performance.now(); const f=()=>{ const k=Math.min(1,(performance.now()-T)/ms), e=k*k*(3-2*k); terrarium.look(x,z,d0+(d1-d0)*e,y0+(y1-y0)*e,p0+(p1-p0)*e); if(k<1&&window._g===T) requestAnimationFrame(f); }; window._g=T; f(); };
   window.halt=()=>{ window._g=0; };
   window.panels=(on)=>{ for (const q of ['.feedwrap','.lb']) { const e=document.querySelector(q); if(e) e.style.opacity=on?'':'0'; } };
@@ -44,7 +44,8 @@ const marks = [];
 // 1 · title over a dawn glide
 await ffTo(7.1); await panels(false); await run('terrarium.setSpeed(2); terrarium.select(null); glide(-6,-2,78,52,.2,.8,.95,.7,6000)');
 marks.push((Date.now() - t0) / 1000); recording = true;
-await cap('Thistlebrook', 'a digital terrarium · eight villagers, one small town', true); await beat(4300);
+const nV = await run('return terrarium.sim.villagers.length');
+await cap('Thistlebrook', `a digital terrarium · ${nV} villagers, one small town`, true); await beat(4300);
 // 2 · morning routines (follow-cam)
 await ffTo(9.8); await run(`const S=terrarium.sim, v=S.villagers.find(v=>v.job==='woodcutter'); if(v&&v.anim!=='chop'){v.act=null;v.queue=[];S.brain.work(v,S);} halt(); terrarium.setSpeed(1); terrarium.select(v.id); terrarium.setMode('follow');`);
 await cap('Everyone has a day plan, needs, traits and a goal', 'and replans when life gets in the way'); await beat(4600);
@@ -61,6 +62,9 @@ await cap('Pinch a keepsake… and hope nobody sees', 'witnesses, chases, scuffl
 // 5 · the villager card
 await run(`terrarium.setMode('free'); terrarium.select(window._mark);`);
 await cap('Click anyone to read their mind', 'portrait, mood, plan, current thought, who they love and loathe'); await beat(4600); await run('terrarium.select(null)');
+// 5b · a brawl, cut by the in-game director (letterbox, push-in, slow-mo, hit shake: all live, not post)
+await ffTo(13.2); await run(`halt(); const S=terrarium.sim; const a=S.byId.get('tom'), c=S.byId.get('pip'); for (const v of [a,c]) { S.leaveSeat(v); v.inside=null; v.avatar.targetAlpha=1; v.busyUntil=0; v.queue=[]; v.act=null; } a.x=-6; a.z=6.2; c.x=-4.9; c.z=6.6; terrarium.setSpeed(1); terrarium.setMode('director'); terrarium.look(-5.5,6.4,16,.7,.5); terrarium.setMode('director'); S.startFight(a,c,'Tom finally lost his temper with Pip'); if(!terrarium.beatOn) terrarium.beat();`);
+await wait(8600);
 // 6 · evening: a confession by the pond
 await ffTo(18.4); await run(`const S=terrarium.sim, pair=[]; for (const v of S.villagers) for (const u of S.villagers) if (v!==u && !v.partner && !u.partner && !v.family.includes(u.id) && v.def.age!=='teen' && u.def.age!=='teen' && !pair.length && v.crush===u.id) pair.push(v.id,u.id); if(!pair.length){ const a=S.byId.get('ollie'), b=S.byId.get('jen'); pair.push(a.id,b.id); } window._pair=pair; return pair`).then(async ([a, bb]) => {
   await run(`const S=terrarium.sim, a=S.byId.get('${a}'), b=S.byId.get('${bb}'); if(a.partner){const x=S.byId.get(a.partner); S.breakUp(a,x);} if(b.partner){const x=S.byId.get(b.partner); S.breakUp(b,x);} a.crush=b.id; b.crush=a.id; a.opinion[b.id]=85; b.opinion[a.id]=82; for (const v of S.villagers) if (v!==a&&v!==b&&Math.hypot(v.x+3,v.z-12)<5) v.x+=6;`);
@@ -70,8 +74,10 @@ await ffTo(18.4); await run(`const S=terrarium.sim, pair=[]; for (const v of S.v
 });
 await cap('Crushes, confessions, heartbreak', 'romance grows out of opinions, memories and nerve'); await beat(6500);
 // 7 · god powers: rain + traveller
-await run("terrarium.god('traveller'); terrarium.god('rain'); terrarium.setSpeed(3); terrarium.fastForward(20); terrarium.setMode('free'); glide(-17.5,2.6,20,13,1.5,1.3,.5,.4,5500)");
-await cap('Play god', 'make it rain · drop a gift · throw a festival · summon the storyteller'); await beat(5200);
+await run("terrarium.god('rain'); terrarium.setSpeed(2); terrarium.fastForward(25); terrarium.setMode('free'); glide(-9,4,34,24,.5,.75,.5,.4,5600)");
+await cap('Play god', 'make it rain · drop a gift · throw a festival · summon the storyteller'); await wait(1900); await run('terrarium.strike()'); await wait(1600); await run('terrarium.strike()'); await beat(1900);
+await run("halt(); terrarium.sim.rainUntil = terrarium.sim.clock; terrarium.setSpeed(1); terrarium.setMode('director'); terrarium.god('traveller')"); await wait(900);
+await run("terrarium.ui().quiet = true; terrarium.fastForward(12); terrarium.ui().quiet = false; if (!terrarium.beatOn) terrarium.beat();"); await wait(5600);
 // 8 · night party
 await ffTo(20.7); await run(`terrarium.setSpeed(1); const S=terrarium.sim, p=S.parties.find(p=>!p.done&&p.at<=S.clock+30)||S.parties[S.parties.length-1]; const pl=S.place(p?p.place:'campfire'); glide(pl.cx, pl.cz+.5, 18, 11, .2, .7, .55, .4, 6000); return p&&p.title`);
 await cap('Invitations spread by word of mouth', 'and parties happen when enough people actually show up'); await beat(5200); await panels(true);
