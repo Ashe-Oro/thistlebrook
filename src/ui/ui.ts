@@ -2,7 +2,7 @@ import type { Sim } from '../sim/sim';
 import type { Villager, SimEvent } from '../sim/types';
 import type { Director, Paper } from '../sim/director';
 import { JOB_INFO, GOAL_LABEL } from '../data/villagers';
-import { fmtTime } from '../core/util';
+import { fmtTime, dayOf } from '../core/util';
 import { drawWeb } from './web';
 
 export const VCOLOR: Record<string, string> = { mara: '#e8875b', tom: '#6c8fd1', jen: '#c96bd6', ollie: '#d8b23b', pip: '#6dbb5a', rosa: '#d4574a', wren: '#5fc0c4', edgar: '#a98a62' };
@@ -16,6 +16,7 @@ export class UI {
   root: HTMLElement; feed!: HTMLElement; card!: HTMLElement; clock!: HTMLElement; overlay!: HTMLElement; toasts!: HTMLElement; caption!: HTMLElement; lb!: HTMLElement; modal!: HTMLElement;
   tags = new Map<string, HTMLElement>(); bubbles = new Map<string, { el: HTMLElement; until: number }>(); icons: { el: HTMLElement; id: string; t: number }[] = []; convo: { who: string; text: string; emoji: string; at: number }[] = [];
   tab = 'rel'; cardT = 0; lbKind: 'popularity' | 'power' | 'mischief' = 'popularity'; feedFilter = 'all'; autoPaper = true;
+  feedDay = 0; safeTop = 70;
   constructor(public app: AppApi, parent: HTMLElement) {
     this.root = h('div', 'ui'); parent.appendChild(this.root); this.build();
     const s = app.sim;
@@ -34,9 +35,10 @@ export class UI {
     top.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach(b => b.onclick = () => this.app.setSpeed(+b.dataset.speed!));
     (top.querySelector('#mode') as HTMLButtonElement).onclick = () => this.app.setMode(this.app.mode === 'director' ? 'free' : 'director');
     (top.querySelector('#snd') as HTMLButtonElement).onclick = (e) => { this.app.sound.setMuted(!this.app.sound.muted); (e.target as HTMLElement).textContent = this.app.sound.muted ? '🔇' : '🔊'; };
-    const fw = h('div', 'feedwrap'); fw.innerHTML = `<div class="ph"><b>📜 Village chronicle</b><div class="ff"><button data-f="all" class="on">All</button><button data-f="drama">Drama</button><button data-f="social">Social</button><button data-f="work">Work</button></div></div>`;
+    const fw = h('div', 'feedwrap'); fw.innerHTML = `<div class="ph"><b>📜 Village chronicle</b><div class="ff"><button data-f="all" class="on">All</button><button data-f="drama">Drama</button><button data-f="social">Social</button><button data-f="work">Work</button></div><button class="feedtog" title="Collapse chronicle">▾</button></div>`;
     this.feed = h('div', 'feed'); fw.appendChild(this.feed); r.appendChild(fw);
     fw.querySelectorAll<HTMLButtonElement>('[data-f]').forEach(b => b.onclick = () => { this.feedFilter = b.dataset.f!; fw.querySelectorAll('[data-f]').forEach(x => x.classList.toggle('on', x === b)); this.refilter(); });
+    const ftog = fw.querySelector<HTMLButtonElement>('.feedtog')!; ftog.onclick = () => { const col = fw.classList.toggle('collapsed'); ftog.textContent = col ? '▸' : '▾'; ftog.title = col ? 'Expand chronicle' : 'Collapse chronicle'; };
     this.card = h('div', 'card hidden'); r.appendChild(this.card);
     this.lb = h('div', 'lb'); r.appendChild(this.lb);
     const dock = h('div', 'dock'); dock.innerHTML = `<div class="grp"><span class="lbl">God powers</span><button data-g="gift">🎁<i>Drop gift</i></button><button data-g="rain">🌧️<i>Rain</i></button><button data-g="traveller">🧳<i>Traveller</i></button><button data-g="festival">🎪<i>Festival</i></button></div>
@@ -51,17 +53,28 @@ export class UI {
   }
   name(id: string) { const v = this.app.sim.byId.get(id); return v ? `<a class="nm" data-id="${id}" style="--c:${VCOLOR[id]}">${v.first}</a>` : id; }
   linkify(text: string) { let t = esc(text); for (const v of this.app.sim.villagers) t = t.replace(new RegExp(`\\b${v.first}(?!\\w)`, 'g'), this.name(v.id)); return t; }
-  cat(e: SimEvent) { return ['theft', 'fight', 'argue', 'god', 'weather', 'traveller', 'festival', 'reconcile', 'ally', 'romance'].includes(e.kind) ? 'drama' : ['talk', 'gift', 'gossip', 'invite', 'party', 'bond', 'reflect'].includes(e.kind) ? 'social' : 'work'; }
+  isLie(e: SimEvent) { return e.kind === 'gossip' && e.text.includes("(It isn't true.)"); }
+  cat(e: SimEvent) {
+    if (e.kind === 'weather') return 'weather'; // routine weather stays out of Drama; only in All
+    if (this.isLie(e)) return 'drama'; // fabricated rumours are the heart of the drama
+    return ['theft', 'burglary', 'fight', 'argue', 'accuse', 'god', 'traveller', 'festival', 'reconcile', 'ally', 'romance', 'rumour', 'snoop', 'sneaky', 'heartbreak'].includes(e.kind) ? 'drama'
+      : ['talk', 'gift', 'gossip', 'invite', 'party', 'bond', 'reflect', 'generous', 'lunch', 'breakfast', 'evening', 'social'].includes(e.kind) ? 'social' : 'work';
+  }
   addFeed(e: SimEvent) {
     if (e.imp <= 1) return; // small talk lives in each villager's story log, not the main chronicle
-    const el = h('div', `ev imp${Math.min(9, e.imp)} k-${e.kind} c-${this.cat(e)}`); el.dataset.id = String(e.id); el.dataset.cat = this.cat(e);
-    el.innerHTML = `<span class="t">${fmtTime(e.t)}</span><span class="ic">${e.icon}</span><span class="tx">${this.linkify(e.text)}</span>`;
+    const cat = this.cat(e), lie = this.isLie(e);
+    const day = dayOf(e.t); if (this.feedDay && day !== this.feedDay) { const sep = h('div', 'daysep', `— Day ${day} —`); this.feed.prepend(sep); } this.feedDay = day;
+    const el = h('div', `ev imp${Math.min(9, e.imp)} k-${e.kind} c-${cat}`); el.dataset.id = String(e.id); el.dataset.cat = cat;
+    const txt = lie ? e.text.replace(/\s*\(It isn't true\.\)\s*/i, ' ').trim() : e.text;
+    el.innerHTML = `<span class="t">${fmtTime(e.t)}</span><span class="ic">${e.icon}</span><span class="tx">${this.linkify(txt)}${lie ? ' <span class="badge false" title="A fabricated rumour — not actually true">false rumour</span>' : ''}</span>`;
     el.querySelectorAll<HTMLElement>('.nm').forEach(a => a.onclick = (ev) => { ev.stopPropagation(); this.app.select(a.dataset.id!); });
-    if (this.feedFilter !== 'all' && this.feedFilter !== el.dataset.cat) el.style.display = 'none';
-    this.feed.prepend(el); while (this.feed.children.length > 150) this.feed.lastChild!.remove();
-    if (e.imp >= 7) { this.captionText(`${e.icon} ${this.linkify(e.text)}`); }
+    if (this.feedFilter !== 'all' && this.feedFilter !== cat) el.style.display = 'none';
+    this.feed.prepend(el); while (this.feed.children.length > 160) this.feed.lastChild!.remove();
+    // only promote to the big caption when the event isn't already the visible top of the chronicle
+    const visibleInFeed = this.feedFilter === 'all' || this.feedFilter === cat;
+    if (e.imp >= 7 && !visibleInFeed) { this.captionText(`${e.icon} ${this.linkify(txt)}`); }
   }
-  updateFeed(e: SimEvent) { const el = this.feed.querySelector<HTMLElement>(`[data-id="${e.id}"] .tx`); if (el) { el.innerHTML = this.linkify(e.text); el.querySelectorAll<HTMLElement>('.nm').forEach(a => a.onclick = (ev) => { ev.stopPropagation(); this.app.select(a.dataset.id!); }); } }
+  updateFeed(e: SimEvent) { const el = this.feed.querySelector<HTMLElement>(`[data-id="${e.id}"] .tx`); if (el) { const lie = this.isLie(e); const txt = lie ? e.text.replace(/\s*\(It isn't true\.\)\s*/i, ' ').trim() : e.text; el.innerHTML = `${this.linkify(txt)}${lie ? ' <span class="badge false" title="A fabricated rumour — not actually true">false rumour</span>' : ''}`; el.querySelectorAll<HTMLElement>('.nm').forEach(a => a.onclick = (ev) => { ev.stopPropagation(); this.app.select(a.dataset.id!); }); } }
   refilter() { this.feed.querySelectorAll<HTMLElement>('.ev').forEach(el => el.style.display = this.feedFilter === 'all' || el.dataset.cat === this.feedFilter ? '' : 'none'); }
   captionTO: any; captionText(html: string) { this.caption.innerHTML = html; this.caption.classList.add('show'); clearTimeout(this.captionTO); this.captionTO = setTimeout(() => this.caption.classList.remove('show'), 6000); }
   toastQ: [string, string][] = []; quiet = false;
@@ -76,36 +89,68 @@ export class UI {
     const s = this.app.sim, now = performance.now();
     while (this.convo.length && this.convo[0].at <= s.clock) { const c = this.convo.shift()!; const v = s.byId.get(c.who); if (v && !v.inside) this.bubble(c.who, c.text, c.emoji, 3); }
     if (this.convo.length > 60) this.convo.splice(0, this.convo.length - 60);
-    const close = this.app.camDist() < 30;
+    const close = this.app.camDist() < 30, W = window.innerWidth, HT = this.safeTop;
     for (const v of s.villagers) {
       const pos = v.avatar.root.position, hh = v.avatar.height, tag = this.tags.get(v.id)!, p = this.app.project(pos.x, hh + .55, pos.z);
       const vis = p.on && !v.inside && v.avatar.alpha > .3;
       tag.style.display = vis && (close || this.app.selected === v.id) ? '' : 'none'; tag.classList.toggle('sel', this.app.selected === v.id);
-      if (vis) tag.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, -100%)`;
-      const b = this.bubbles.get(v.id); if (b) { const show = vis && now < b.until; b.el.style.display = show ? '' : 'none'; if (show) { const q = this.app.project(pos.x, hh + 1.0, pos.z); b.el.style.transform = `translate(${q.x}px, ${q.y - (tag.style.display === 'none' ? 0 : 18)}px) translate(-50%, -100%)`; } }
+      const tagHidden = tag.style.display === 'none';
+      if (vis && !tagHidden) { const tw = tag.offsetWidth, th = tag.offsetHeight; const tx = Math.max(tw / 2 + 4, Math.min(W - tw / 2 - 4, p.x)), ty = Math.max(HT + th, p.y); tag.style.transform = `translate(${tx}px, ${ty}px) translate(-50%, -100%)`; }
+      const b = this.bubbles.get(v.id);
+      if (b) { const show = vis && now < b.until; b.el.style.display = show ? '' : 'none';
+        if (show) { const q = this.app.project(pos.x, hh + 1.0, pos.z), bw = b.el.offsetWidth, bh = b.el.offsetHeight;
+          let bx = q.x, by = q.y - (tagHidden ? 0 : 18), below = false;
+          if (by - bh < HT) { below = true; by = q.y + 16; } // flip bubble below the head if it would clip the topbar
+          bx = Math.max(bw / 2 + 4, Math.min(W - bw / 2 - 4, bx));
+          b.el.classList.toggle('below', below); b.el.style.transform = `translate(${bx}px, ${by}px) translate(-50%, ${below ? '0%' : '-100%'})`; } }
     }
-    // keep simultaneous speech bubbles from stacking on top of each other
-    const shown: { el: HTMLElement; x: number; y: number; w: number; h: number }[] = [];
-    for (const [, b] of this.bubbles) { if (b.el.style.display === 'none') continue; const m = /translate\(([-\d.]+)px, ([-\d.]+)px\)/.exec(b.el.style.transform); if (!m) continue; shown.push({ el: b.el, x: +m[1], y: +m[2], w: b.el.offsetWidth, h: b.el.offsetHeight }); }
+    // keep simultaneous speech bubbles from stacking on top of each other, then clamp clear of the safe inset
+    const shown: { el: HTMLElement; x: number; y: number; w: number; h: number; off: string; below: boolean }[] = [];
+    for (const [, b] of this.bubbles) { if (b.el.style.display === 'none') continue; const m = /translate\(([-\d.]+)px, ([-\d.]+)px\) translate\(-50%, ([^)]+)\)/.exec(b.el.style.transform); if (!m) continue; shown.push({ el: b.el, x: +m[1], y: +m[2], w: b.el.offsetWidth, h: b.el.offsetHeight, off: m[3], below: m[3].trim() === '0%' }); }
     shown.sort((a, b) => b.y - a.y);
-    for (let i = 0; i < shown.length; i++) { const a = shown[i]; for (let j = 0; j < i; j++) { const b = shown[j]; if (Math.abs(a.x - b.x) < (a.w + b.w) / 2 + 4 && a.y > b.y - b.h - 6 && a.y < b.y + a.h) { a.y = b.y - b.h - 8; } } a.el.style.transform = `translate(${a.x}px, ${a.y}px) translate(-50%, -100%)`; }
-    for (const ic of this.icons) { ic.t += dt; const v = s.byId.get(ic.id)!; const pos = v.avatar.root.position; const p = this.app.project(pos.x, v.avatar.height + .9 + ic.t * .9, pos.z); ic.el.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, -50%) scale(${Math.min(1, ic.t * 5)})`; ic.el.style.opacity = String(Math.max(0, 1 - ic.t / 2.2)); ic.el.style.display = p.on && !v.inside ? '' : 'none'; }
+    for (let i = 0; i < shown.length; i++) { const a = shown[i]; for (let j = 0; j < i; j++) { const b = shown[j]; if (Math.abs(a.x - b.x) < (a.w + b.w) / 2 + 4 && a.y > b.y - b.h - 6 && a.y < b.y + a.h) { a.y = b.y - b.h - 8; } }
+      if (a.below) { if (a.y < HT) a.y = HT; } else if (a.y - a.h < HT) a.y = HT + a.h;
+      a.el.style.transform = `translate(${a.x}px, ${a.y}px) translate(-50%, ${a.off})`; }
+    for (const ic of this.icons) { ic.t += dt; const v = s.byId.get(ic.id)!; const pos = v.avatar.root.position; const p = this.app.project(pos.x, v.avatar.height + .9 + ic.t * .9, pos.z); const ix = Math.max(16, Math.min(W - 16, p.x)), iy = Math.max(HT, p.y); ic.el.style.transform = `translate(${ix}px, ${iy}px) translate(-50%, -50%) scale(${Math.min(1, ic.t * 5)})`; ic.el.style.opacity = String(Math.max(0, 1 - ic.t / 2.2)); ic.el.style.display = p.on && !v.inside ? '' : 'none'; }
     this.icons = this.icons.filter(ic => { if (ic.t > 2.2) { ic.el.remove(); return false; } return true; });
     this.cardT -= dt; if (this.cardT <= 0) { this.cardT = .35; this.clock.innerHTML = `<b>Day ${s.day}</b> · ${fmtTime(s.clock)} ${s.rain > .4 ? '🌧️' : s.hour >= 20 || s.hour < 6 ? '🌙' : s.hour < 8 ? '🌅' : '☀️'}${s.festivalUntil > s.clock ? ' 🎪' : ''}${s.visitorUntil > s.clock ? ' 🧳' : ''}`;
+      this.measureChrome();
       this.root.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach(b => b.classList.toggle('on', +b.dataset.speed! === this.app.speed)); (this.root.querySelector('#mode') as HTMLElement).textContent = this.app.mode === 'director' ? '🎬 Director' : '🕹️ Free cam';
       this.renderCard(); this.renderLB(); }
   }
+  // measure real topbar/dock heights so overlays and panels never assume a fixed chrome size
+  measureChrome() {
+    const tb = this.root.querySelector<HTMLElement>('.topbar'), dk = this.root.querySelector<HTMLElement>('.dock');
+    if (tb) { const r = tb.getBoundingClientRect(); this.safeTop = r.bottom + 8; this.root.style.setProperty('--top-h', `${Math.round(r.height)}px`); }
+    if (dk) this.root.style.setProperty('--dock-h', `${Math.round(dk.offsetHeight)}px`);
+  }
   renderLB() {
-    const rows = this.app.director.ranked(this.lbKind), max = Math.max(1, ...rows.map(r => Math.abs(r.score)));
+    const s = this.app.sim, rows = this.app.director.ranked(this.lbKind), max = Math.max(1, ...rows.map(r => Math.abs(r.score)));
+    const legend: Record<string, string> = { popularity: 'Liked — the village’s average opinion of you.', power: 'Influence — allies + admirers + those who fear you.', mischief: 'Mischief — thefts, rumours and fights stirred up.' };
+    // trend vs ~24 game hours ago (popularity & influence are tracked in sim.history)
+    const hk = this.lbKind === 'popularity' ? 'pop' : this.lbKind === 'power' ? 'power' : null;
+    let past: Record<string, number> | null = null;
+    if (hk && s.history.length) { const tgt = s.clock - 1440; let pick = s.history[0]; for (const snap of s.history) { if (snap.t <= tgt) pick = snap; } past = (pick as any)[hk]; }
+    const trend = (id: string, cur: number) => { if (!past || past[id] === undefined) return ''; const d = cur - past[id]; return d > 2 ? '<span class="tr up" title="rising since yesterday">↑</span>' : d < -2 ? '<span class="tr dn" title="falling since yesterday">↓</span>' : '<span class="tr fl" title="steady">·</span>'; };
     this.lb.innerHTML = `<div class="ph"><b>🏆 Leaderboard</b><div class="ff">${(['popularity', 'power', 'mischief'] as const).map(k => `<button data-k="${k}" class="${k === this.lbKind ? 'on' : ''}">${k === 'mischief' ? '😈 Mischief' : k === 'popularity' ? '❤️ Liked' : '👑 Influence'}</button>`).join('')}</div></div>` +
-      rows.map((r, i) => `<div class="row" data-id="${r.v.id}"><span class="rk">${['🥇', '🥈', '🥉'][i] ?? i + 1}</span><span class="dot" style="background:${VCOLOR[r.v.id]}"></span><span class="n">${r.v.first}</span><span class="bar"><i style="width:${Math.max(3, Math.abs(r.score) / max * 100)}%;background:${r.score < 0 ? '#c55' : VCOLOR[r.v.id]}"></i></span><span class="sc">${r.score}</span></div>`).join('');
+      `<div class="lbleg">${esc(legend[this.lbKind])}</div>` +
+      rows.map((r, i) => { const neg = r.score < 0, w = Math.max(2, Math.abs(r.score) / max * 50); return `<div class="row" data-id="${r.v.id}"><span class="rk">${['🥇', '🥈', '🥉'][i] ?? i + 1}</span><span class="dot" style="background:${VCOLOR[r.v.id]}"></span><span class="n">${r.v.first}</span><span class="bar signed"><i class="${neg ? 'neg' : 'pos'}" style="${neg ? 'right:50%' : 'left:50%'};width:${w}%;background:${neg ? '#d1574b' : VCOLOR[r.v.id]}"></i></span><span class="sc">${r.score}${trend(r.v.id, r.score)}</span></div>`; }).join('');
     this.lb.querySelectorAll<HTMLElement>('[data-k]').forEach(b => b.onclick = () => { this.lbKind = b.dataset.k as any; this.renderLB(); });
     this.lb.querySelectorAll<HTMLElement>('.row').forEach(b => b.onclick = () => this.app.select(b.dataset.id!));
   }
   mood(v: Villager) { const e = v.avatar.expr; return ({ happy: '😊', grin: '😁', sad: '😢', angry: '😠', scared: '😨', surprised: '😮', sleepy: '😴', love: '🥰', smirk: '😏', determined: '😤', dizzy: '😵‍💫', neutral: '🙂', knockedOut: '😵' } as any)[e] ?? '🙂'; }
   relLabel(o: number) { return o >= 70 ? 'Best friend' : o >= 35 ? 'Friend' : o >= 10 ? 'Friendly' : o > -10 ? 'Neutral' : o > -40 ? 'Wary' : o > -70 ? 'Dislikes' : 'Nemesis'; }
+  // cheaply refresh the volatile header fields without tearing down the whole card (avoids flicker / focus loss)
+  updateCardLive(v: Villager, s: Sim) {
+    const md = this.card.querySelector('.md'); if (md) md.textContent = this.mood(v);
+    const th = this.card.querySelector('.thought'); if (th) th.innerHTML = `💭 ${esc(v.thought)}`;
+    const dg = this.card.querySelector('.doing'); if (dg) dg.innerHTML = `▶ ${esc(v.doing)}${v.inside ? ` <span class="muted">(inside ${s.place(v.inside).name})</span>` : ''}`;
+    const bars = this.card.querySelectorAll<HTMLElement>('.need i'); if (bars.length >= 3) { bars[0].style.width = `${v.needs.food}%`; bars[1].style.width = `${v.needs.energy}%`; bars[2].style.width = `${v.needs.social}%`; }
+  }
   renderCard() {
-    const id = this.app.selected; if (!id) { this.card.classList.add('hidden'); return; } const s = this.app.sim, v = s.byId.get(id)!; this.card.classList.remove('hidden');
+    const id = this.app.selected; if (!id) { this.card.classList.add('hidden'); this.card.dataset.rid = ''; return; } const s = this.app.sim, v = s.byId.get(id)!; this.card.classList.remove('hidden');
+    if (this.card.dataset.rid === id && this.card.dataset.rtab === this.tab) { this.updateCardLive(v, s); return; }
+    this.card.dataset.rid = id; this.card.dataset.rtab = this.tab;
     const al = v.alliance ? s.alliances.find(a => a.id === v.alliance) : null; const bar = (l: string, x: number, c: string) => `<div class="need"><span>${l}</span><b><i style="width:${x}%;background:${c}"></i></b></div>`;
     const traits = Object.entries(v.traits).map(([k, x]) => `<span class="tr" title="${k} ${x}">${k}<i style="width:${x * 100}%"></i></span>`).join('');
     const held = s.holding(v).map(k => `<span class="it ${k.owner !== v.id ? 'hot' : ''}" title="${k.owner !== v.id ? 'Belongs to ' + s.byId.get(k.owner)?.first : 'Treasured keepsake'}">${k.icon} ${esc(k.name.replace(/^(his|her) /, ''))}${k.owner !== v.id ? ` <em>(${s.byId.get(k.owner)?.first}'s!)</em>` : ''}</span>`).join('');
@@ -131,7 +176,7 @@ export class UI {
   view(kind: string) {
     const s = this.app.sim; this.modal.classList.remove('hidden');
     if (kind === 'paper') { const p = this.app.director.papers[this.app.director.papers.length - 1] ?? this.app.director.paper(s.day); this.showPaper(p); return; }
-    if (kind === 'web') { this.modal.innerHTML = `<div class="sheet web"><button class="x">✕</button><h2>🕸️ Who likes whom</h2><p class="muted">Green = fondness, red = resentment, thickness = strength. Flags mark alliances.</p><canvas width="760" height="560"></canvas></div>`; drawWeb(this.modal.querySelector('canvas')!, s, VCOLOR, (id) => this.app.portrait(id)); }
+    if (kind === 'web') { this.modal.innerHTML = `<div class="sheet web"><button class="x">✕</button><h2>🕸️ Who likes whom</h2><p class="muted">Green = fondness, red = resentment, thickness = strength. Hover or tap a face to see who <b>they</b> like (→ outgoing) and who likes <b>them</b> (← incoming). 💞 sweethearts · 💗 crushes · 🚩 alliances.</p><canvas width="760" height="560"></canvas></div>`; drawWeb(this.modal.querySelector('canvas')!, s, VCOLOR, (id) => this.app.portrait(id)); }
     if (kind === 'recap') this.showRecap();
     if (kind === 'villagers') { this.modal.innerHTML = `<div class="sheet"><button class="x">✕</button><h2>👥 The villagers</h2><div class="vgrid">${s.villagers.map(v => `<div class="vc" data-id="${v.id}"><div class="pt"></div><b style="color:${VCOLOR[v.id]}">${v.name}</b><small>${JOB_INFO[v.job].label} · ${GOAL_LABEL[v.goal]}</small><p>${esc(v.def.bio)}</p></div>`).join('')}</div></div>`;
       this.modal.querySelectorAll<HTMLElement>('.vc').forEach(el => { el.querySelector('.pt')!.appendChild(this.app.portrait(el.dataset.id!)); el.onclick = () => { this.closeModal(); this.app.select(el.dataset.id!); }; }); }
@@ -139,7 +184,7 @@ export class UI {
   }
   showPaper(p: Paper) {
     this.modal.classList.remove('hidden'); this.app.sound.play('paper');
-    this.modal.innerHTML = `<div class="sheet paper"><button class="x">✕</button><div class="mast">The Thistlebrook Gazette</div><div class="dateline">Day ${p.day + 1} · Morning edition · Weather: ${p.weather} · One copper</div><h1>${this.linkify(p.headline)}</h1>
+    this.modal.innerHTML = `<div class="sheet paper"><button class="x">✕</button><div class="mast">The Thistlebrook Gazette</div><div class="dateline">Day ${p.day + 1} · Village morning edition · Weather: ${p.weather}</div><h1>${this.linkify(p.headline)}</h1>
       <div class="cols"><div>${p.stories.map(x => `<p>${x.icon} ${this.linkify(x.text)}</p>`).join('') || '<p>All quiet on the village front.</p>'}</div><div class="side"><h3>Standings</h3><p>❤️ Best-loved: <b>${p.leaders.popular}</b></p><p>👑 Most influential: <b>${p.leaders.power}</b></p><p>😈 Most mischievous: <b>${p.leaders.mischief}</b></p>${p.couples ? `<p>💞 Sweethearts: <b>${p.couples}</b></p>` : ''}${p.quote ? `<h3>Overheard</h3><p class="q">“${esc(p.quote.text)}”<br>— ${p.quote.who}</p>` : ''}</div></div></div>`;
     this.modal.querySelector('.x')?.addEventListener('click', () => this.closeModal());
   }
