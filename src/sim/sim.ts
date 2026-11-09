@@ -313,10 +313,13 @@ export class Sim {
       if (n < 2) { host.emotions.sadness = .8; host.mem.add(this.clock, `Nobody came to my ${p.title}`, 7, [host.id], -.8); }
     }
   }
+  ringN = 0;
   attend(v: Villager, a: Action, dt: number, walk: (x: number, z: number, r?: number) => boolean) {
     const p = this.parties.find(x => x.id === a.party); if (!p || p.done) { this.leaveSeat(v); return true; }
     const pl = this.place(p.place);
     if (!a._at) {
+      // the festival is a ring dance round the plaza (promenade, then dance in place), not a bench-sit
+      if (this.festivalUntil > this.clock && p.place === 'plaza' && a.ring === undefined && !a.seat) { a.ring = this.ringN = (this.ringN + 1) % 16; a.spot = [pl.cx + Math.cos(a.ring * .79) * 3.1, pl.cz + Math.sin(a.ring * .79) * 3.1]; }
       if (!a.seat && !a.spot) { a.seat = p.place === 'campfire' ? this.takeSeat(v, 'campfire') : (p.place === 'plaza' ? this.takeSeat(v, 'bench') : null); if (!a.seat) { const ang = this.rng.range(0, 6.28), r = p.place === 'campfire' ? 3.4 : 2.2 + this.rng.range(0, 1.5); a.spot = [pl.cx + Math.sin(ang) * r, pl.cz + 2.5 + Math.cos(ang) * r]; if (p.place === 'tavern') a.spot = [pl.x + this.rng.range(-3.5, 3.5), pl.z + this.rng.range(.5, 3)]; a.spot = this.world.nav.nearestFree(a.spot[0], a.spot[1]); } }
       const [x, z] = a.seat ? [a.seat.x + Math.sin(a.seat.rot) * .55, a.seat.z + Math.cos(a.seat.rot) * .55] : a.spot;
       if (!walk(x, z, .35)) return false; a._at = 1; p.attendees.add(v.id); if (a.seat) { v.x = a.seat.x; v.z = a.seat.z; v.heading = a.seat.rot; }
@@ -325,7 +328,14 @@ export class Sim {
     }
     const host = this.byId.get(p.host)!;
     if (!a.seat) { v.heading = Math.atan2(pl.cx - v.x, (p.place === 'campfire' ? pl.cz : pl.cz + 4) - v.z); }
-    const k = Math.floor(a.t / 12) % 4; v.anim = a.seat ? (k === 2 ? 'talk' : 'sit') : (this.festivalUntil > this.clock || p.title.includes('dance') ? (k % 2 ? 'dance' : 'cheer') : (k === 1 ? 'talk' : k === 3 ? 'drink' : 'idle'));
+    const ringed = a.ring !== undefined && this.festivalUntil > this.clock;
+    if (ringed) { // promenade round the ring for a while, then stop and dance facing in
+      const promenade = Math.floor(a.t / 10) % 2 === 0, ang = a.ring * .79 + (a.ringT = (a.ringT ?? 0) + (promenade ? dt * .07 : 0)), nx = pl.cx + Math.cos(ang) * 3.1, nz = pl.cz + Math.sin(ang) * 3.1;
+      if (this.world.nav.isFree(nx, nz)) { if (promenade) v.heading = Math.atan2(nx - v.x, nz - v.z); v.x = nx; v.z = nz; } else a.ringT -= dt * .07;
+      if (!promenade) v.heading = Math.atan2(pl.cx - v.x, pl.cz - v.z); v.anim = promenade ? 'walk' : (Math.floor(a.t / 5) % 3 === 2 ? 'cheer' : 'dance');
+      if (!promenade && this.rng.chance(dt * .01)) this.world.fx.sparkle(v.x, 1.6, v.z, [1, .85, .45], 4);
+    }
+    const k = Math.floor(a.t / 12) % 4; if (!ringed) v.anim = a.seat ? (k === 2 ? 'talk' : 'sit') : (this.festivalUntil > this.clock || p.title.includes('dance') ? (k % 2 ? 'dance' : 'cheer') : (k === 1 ? 'talk' : k === 3 ? 'drink' : 'idle'));
     if (a.seat) { v.x = a.seat.x; v.z = a.seat.z; v.heading = a.seat.rot; }
     v.needs.social = Math.min(100, v.needs.social + dt * 2); v.emotions.joy = Math.min(1, v.emotions.joy + dt * .02);
     if (Math.random() < dt * .05) { const others = [...p.attendees].filter(x => x !== v.id); if (others.length) { const o = this.byId.get(this.rng.pick(others))!; v.opinion[o.id] = Math.min(100, (v.opinion[o.id] ?? 0) + 1); this.say(v, this.rng.pick(['Ha! Good one.', `Cheers, ${o.first}!`, 'Remember last spring?', 'More cider!', 'La la laaa~', ...v.def.catchphrases]), this.rng.pick(['😄', '🍻', '🎶', '😂'])); } }
