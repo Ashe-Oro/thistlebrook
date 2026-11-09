@@ -1,0 +1,11 @@
+# Licensed ThreeJS Assets content: never commit, never upload
+licensed/
+dist/
+node_modules/
+shots/
+
+*.glb
+*.gltf
+*.fbx
+*.mp4
+*.webm
