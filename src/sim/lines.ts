@@ -1,0 +1,264 @@
+// Dialogue & narration content library for Thistlebrook.
+// Lines are keyed by *situation*. Each situation holds 6-12 short variants (speech-bubble sized, <= 60 chars),
+// some gated by the speaker's personality (traits + goal) so the cast sounds like themselves. Selection is
+// deterministic via sim.rng so the same seed replays the same conversations.
+import type { Sim } from './sim';
+import type { Villager } from './types';
+import type { Goal } from '../data/villagers';
+
+// --- pronoun helper -------------------------------------------------------
+export function pr(v: Villager) {
+  const she = v.def.pronouns === 'she';
+  return { sub: she ? 'she' : 'he', obj: she ? 'her' : 'him', pos: she ? 'her' : 'his', Sub: she ? 'She' : 'He' };
+}
+
+// --- personality predicates ----------------------------------------------
+type Pred = (s: Villager) => boolean;
+const kind: Pred = s => s.traits.kindness > .6;
+const mean: Pred = s => s.traits.kindness < .4;
+const honest: Pred = s => s.traits.honesty > .7;
+const sly: Pred = s => s.traits.honesty < .4;
+const brave: Pred = s => s.traits.bravery > .65;
+const timid: Pred = s => s.traits.bravery < .4;
+const outgoing: Pred = s => s.traits.sociability > .65;
+const shy: Pred = s => s.traits.sociability < .45;
+const envious: Pred = s => s.traits.envy > .55;
+const ambi: Pred = s => s.traits.ambition > .7;
+const diligent: Pred = s => s.traits.diligence > .7;
+const hot: Pred = s => s.traits.temper > .6;
+const calm: Pred = s => s.traits.temper < .35;
+const G = (g: Goal): Pred => s => s.goal === g;
+
+type Variant = string | [string, Pred];
+
+// --- the library ----------------------------------------------------------
+const LIB: Record<string, Variant[]> = {
+  greeting: [
+    'Morning, {t}!', 'Hey {t}!', '{t}! Got a minute?', 'Fine day, {t}.',
+    ['There you are, {t}! Come here.', outgoing], ['Well if it isn’t {t}!', outgoing],
+    ['Good to see you, {t}.', kind], ['Oh—hello, {t}.', shy], ['Quick word, {t}?', diligent],
+    ['{t}. Glad I caught you.', G('power')], ['You. {t}. A moment.', hot], ['Afternoon, {t}. All well?', calm],
+  ],
+  // small-talk topics (no prices, no money — just village life)
+  weather: [
+    'Did you see the sky this morning?', 'Rain’s coming, I can feel it.', 'Not a cloud in sight today.',
+    'Bit nippy for the season, eh?', 'Good drying weather, this.', '"Red sky at night," my gran said.',
+    ['Weather’s fair — work to do.', diligent], ['Lovely light this evening.', calm],
+  ],
+  hens: [
+    'The hens were extra loud today.', 'Wren’s hens are laying again!', 'Fresh eggs this morning, lucky us.',
+    'One of the hens got out again.', 'That rooster has no manners.', ['The speckled hen’s my favourite.', kind],
+  ],
+  forge: [
+    'Tom’s forge was roaring today.', 'You can hear the hammer from here.', 'Smells of coal smoke by the smithy.',
+    'Tom made a fine hinge, I’ll say that.', 'Sparks flying at the forge again.', ['Tom thinks he runs this place.', ambi],
+  ],
+  post: [
+    'Any letters for me, you think?', 'Jen’s run off her feet with post.', 'Heard the mail coach was late.',
+    'A parcel came for someone today.', 'I’m waiting on a letter myself.', ['Jen reads the mail, you know.', sly],
+  ],
+  woods: [
+    'Pip’s been felling trees all day.', 'The woods are lovely this time o’ year.', 'Mind the old path, it’s muddy.',
+    'Heard an owl out past the treeline.', 'Good firewood coming in lately.', ['I don’t go in the woods after dark.', timid],
+  ],
+  quarry: [
+    'Rosa’s been at the quarry since dawn.', 'They blasted stone again today.', 'That new stone’s a lovely grey.',
+    'Dusty work, the quarry.', 'Rosa carved a fine lintel.', ['I’d take a turn at the quarry.', brave],
+  ],
+  gossipTopic: [
+    'Have you heard any news?', 'Folks have been talking, haven’t they?', 'Something’s in the air lately.',
+    'You always know the latest, {t}.', ['I hear things. I always do.', sly], ['Tell me everything, I’m nosy.', outgoing],
+  ],
+  // chat reactions
+  chatReact: [
+    'Tell me about it.', 'Same here!', 'Really?', 'Is that right?', 'You don’t say.', ['Oh, do tell me more.', kind],
+  ],
+  agree: [
+    'Ha! Exactly.', 'My thoughts precisely.', 'Couldn’t agree more.', 'Now that’s the truth.', 'You said it.',
+    ['Oh, I like how you put that.', kind], ['Aye, that’s the plain truth.', honest], ['Yes! We think alike.', outgoing],
+  ],
+  disagree: [
+    'Hmm, if you say so.', 'I’m not so sure about that.', 'We’ll have to differ there.', 'Is that so? I wonder.',
+    ['No, I don’t think that’s right.', honest], ['Rubbish. Plain rubbish.', hot],
+    ['I see it differently, is all.', kind], ['Perhaps. Perhaps not.', calm],
+  ],
+  snap: [
+    'Not now, I’m not in the mood.', 'Do you ever stop talking?', 'Ugh. Whatever.', 'Leave me be, would you?',
+    'I’m tired and hungry. Later.', ['Say one more word. Go on.', hot], ['I haven’t the patience today.', hot],
+    ['What do YOU want?', mean], ['Please… just not right now.', shy],
+  ],
+  // gossip
+  gossipOpener: [
+    'Psst, {t}...', 'Can you keep a secret?', 'You didn’t hear this from me...', 'Lean in, I’ve got one for you.',
+    ['Oh, have I got something for you.', sly], ['A little bird told me something.', G('power')],
+    ['{t}! You will not believe this.', outgoing], ['I probably shouldn’t say, but...', shy],
+  ],
+  gossipReactNeg: [
+    'No way!', 'I knew it!', 'Unbelievable.', 'Well I never!', 'The nerve of some people.',
+    'You’re joking. Tell me more.', ['Ha! Serves them right.', mean], ['Oh, that’s a shame to hear.', kind],
+  ],
+  gossipReactPos: [
+    'How lovely!', 'Good for them.', 'That’s the best news all week.', 'Oh, I’m so pleased!',
+    'Aw, that warms the heart.', ['Lucky them, I suppose.', envious],
+  ],
+  // rumours (lies)
+  rumourOpener: [
+    'Between you and me, {t}...', 'Don’t repeat this, but...', 'I probably shouldn’t say...', 'Keep this under your hat...',
+    ['I have it on good authority...', sly], ['People ought to know this.', mean], ['You’ll want to hear this one.', G('power')],
+  ],
+  rumourBelieved: [
+    'I had no idea!', 'Hmm. That explains a lot.', 'Really?!', 'I always suspected as much.', 'Well. That changes things.',
+    ['Ha, so they’re not so perfect.', envious],
+  ],
+  rumourDisbelieved: [
+    'I don’t believe that for a second.', 'Who told you that nonsense?', 'That doesn’t sound right at all.',
+    'Pull the other one.', ['That’s a lie and you know it.', honest], ['I won’t hear that about them.', kind],
+  ],
+  // flirting
+  flirt: [
+    'You look nice today, {t}.', 'Walk with me a while?', 'I saved you the good seat, {t}.',
+    'Your laugh is the best sound here.', 'Is it warm, or is it just you?',
+    ['I can’t stop thinking about you.', brave], ['I, um… you look lovely, {t}.', shy],
+    ['Fancy a stroll, just us two?', outgoing], ['I’d cross the village to see you.', G('love')],
+    ['You brighten my whole day, {t}.', kind],
+  ],
+  flirtWarm: [
+    'Oh, stop it...', 'You’re sweet.', 'I’d like that.', 'Flatterer. ...Go on, then.', 'My, aren’t you bold.',
+    ['I—oh. Thank you.', shy], ['Took you long enough to ask!', outgoing],
+  ],
+  flirtAwkward: [
+    'Uh... thanks?', 'I should get back to work.', 'Mm-hm.', 'That’s... nice of you.', 'Haha. Anyway.',
+    ['Oh. Um. I—bye.', shy], ['Don’t.', hot],
+  ],
+  // confession
+  confess: [
+    '{t}... I can’t keep it in any longer.', '{t}, I think I’m in love with you.',
+    'My heart’s made up its mind. It’s you.', 'I’ve wanted to say this so long.', 'No more hiding it — I adore you.',
+    ['{t}, I love you. Plain and simple.', brave], ['{t}, there’s something I must say.', shy],
+    ['You’re all I think about, {t}.', G('love')],
+  ],
+  confessYes: [
+    'You... really? Because I feel the same.', 'Yes. A hundred times yes.', 'I was hoping you’d say that.',
+    'Come here, you.', 'My heart’s been yours for ages.', ['I… yes. Yes!', shy],
+  ],
+  confessNo: [
+    'Oh. Oh no. I’m so sorry...', 'You’re dear to me, but not like that.', 'I... don’t feel the same way.',
+    'I wish I could say it back.', 'I’m so sorry. I can’t.', ['You’re lovely, truly — just not for me.', kind],
+  ],
+  confessHeartbroken: [
+    'Right. Of course. Forget I said anything.', 'I understand. Sorry to trouble you.', 'No—no, it’s fine. Really.',
+    'Silly of me. Goodnight, {t}.', 'I’ll… see myself out.',
+  ],
+  // gifts
+  giftGiveNormal: [
+    'For you, {t}!', 'I thought you could use this.', 'A little something!', 'Here—this made me think of you.',
+    'No occasion. Just felt right.', ['Just because you’re you, {t}.', kind], ['Made it myself. Go on, take it.', diligent],
+  ],
+  giftGiveRomantic: [
+    'I, um, made this for you.', 'This made me think of you.', 'For you. Only you.', 'I hope… I hope you like it.',
+    ['It’s silly. But it’s yours.', shy], ['I made this with you in mind, {t}.', brave],
+  ],
+  giftReceiveNormal: [
+    'Oh! You shouldn’t have!', 'That’s so kind!', 'You’re a treasure.', 'For me? Well now.', 'Bless you, {v}.',
+    ['You’ve made my whole day.', kind],
+  ],
+  giftReceiveRomantic: [
+    'Oh… it’s beautiful.', 'You made this? For me?', 'I’ll treasure it. Truly.', 'My heart. Come here.',
+    'You sweet thing.', ['I… don’t know what to say.', shy],
+  ],
+  // arguments
+  argueOpener: [
+    'We need to talk.', 'You’ve got some nerve, {t}.', 'I know what you did.', 'Don’t play innocent with me.',
+    ['Right. That’s it. Outside.', hot], ['I’ll say this to your face, {t}.', honest],
+    ['Stay away from my family.', G('family')], ['A word. Now, if you please.', calm],
+  ],
+  argueRetort: [
+    'Oh, here we go.', 'What now?', 'Leave me alone.', 'You’ve lost your mind.', 'I don’t owe you a thing.',
+    ['Say that again. I dare you.', hot], ['Cry about it.', mean], ['Lower your voice, would you.', calm],
+  ],
+  fightTaunt: [
+    'Everyone knows about it!', 'You’re a menace!', 'Say that again!', 'You want trouble?', 'Liar!', 'Take it back!',
+    ['I’ve had ENOUGH of you!', hot], ['Come on then, big words!', brave], ['You’re nothing. Nothing!', mean],
+  ],
+  // reconciliation
+  apology: [
+    'I’m sorry about before.', 'I’m sorry. Truly.', 'I was out of line. Forgive me?', 'I’ve felt rotten about it.',
+    ['I never meant to hurt you, {t}.', kind], ['I was wrong. Plain and simple.', honest],
+    ['I… I came to say sorry.', shy], ['Peace? For both our sakes.', G('family')],
+  ],
+  reconcileAccept: [
+    '...Alright. Water under the bridge.', 'Come here, you daft thing.', 'I’ve missed you, if I’m honest.',
+    'Let’s put it behind us.', 'Took you long enough. Friends.', ['Of course I forgive you.', kind],
+  ],
+  reconcileRefuse: [
+    'Sorry doesn’t cut it.', 'Not yet. Maybe not ever.', 'You can’t just say sorry and go.',
+    'I need time. A lot of it.', 'Fine words. I’ve heard them before.', ['Get out of my sight.', hot],
+  ],
+  // accusations
+  accuseDemand: [
+    'Where is {thing}?', 'You took {thing}. Admit it.', 'Give back {thing}, {t}!', 'I know you took it, {t}.',
+    ['Hand it over. Now.', hot], ['I’ll ask once. Did you take it?', honest],
+  ],
+  accuseGuiltyConfess: [
+    'Fine. Here. I’m sorry.', '...You caught me. Take it.', 'I shouldn’t have. Forgive me.',
+    ['I… I’m so sorry. Here.', shy], ['I feel awful. Please, take it back.', kind],
+  ],
+  accuseGuiltyDeny: [
+    'Me? I would never!', 'I don’t know what you mean.', 'Search me, you’ll find nothing.', 'Prove it.',
+    ['Careful who you accuse, {t}.', sly], ['You’ve lost it.', mean],
+  ],
+  accuseGuiltyReply: [ 'Hmph.', 'We’ll see about that.', 'I don’t believe you.' ],
+  accuseInnocent: [
+    'What?! I never touched it!', 'How dare you!', 'Me?! I’d do no such thing!', 'That’s a filthy accusation!',
+    ['Take that back right now!', hot], ['I’m no thief and you know it!', honest],
+  ],
+  accuseInnocentReply: [ 'Then who did?', 'Someone took it...', 'I… I’m sorry. I just—' ],
+  // theft caught
+  theftShoutSelf: [
+    'Hey! Give that BACK!', 'Thief! That’s mine!', 'Stop! Put it down!', 'Oi! Hands off!',
+  ],
+  theftShoutOther: [
+    '{t}! {v} just took your {what}!', 'Thief! {v}’s got your {what}, {t}!', 'Stop {v}! {t}, your {what}!',
+  ],
+  theftOops: [
+    'Uh oh...', 'Ah. Time to run.', 'I can explain—later!', 'Not good, not good.',
+  ],
+  // jealousy
+  jealousy: [
+    'And what’s so special about them?', 'I saw you two together, you know.', 'Should I just not bother, then?',
+    'I thought I meant more to you.', 'Don’t mind me. I’m used to it.',
+    ['It’s always them, never me.', envious], ['Go on, choose them. See if I care.', hot],
+  ],
+  // party
+  toast: [
+    'To Thistlebrook!', 'Raise your cups, friends!', 'To good neighbours and full cups!', 'Health and happiness, all!',
+    'To old friends and new!', 'Drink up, it’s a grand night!', ['Everybody up! A toast!', outgoing],
+    ['To the finest village in the land!', G('power')],
+  ],
+  partyBanter: [
+    'Ha! Good one.', 'Cheers, {t}!', 'Remember last spring?', 'More cider!', 'La la laaa~', 'Best night in ages, this.',
+    'Who brought the good cheese?', ['Dance with me, {t}!', outgoing],
+  ],
+  // invitations
+  inviteAccept: [ 'I’ll be there!', 'Wouldn’t miss it!', 'Count me in.', 'Save me a seat!', ['Try and stop me!', outgoing] ],
+  inviteMaybe: [ 'Maybe I’ll stop by.', 'We’ll see.', 'If I finish up in time.', 'Perhaps, perhaps.', ['I’ll… think about it.', shy] ],
+  inviteRefuse: [ 'Hmph. We’ll see.', 'Not really my sort of thing.', 'I’d rather not, thanks.', 'Another time, maybe.', ['With that lot? Hardly.', mean] ],
+};
+
+const TOPIC_KEYS = ['weather', 'hens', 'forge', 'post', 'woods', 'quarry', 'gossipTopic'];
+
+// Pick a personality- and goal-appropriate line for `sit`, interpolating {t}/{v}/{thing}/{what}
+// plus speaker pronoun tokens {sub}/{obj}/{pos}/{Sub}. Deterministic via sim.rng.
+export function say(sim: Sim, sp: Villager, sit: string, vars: Record<string, string> = {}): string {
+  const pool = LIB[sit];
+  if (!pool || !pool.length) return '';
+  const eligible = pool.filter(x => typeof x === 'string' || x[1](sp));
+  const chosen = sim.rng.pick(eligible.length ? eligible : pool);
+  const text = typeof chosen === 'string' ? chosen : chosen[0];
+  const p = pr(sp);
+  const ctx: Record<string, string> = { sub: p.sub, obj: p.obj, pos: p.pos, Sub: p.Sub, ...vars };
+  return text.replace(/\{(\w+)\}/g, (_, k) => ctx[k] ?? '');
+}
+
+// A random piece of village small-talk, flavoured by the speaker.
+export function smalltalk(sim: Sim, sp: Villager): string { return say(sim, sp, sim.rng.pick(TOPIC_KEYS)); }
