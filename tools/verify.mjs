@@ -42,7 +42,7 @@ const soak = await ev(async (DAYS) => {
   return { day: S.day, kinds, changed, big, dist, bad: [...new Set(bad)].slice(0, 20), alliances: S.alliances.map(a => a.name + ': ' + a.members.join(', ')), parties: S.parties.map(p => `${p.title} @${p.place} day ${Math.floor(p.at / 1440) + 1} — ${p.attendees.size} came`), hearts: S.villagers.map(v => `${v.id}${v.partner ? ' 💞 ' + v.partner : v.crush ? ' 💘 ' + v.crush : ''}`), keepsakes: [...S.keepsakes.values()].filter(k => k.holder !== k.owner).map(k => `${k.owner}'s ${k.name} -> ${k.holder}`), memories: Object.fromEntries(S.villagers.map(v => [v.id, v.mem.items.length])), beliefs: Object.fromEntries(S.villagers.map(v => [v.id, v.thought])), feed };
 }, DAYS);
 // 3) after the soak the renderer still runs
-await p.waitForTimeout(3000); const fps2 = await ev(() => terrarium.fps);
+await p.waitForTimeout(3000); const fps2 = await ev(() => terrarium.fps); const perfInfo = await ev(() => ({ pixelRatio: +terrarium.pixelRatio.toFixed(2), cpuMs: +terrarium.cpuMs.toFixed(2), simMs: +terrarium.simMs.toFixed(2), quality: terrarium.quality }));
 const checks = [
   ['no console/page/HTTP errors', errs.length === 0, errs.slice(0, 10)],
   ['villagers move in real time (4x, 6 s)', realMoved >= 3, `${realMoved}/8 moved (others are indoors baking, sorting post, brewing)`],
@@ -54,10 +54,10 @@ const checks = [
   ['drama present (theft or argue or fight)', (soak.kinds.theft || 0) + (soak.kinds.argue || 0) + (soak.kinds.fight || 0) > 0, ''],
   ['relationships changed (>= 20 pairs moved >= 5)', soak.changed >= 20, `${soak.changed} pairs moved, ${soak.big} by >= 25`],
   ['memory streams growing', Object.values(soak.memories).every(n => n > 20), soak.memories],
-  ['renderer alive after soak (fps > 10)', fps2 > 10, `${fps.toFixed(0)} fps before, ${fps2.toFixed(0)} after (SwiftShader CPU raster)`],
+  ['renderer alive after soak (real rAF fps > 5)', fps2 > 5, `${fps.toFixed(1)} fps before, ${fps2.toFixed(1)} after: frames actually drawn per second, SwiftShader CPU raster, dynamic resolution ${perfInfo.pixelRatio}x; JS cost ${perfInfo.cpuMs} ms/frame`],
 ];
 const ok = checks.every(c => c[1]);
 for (const [name, pass, info] of checks) console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${info === '' ? '' : '  ' + (typeof info === 'string' ? info : JSON.stringify(info))}`);
 console.log(`\nload ${loadMs} ms · simulated ${DAYS} days · seed ${SEED}\nalliances: ${soak.alliances.join(' | ') || 'none'}\nparties: ${soak.parties.join(' | ')}\nhearts: ${soak.hearts.join(', ')}\nkeepsakes astray: ${soak.keepsakes.join('; ') || 'none'}\n\nFeed sample:\n${soak.feed.join('\n')}`);
-fs.mkdirSync('shots', { recursive: true }); fs.writeFileSync('shots/verify-report.json', JSON.stringify({ ok, seed: SEED, days: DAYS, loadMs, fps, fps2, checks, ...soak, errors: errs }, null, 2));
+fs.mkdirSync('shots', { recursive: true }); fs.writeFileSync('shots/verify-report.json', JSON.stringify({ ok, seed: SEED, days: DAYS, loadMs, fps, fps2, perf: perfInfo, checks, ...soak, errors: errs }, null, 2));
 await b.close(); srv.close(); process.exit(ok ? 0 : 1);

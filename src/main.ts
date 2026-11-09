@@ -95,7 +95,7 @@ let focusTarget: THREE.Vector3 | null = null, focusDist = 0;
 function focusPoint(x: number, z: number, dist = 22) { focusTarget = new THREE.Vector3(x, 0, z); focusDist = dist; follow = null; }
 
 // click to select a villager (screen-space pick)
-renderer.domElement.addEventListener('pointerdown', e => { (renderer.domElement as any)._down = [e.clientX, e.clientY]; if (mode === 'director') { mode = 'free'; } focusTarget = null; });
+renderer.domElement.addEventListener('pointerdown', e => { if (intro) { endIntro(); return; } (renderer.domElement as any)._down = [e.clientX, e.clientY]; if (mode === 'director') { mode = 'free'; } focusTarget = null; });
 renderer.domElement.addEventListener('pointerup', e => {
   const d = (renderer.domElement as any)._down; if (!d || Math.hypot(e.clientX - d[0], e.clientY - d[1]) > 6) return;
   let best: Villager | null = null, bd = 46; for (const v of sim.villagers) { if (v.inside) continue; for (const yy of [.5, 1.1, 1.7]) { const p = api.project(v.x, yy, v.z); const dd = Math.hypot(p.x - e.clientX, p.y - e.clientY); if (p.on && dd < bd) { bd = dd; best = v; } } }
@@ -205,13 +205,29 @@ function beatCamera(dt: number) {
   if (shake > 0) { camera.position.x += (Math.random() - .5) * shake * .18; camera.position.y += (Math.random() - .5) * shake * .12; shake = Math.max(0, shake - dt * 3.5); }
   camera.lookAt(controls.target);
 }
+
+// Establishing shot on first load: a slow crane over the village before the director takes over (any click skips it).
+let intro: { t: number; dur: number } | null = null;
+const iA = new THREE.Vector3(), iB = new THREE.Vector3();
+function startIntro() {
+  intro = { t: 0, dur: 11 }; (cine.querySelector('em') as HTMLElement).textContent = '🌿'; (cine.querySelector('b') as HTMLElement).textContent = 'Thistlebrook';
+  (cine.querySelector('span') as HTMLElement).textContent = `${sim.villagers.length} villagers, ${world.places.size} places, and every one of them has an opinion. Click anywhere to take over.`; cine.classList.add('on');
+}
+function endIntro() { if (!intro) return; intro = null; cine.classList.remove('on'); }
+function introCamera(dt: number) {
+  if (!intro) return; intro.t += dt; const u = Math.min(1, intro.t / intro.dur), e = u * u * (3 - 2 * u);
+  const ang = 2.6 - e * 1.9, r = 78 - e * 50, hgt = 48 - e * 30;
+  iA.set(-9 + Math.sin(ang) * r, hgt, 2 + Math.cos(ang) * r); iB.set(-9 + (1 - e) * 4, 0, 2 - (1 - e) * 6);
+  camera.position.copy(iA); controls.target.copy(iB); camera.lookAt(iB); if (u >= 1) endIntro();
+}
 function start() {
   ui = new UI(api, document.body);
   sim.on('sound', (k: string, x: number, z: number) => sound.play(k, Math.max(0, 1 - Math.hypot(x - controls.target.x, z - controls.target.z) / 40)));
   sim.on('dawn', () => { const p = director.papers[director.papers.length - 1]; if (p && ui.autoPaper && !params.has('nopaper')) { ui.showPaper(p); setTimeout(() => { if (ui.modal.querySelector('.paper')) ui.closeModal(); }, 20000); } });
-  sim.on('event', (e: SimEvent) => { if (mode === 'director' && !selected && !ui.quiet && !params.has('nobeats')) startBeat(e); });
+  sim.on('event', (e: SimEvent) => { if (mode === 'director' && !selected && !intro && !ui.quiet && !params.has('nobeats')) startBeat(e); });
   sim.on('hit', () => { if (beat) shake = 1; sound.play('scuffle', .5); });
   sky.onThunder = d => setTimeout(() => sound.play('thunder', .9), d * 1000);
+  if (params.has('intro') || (!navigator.webdriver && !params.has('capture') && !params.has('nointro'))) startIntro();
   loading.classList.add('done'); setTimeout(() => loading.remove(), 900);
   requestAnimationFrame(frame);
 }
@@ -231,10 +247,11 @@ function frame(now: number) {
   if (beat) { controls.autoRotate = false; }
   else if (mode === 'director' && !selected) { dirT -= dt; if (dirT <= 0) { dirT = 1; const pick = director.pick(sim.clock, follow); if (pick && pick.id !== follow) { follow = pick.id; } } controls.autoRotate = true; controls.autoRotateSpeed = .35; }
   else controls.autoRotate = false;
-  const want = beat ? null : follow ? sim.byId.get(follow)!.avatar.root.position : focusTarget;
+  const want = beat || intro ? null : follow ? sim.byId.get(follow)!.avatar.root.position : focusTarget;
   if (want) { const k = 1 - Math.pow(.04, dt), dx = (want.x - controls.target.x) * k, dz = (want.z - controls.target.z) * k, dy = ((follow ? 1 : 0) - controls.target.y) * k; controls.target.x += dx; controls.target.z += dz; controls.target.y += dy; camera.position.x += dx; camera.position.z += dz; camera.position.y += dy;
     const wantDist = mode === 'director' ? 17 + Math.sin(now / 9000) * 4 : (focusTarget && !follow ? focusDist : 0); if (wantDist) { const off = camera.position.clone().sub(controls.target); const d = off.length(); off.multiplyScalar(1 + (wantDist / d - 1) * k * .5); camera.position.copy(controls.target).add(off); } }
-  if (!beat) controls.update(); else beatCamera(Math.min(.25, (now - (beatLast || now)) / 1000)); beatLast = now;
+  if (intro) { introCamera(Math.min(.25, (now - (beatLast || now)) / 1000)); beatLast = now; }
+  else if (!beat) controls.update(); else beatCamera(Math.min(.25, (now - (beatLast || now)) / 1000)); beatLast = now;
   sky.update(sim.hour, sim.rain, controls.target, dt * Math.max(speed, .0001)); renderer.toneMappingExposure = 1.05 + sky.golden * .1 + sky.flash * .45; world.fx.setRain(sim.rain > .35); world.fx.update(dt, controls.target);
   sound.ambient(sky.night, sim.rain, dt);
   ui.frame(dt);
@@ -247,7 +264,7 @@ function frame(now: number) {
   sim, director, world, camera, controls, renderer, scene, get fps() { return perf.fps; }, get pixelRatio() { return perf.pr; }, quality: { soft: SOFT, aa: AA }, get simMs() { return simMsAvg; }, get cpuMs() { return cpuMsAvg; },
   setSpeed: (s: number) => (speed = s), select: (id: string | null) => api.select(id), setMode: (m: any) => api.setMode(m), god: (k: string) => api.god(k), ui: () => ui,
   fastForward(minutes: number) { ui.quiet = true; stepSim(minutes / MIN_PER_SEC); ui.quiet = false; for (const v of sim.villagers) syncAvatar(v, .016); },
-  look(x: number, z: number, dist = 30, yaw = .6, pitch = .9) { follow = null; focusTarget = null; mode = 'free'; controls.target.set(x, 0, z); camera.position.set(x + Math.sin(yaw) * Math.cos(pitch) * dist, Math.sin(pitch) * dist, z + Math.cos(yaw) * Math.cos(pitch) * dist); controls.update(); },
+  look(x: number, z: number, dist = 30, yaw = .6, pitch = .9) { endIntro(); follow = null; focusTarget = null; mode = 'free'; controls.target.set(x, 0, z); camera.position.set(x + Math.sin(yaw) * Math.cos(pitch) * dist, Math.sin(pitch) * dist, z + Math.cos(yaw) * Math.cos(pitch) * dist); controls.update(); },
   closeUp(id: string, dist = 3.2, side = .3) { const v = sim.byId.get(id)!; follow = null; focusTarget = null; mode = 'free'; const hd = v.avatar.heading; const hy = v.avatar.height * .8; controls.target.set(v.x, hy, v.z); camera.position.set(v.x + Math.sin(hd + side) * dist, hy + .5, v.z + Math.cos(hd + side) * dist); controls.update(); },
   beat(id?: number) { const e = id === undefined ? [...sim.events].reverse().find(x => beatTitle(x)) : sim.events.find(x => x.id === id); mode = 'director'; selected = null; return e ? startBeat(e, true) : false; }, get beatOn() { return !!beat; }, strike: () => sky.strike(),
   forceExpr(id: string, expr: string) { forced.set(id, { expr, until: 0 }); }, clearExpr() { forced.clear(); },
