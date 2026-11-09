@@ -198,7 +198,7 @@ const bT = new THREE.Vector3(), bP = new THREE.Vector3(), rc = new THREE.Raycast
 function clearYaw(yaw: number, dist: number, h: number): number {
   for (const off of [0, .45, -.45, .9, -.9, Math.PI, Math.PI + .5, Math.PI - .5, 1.4, -1.4]) {
     bP.set(bT.x + Math.sin(yaw + off) * dist, h + bT.y * .3, bT.z + Math.cos(yaw + off) * dist); rDir.copy(bP).sub(bT); const L = rDir.length(); rDir.divideScalar(L);
-    rc.set(bT, rDir); rc.far = L + .3; const hit = rc.intersectObjects(scene.children, true).some(i => (i.object as any).isMesh && !(i.object as any).isSkinnedMesh && i.object.visible && i.distance > .9 && !(i.object.parent && (i.object.parent as any).isBone));
+    rc.set(bT, rDir); rc.far = L + .3; rc.camera = camera; let hits: THREE.Intersection[] = []; try { hits = rc.intersectObjects(scene.children, true); } catch { return 0; } const hit = hits.some(i => (i.object as any).isMesh && !(i.object as any).isSkinnedMesh && i.object.visible && i.distance > .9 && !(i.object.parent && (i.object.parent as any).isBone));
     if (!hit) return off;
   }
   return 0;
