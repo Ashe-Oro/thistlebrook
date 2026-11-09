@@ -22,6 +22,8 @@ export function animateGifts(sim: Sim, dt: number) {
   sim.gifts = sim.gifts.filter(g => { if (g.claimedBy && g.obj.parent) { g.obj.parent.remove(g.obj); } return !g.claimedBy; });
 }
 export function summonRain(sim: Sim) { sim.startRain(150, true); }
+// where Old Nell stands to tell her tales: on the green just south of her wagon, facing the road, so the crowd gathers in front of her
+export const NELL: [number, number] = [-19.4, 5.0];
 // A travelling storyteller rolls in. Folk gather to hear her tales... and she has heard a few things about *them*.
 export async function spawnTraveller(sim: Sim) {
   if (sim.visitorUntil > sim.clock) return; sim.visitorUntil = sim.clock + 300; await sim.world.setMerchant(true);
@@ -32,10 +34,10 @@ export async function spawnTraveller(sim: Sim) {
   const subject = pv ?? sim.rng.pick(sim.villagers); const crushOf = pv ? sim.byId.get(pv.crush!)! : null;
   const f = sim.fact('deed', crushOf ? `${subject.first} is sweet on ${crushOf.first}` : `${subject.first} was once ${sim.rng.pick(['chased out of the capital by a goose', 'engaged to a duke', 'a famous juggler'])}`, subject.id, subject.id, crushOf ? .1 : 0, crushOf ? 8 : 5, crushOf?.id);
   if (crushOf) (f as any).romance = true; (f as any).label = 'the storyteller\u2019s tale';
-  let told = false; const [cx, cz] = [-18.9, 2.2]; let slot = 0;
+  let told = false; const [cx, cz] = NELL; let slot = 0;
   for (const v of sim.villagers) {
     if (v.inside || v.doing === 'sleeping' || v.act?.locked || !(v.traits.sociability > .45 || sim.rng.chance(.4))) continue;
-    const a = (slot % 5 - 2) * .42 + sim.rng.range(-.08, .08), r = 2.3 + Math.floor(slot / 5) * 1.1; slot++; const [x, z] = sim.world.nav.nearestFree(cx + Math.cos(a) * r, cz + Math.sin(a) * r);
+    const a = Math.PI / 2 + (slot % 5 - 2) * .42 + sim.rng.range(-.08, .08), r = 2.3 + Math.floor(slot / 5) * 1.1; slot++; const [x, z] = sim.world.nav.nearestFree(cx + Math.cos(a) * r, cz + Math.sin(a) * r);
     v.act = null; sim.leaveSeat(v); v.thought = 'A storyteller! I love a good tale.'; sim.icon(v, '📜');
     v.queue = [{ type: 'go', x, z, t: 0, label: 'hurrying to hear the storyteller' }, { type: 'idle', anim: 'idle', dur: 40, face: Math.atan2(cx - x, cz - z), t: 0, label: 'listening to tall tales', after: () => {
       const isSubject = v === subject; v.emotions.joy += .3; v.needs.social = Math.min(100, v.needs.social + 25);

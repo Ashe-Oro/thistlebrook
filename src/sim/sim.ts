@@ -51,7 +51,7 @@ export class Sim {
   log(text: string, imp: number, actors: string[], kind = 'misc', icon = '•', x?: number, z?: number) {
     const a0 = this.byId.get(actors[0]); text = text.charAt(0).toUpperCase() + text.slice(1);
     const last = this.events[this.events.length - 1];
-    if (last && a0 && text.startsWith(a0.first + ' ') && last.text.startsWith(a0.first + ' ') && last.actors[0] === actors[0] && last.kind === kind && this.clock - last.t < 25 && last.kind !== 'headline' && kind !== 'headline' && last.text.length < 140 && imp >= 3 && last.imp >= 3) {
+    if (last && a0 && text.startsWith(a0.first + ' ') && last.text.startsWith(a0.first + ' ') && last.actors[0] === actors[0] && last.kind === kind && kind !== 'gossip' && !/\)\s*$/.test(last.text) && this.clock - last.t < 25 && last.kind !== 'headline' && kind !== 'headline' && last.text.length < 140 && imp >= 3 && last.imp >= 3) {
       last.text = last.text.replace(/\.$/, '') + ', then ' + text.replace(new RegExp('^' + (a0?.first ?? '') + ' '), '');
       last.imp = Math.max(last.imp, imp); last.actors = [...new Set([...last.actors, ...actors])]; this.emit('eventUpdate', last); this.story(actors, text); return last;
     }
@@ -184,7 +184,11 @@ export class Sim {
         if (a.t > 50 || t.inside) { this.say(v, 'Coward! I know it was you!', '💢'); v.emotions.anger = 1; this.log(`${t.first} got away from ${v.first}.`, 5, [t.id, v.id], 'theft', '💨'); return true; }
         return false;
       }
-      case 'fight': { v.anim = 'fight'; if (a.t >= a.dur) { a.outcome?.(); return true; } if (Math.random() < dt * 4) this.world.fx.dust(v.x + (Math.random() - .5) * 1.4, v.z + (Math.random() - .5) * 1.4, 2, .8); return false; }
+      case 'fight': { v.anim = 'fight'; if (a.t >= a.dur) { a.outcome?.(); return true; }
+        if (a.cx !== undefined) { // circle each other round the midpoint, trading lunges, so a brawl reads as a brawl
+          const th = a.th + a.t * .22, lunge = Math.max(0, Math.sin(a.t * 4.2 + (a.side ? Math.PI : 0))), r = .62 - lunge * .2;
+          v.x = a.cx + Math.cos(th) * r; v.z = a.cz + Math.sin(th) * r; v.heading = Math.atan2(a.cx - v.x, a.cz - v.z); v.avatar.targetHeading = v.heading;
+          if (lunge > .97 && this.clock - (a.lastHit ?? -9) > 1.2) { a.lastHit = this.clock; this.icon(v, this.rng.pick(['💥', '💢', '👊'])); this.emit('hit', a.cx, a.cz); this.world.fx.dust(a.cx, a.cz, 4, .9); } } if (Math.random() < dt * 4) this.world.fx.dust(v.x + (Math.random() - .5) * 1.4, v.z + (Math.random() - .5) * 1.4, 2, .8); return false; }
       case 'attend': return this.attend(v, a, dt, walk);
       case 'claim': {
         const g = this.gifts.find(x => x === a.gift); if (!g || g.claimedBy) { if (g?.claimedBy && g.claimedBy !== v.id) { v.emotions.sadness += .2; v.emotions.anger += .2; this.say(v, 'Aww, too slow!', '😤', 2); } return true; }
@@ -272,6 +276,7 @@ export class Sim {
     }
     a.heading = Math.atan2(b.x - a.x, b.z - a.z); b.heading = Math.atan2(a.x - b.x, a.z - b.z); a.avatar.targetHeading = a.heading; b.avatar.targetHeading = b.heading;
     const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2; this.world.fx.dust(mx, mz, 14, 1.2); this.emit('sound', 'scuffle', mx, mz);
+    { const th = Math.atan2(a.z - mz, a.x - mx); Object.assign(a.act!, { cx: mx, cz: mz, th, side: 0 }); Object.assign(b.act!, { cx: mx, cz: mz, th: th + Math.PI, side: 1 }); }
     this.say(a, this.rng.pick(['That\u2019s it!', 'You asked for it!', 'Come here!']), '💢'); this.say(b, this.rng.pick(['Get off me!', 'Hey!', 'Oof!']), '💥');
     const sa = a.traits.bravery + a.def.height * .3 + this.rng.range(0, .6), sb = b.traits.bravery + b.def.height * .3 + this.rng.range(0, .6), [w, l] = sa >= sb ? [a, b] : [b, a];
     const ev = this.log(`${why}. Fists and dust are flying!`, 8, [a.id, b.id], 'fight', '💥', mx, mz);

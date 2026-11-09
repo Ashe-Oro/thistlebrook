@@ -13,3 +13,4 @@ licensed
 node_modules
 dist
 CLAUDE_*.txt
+tools/_*.mjs

@@ -10,8 +10,8 @@ import { LLMBrain, type LLMConfig } from './sim/llm';
 import { Director } from './sim/director';
 import { UI, type AppApi } from './ui/ui';
 import { Sound } from './ui/sound';
-import { dropGift, animateGifts, summonRain, spawnTraveller, tickTraveller, startFestival, tickFestival } from './sim/god';
-import type { Villager } from './sim/types';
+import { dropGift, animateGifts, summonRain, spawnTraveller, tickTraveller, startFestival, tickFestival, NELL } from './sim/god';
+import type { Villager, SimEvent } from './sim/types';
 import { makeAnvil } from './agents/props';
 
 const mobile = matchMedia('(pointer: coarse)').matches || innerWidth < 760;
@@ -86,7 +86,7 @@ const api: AppApi = {
   sim, director, get speed() { return speed; }, setSpeed(s) { speed = s; }, get selected() { return selected; },
   select(id) { selected = id; follow = id; if (id) { const v = sim.byId.get(id)!; if (v && camera.position.distanceTo(controls.target) > 24) { const dir = camera.position.clone().sub(controls.target).normalize(); controls.target.set(v.x, 1, v.z); camera.position.copy(controls.target).addScaledVector(dir, 15); } sound.play('pop'); if (mode === 'director') mode = 'free'; if (v) controls.autoRotate = false; } },
   portrait, get mode() { return mode; }, setMode(m) { mode = m; if (m === 'director') { selected = null; follow = null; } controls.autoRotate = false; },
-  god(kind) { if (kind === 'gift') { const v = selected ? sim.byId.get(selected) : null; const g = dropGift(sim, v ? v.x + 3 : undefined, v ? v.z + 2 : undefined); focusPoint(g.x, g.z); } if (kind === 'rain') summonRain(sim); if (kind === 'traveller' || kind === 'merchant') { spawnTraveller(sim); focusPoint(-19, 5); } if (kind === 'festival') { startFestival(sim); focusPoint(-9, 5); } },
+  god(kind) { if (kind === 'gift') { const v = selected ? sim.byId.get(selected) : null; const g = dropGift(sim, v ? v.x + 3 : undefined, v ? v.z + 2 : undefined); focusPoint(g.x, g.z); } if (kind === 'rain') summonRain(sim); if (kind === 'traveller' || kind === 'merchant') { spawnTraveller(sim); focusPoint(NELL[0], NELL[1] + 2); } if (kind === 'festival') { startFestival(sim); focusPoint(-9, 5); } },
   sound, project(x, y, z) { tmpV.set(x, y, z).project(camera); return { x: (tmpV.x * .5 + .5) * innerWidth, y: (-tmpV.y * .5 + .5) * innerHeight, on: tmpV.z < 1 && Math.abs(tmpV.x) < 1.1 && Math.abs(tmpV.y) < 1.1 }; },
   camDist() { return camera.position.distanceTo(controls.target); },
 };
@@ -157,10 +157,61 @@ const perf = (() => {
     },
   };
 })();
+
+// ---- cinematic beats ---------------------------------------------------------------------------------
+// When something big happens while the director has the camera, cut to a framed, letterboxed shot of it:
+// a low two-shot across the action line (or a three-quarter on one subject), a slow push-in, a title card,
+// a touch of slow motion for brawls and a punch of camera shake on every hit. Then hand back to the director.
+interface Beat { e: SimEvent; title: string; icon: string; t: number; dur: number; ids: string[]; slow: number; side: number; fixed?: [number, number, number, number]; from: { p: THREE.Vector3; t: THREE.Vector3 } }
+let beat: Beat | null = null, beatCool = 0, shake = 0, beatLast = 0;
+const cine = document.createElement('div'); cine.className = 'cine'; cine.innerHTML = '<i class="bar t"></i><i class="bar b"></i><div class="ct"><em></em><b></b><span></span></div>'; document.body.appendChild(cine);
+function beatTitle(e: SimEvent): string | null {
+  if (e.kind === 'fight' && e.icon === '💥') return 'The Brawl';
+  if (e.kind === 'romance' && e.icon === '💞') return 'Sweethearts';
+  if (e.kind === 'romance' && e.icon === '💔' && e.imp >= 8) return 'Heartbreak';
+  if (e.kind === 'theft' && e.imp >= 7) return e.icon === '🫳' ? 'Caught Red-Handed' : 'Thief in the Night';
+  if (e.kind === 'party' && e.imp >= 7) return 'Party of the Season';
+  if (e.kind === 'festival') return 'Festival!';
+  if (e.kind === 'traveller' && (e.icon === '🧳' || (e.icon === '📜' && e.imp >= 8))) return e.icon === '🧳' ? 'The Storyteller' : 'The Ballad';
+  return null;
+}
+function startBeat(e: SimEvent, force = false) {
+  const title = beatTitle(e); if (!title && !force) return false;
+  const nowR = performance.now(); if (!force && (beat || nowR < beatCool)) return false;
+  const ids = e.actors.filter(id => { const v = sim.byId.get(id); return v && !v.inside; }).slice(0, 2);
+  const fixed: Beat['fixed'] = e.kind === 'traveller' ? [NELL[0], NELL[1] + 1.2, 1.1, .45] : e.kind === 'festival' || (e.kind === 'party' && !ids.length) ? [e.x, e.z, 1.2, -.6] : undefined;
+  if (!ids.length && !fixed) return false;
+  const off = camera.position.clone().sub(controls.target);
+  beat = { e, title: title ?? e.kind, icon: e.icon, t: 0, dur: e.kind === 'fight' ? 7.5 : 5.5, ids, slow: e.kind === 'fight' ? .45 : .8, side: 0, fixed, from: { p: camera.position.clone(), t: controls.target.clone() } };
+  beat.side = Math.atan2(off.x, off.z);
+  (cine.querySelector('em') as HTMLElement).textContent = e.icon; (cine.querySelector('b') as HTMLElement).textContent = beat.title;
+  (cine.querySelector('span') as HTMLElement).textContent = e.text.replace(/\s*\(It isn't true\.\)/gi, '').replace(/\s+/g, ' ');
+  cine.classList.add('on'); follow = null; focusTarget = null; controls.autoRotate = false;
+  return true;
+}
+function endBeat() { if (!beat) return; const b = beat; beat = null; cine.classList.remove('on'); beatCool = performance.now() + 9000; if (mode === 'director') { follow = b.ids[0] ?? null; if (b.fixed) focusPoint(b.fixed[0], b.fixed[1], 16); director.focus = { id: b.ids[0] ?? null, until: sim.clock + 30, reason: b.e.text }; } }
+const bT = new THREE.Vector3(), bP = new THREE.Vector3();
+function beatCamera(dt: number) {
+  if (!beat) return; const b = beat; b.t += dt; if (b.t >= b.dur || mode !== 'director' || selected) { endBeat(); return; }
+  const vs = b.ids.map(id => sim.byId.get(id)!).filter(v => v && !v.inside);
+  let yaw: number, dist: number, h: number;
+  if (b.fixed) { bT.set(b.fixed[0], b.fixed[2], b.fixed[1]); yaw = b.fixed[3] + Math.sin(b.t * .25) * .15; dist = 10 - b.t * .45; h = 3.2; }
+  else if (vs.length >= 2) { const [a, c] = vs; bT.set((a.x + c.x) / 2, 1.15, (a.z + c.z) / 2); const line = Math.atan2(c.x - a.x, c.z - a.z); let p = line + Math.PI / 2; if (Math.cos(p - b.side) < 0) p += Math.PI; yaw = p + .25 + b.t * .03; dist = Math.max(4.8, Math.hypot(c.x - a.x, c.z - a.z) * 1.5 + 5.4) - b.t * .22; h = 1.9; }
+  else if (vs.length) { const a = vs[0]; bT.set(a.x, 1.2, a.z); yaw = a.avatar.heading + .55 + b.t * .04; dist = 5.2 - b.t * .2; h = 1.75; }
+  else { endBeat(); return; }
+  bP.set(bT.x + Math.sin(yaw) * dist, h + bT.y * .3, bT.z + Math.cos(yaw) * dist);
+  const k = Math.min(1, b.t / .9), e = k * k * (3 - 2 * k); // ease in from where the camera was
+  controls.target.lerpVectors(b.from.t, bT, e); camera.position.lerpVectors(b.from.p, bP, e);
+  if (shake > 0) { camera.position.x += (Math.random() - .5) * shake * .18; camera.position.y += (Math.random() - .5) * shake * .12; shake = Math.max(0, shake - dt * 3.5); }
+  camera.lookAt(controls.target);
+}
 function start() {
   ui = new UI(api, document.body);
   sim.on('sound', (k: string, x: number, z: number) => sound.play(k, Math.max(0, 1 - Math.hypot(x - controls.target.x, z - controls.target.z) / 40)));
   sim.on('dawn', () => { const p = director.papers[director.papers.length - 1]; if (p && ui.autoPaper && !params.has('nopaper')) { ui.showPaper(p); setTimeout(() => { if (ui.modal.querySelector('.paper')) ui.closeModal(); }, 20000); } });
+  sim.on('event', (e: SimEvent) => { if (mode === 'director' && !selected && !ui.quiet && !params.has('nobeats')) startBeat(e); });
+  sim.on('hit', () => { if (beat) shake = 1; sound.play('scuffle', .5); });
+  sky.onThunder = d => setTimeout(() => sound.play('thunder', .9), d * 1000);
   loading.classList.add('done'); setTimeout(() => loading.remove(), 900);
   requestAnimationFrame(frame);
 }
@@ -169,20 +220,22 @@ let cpuMsAvg = 0; // JS cost of a frame (sim + UI + draw submission) — what bo
 function frame(now: number) {
   requestAnimationFrame(frame);
   const cpu0 = performance.now(); let dt = Math.min(.1, (now - last) / 1000); last = now; perf.tick(now);
-  const t0 = performance.now(); if (speed > 0) stepSim(dt * speed); simMsAvg = simMsAvg * .9 + (performance.now() - t0) * .1;
-  const adt = speed === 0 ? dt * .25 : dt * Math.min(speed, 2.5);
+  const slow = beat && beat.t < 3.2 ? beat.slow : 1;
+  const t0 = performance.now(); if (speed > 0) stepSim(dt * speed * slow); simMsAvg = simMsAvg * .9 + (performance.now() - t0) * .1;
+  const adt = speed === 0 ? dt * .25 : dt * Math.min(speed, 2.5) * slow;
   for (const v of sim.villagers) syncAvatar(v, speed === 0 ? 0 : adt);
-  if (nell) { const on = sim.visitorUntil > sim.clock; nell.targetAlpha = on ? 1 : 0; if (on || nell.alpha > .05) { nellT += adt; nell.root.position.set(-18.9, 0, 2.2); nell.targetHeading = Math.PI / 2 + Math.sin(nellT * .4) * .5; const k = Math.floor(nellT / 2.5) % 4; nell.anim = (['talk', 'wave', 'talk', 'cheer'] as any)[k]; nell.setExpression(k === 3 ? 'grin' : 'happy'); nell.update(speed === 0 ? 0 : adt, .8); } }
+  if (nell) { const on = sim.visitorUntil > sim.clock; nell.targetAlpha = on ? 1 : 0; if (on || nell.alpha > .05) { nellT += adt; nell.root.position.set(NELL[0], 0, NELL[1]); nell.targetHeading = Math.sin(nellT * .4) * .5; const k = Math.floor(nellT / 2.5) % 4; nell.anim = (['talk', 'wave', 'talk', 'cheer'] as any)[k]; nell.setExpression(k === 3 ? 'grin' : 'happy'); nell.update(speed === 0 ? 0 : adt, .8); } }
   animateGifts(sim, dt);
   world.update(adt, dt * speed * MIN_PER_SEC, sim.clock, sky.night);
   // camera
-  if (mode === 'director' && !selected) { dirT -= dt; if (dirT <= 0) { dirT = 1; const pick = director.pick(sim.clock, follow); if (pick && pick.id !== follow) { follow = pick.id; } } controls.autoRotate = true; controls.autoRotateSpeed = .35; }
+  if (beat) { controls.autoRotate = false; }
+  else if (mode === 'director' && !selected) { dirT -= dt; if (dirT <= 0) { dirT = 1; const pick = director.pick(sim.clock, follow); if (pick && pick.id !== follow) { follow = pick.id; } } controls.autoRotate = true; controls.autoRotateSpeed = .35; }
   else controls.autoRotate = false;
-  const want = follow ? sim.byId.get(follow)!.avatar.root.position : focusTarget;
+  const want = beat ? null : follow ? sim.byId.get(follow)!.avatar.root.position : focusTarget;
   if (want) { const k = 1 - Math.pow(.04, dt), dx = (want.x - controls.target.x) * k, dz = (want.z - controls.target.z) * k, dy = ((follow ? 1 : 0) - controls.target.y) * k; controls.target.x += dx; controls.target.z += dz; controls.target.y += dy; camera.position.x += dx; camera.position.z += dz; camera.position.y += dy;
     const wantDist = mode === 'director' ? 17 + Math.sin(now / 9000) * 4 : (focusTarget && !follow ? focusDist : 0); if (wantDist) { const off = camera.position.clone().sub(controls.target); const d = off.length(); off.multiplyScalar(1 + (wantDist / d - 1) * k * .5); camera.position.copy(controls.target).add(off); } }
-  controls.update();
-  sky.update(sim.hour, sim.rain, controls.target); world.fx.setRain(sim.rain > .35); world.fx.update(dt, controls.target);
+  if (!beat) controls.update(); else beatCamera(Math.min(.25, (now - (beatLast || now)) / 1000)); beatLast = now;
+  sky.update(sim.hour, sim.rain, controls.target, dt * Math.max(speed, .0001)); renderer.toneMappingExposure = 1.05 + sky.golden * .1 + sky.flash * .45; world.fx.setRain(sim.rain > .35); world.fx.update(dt, controls.target);
   sound.ambient(sky.night, sim.rain, dt);
   ui.frame(dt);
   perf.beforeRender();
@@ -196,6 +249,7 @@ function frame(now: number) {
   fastForward(minutes: number) { ui.quiet = true; stepSim(minutes / MIN_PER_SEC); ui.quiet = false; for (const v of sim.villagers) syncAvatar(v, .016); },
   look(x: number, z: number, dist = 30, yaw = .6, pitch = .9) { follow = null; focusTarget = null; mode = 'free'; controls.target.set(x, 0, z); camera.position.set(x + Math.sin(yaw) * Math.cos(pitch) * dist, Math.sin(pitch) * dist, z + Math.cos(yaw) * Math.cos(pitch) * dist); controls.update(); },
   closeUp(id: string, dist = 3.2, side = .3) { const v = sim.byId.get(id)!; follow = null; focusTarget = null; mode = 'free'; const hd = v.avatar.heading; const hy = v.avatar.height * .8; controls.target.set(v.x, hy, v.z); camera.position.set(v.x + Math.sin(hd + side) * dist, hy + .5, v.z + Math.cos(hd + side) * dist); controls.update(); },
+  beat(id?: number) { const e = id === undefined ? [...sim.events].reverse().find(x => beatTitle(x)) : sim.events.find(x => x.id === id); mode = 'director'; selected = null; return e ? startBeat(e, true) : false; }, get beatOn() { return !!beat; }, strike: () => sky.strike(),
   forceExpr(id: string, expr: string) { forced.set(id, { expr, until: 0 }); }, clearExpr() { forced.clear(); },
   enableLLM(cfg: LLMConfig) { localStorage.setItem('terrarium.llm', JSON.stringify(cfg)); sim.brain = new LLMBrain(cfg); console.info('LLM brain enabled (plans + reflections).'); },
   disableLLM() { localStorage.removeItem('terrarium.llm'); sim.brain = new UtilityBrain(); },

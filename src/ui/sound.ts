@@ -21,6 +21,7 @@ export class Sound {
       case 'pop': this.tone(600, .08, 'sine', .1 * vol, 1.8); break;
       case 'bird': { const f = 2200 + Math.random() * 1500; this.tone(f, .09, 'sine', .04 * vol, 1.3); setTimeout(() => this.tone(f * 1.1, .07, 'sine', .035 * vol, .8), 110); break; }
       case 'cricket': this.tone(4200, .04, 'square', .012 * vol); setTimeout(() => this.tone(4200, .04, 'square', .012 * vol), 60); break;
+      case 'thunder': this.noise(1.8, 120, .6 * vol, .35); this.tone(48, 1.4, 'sine', .25 * vol, .6); break;
       case 'paper': this.noise(.25, 3000, .15, .5); break;
     }
   }
