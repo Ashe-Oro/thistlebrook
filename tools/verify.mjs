@@ -42,10 +42,10 @@ const soak = await ev(async (DAYS) => {
   return { day: S.day, kinds, changed, big, dist, bad: [...new Set(bad)].slice(0, 20), alliances: S.alliances.map(a => a.name + ': ' + a.members.join(', ')), parties: S.parties.map(p => `${p.title} @${p.place} day ${Math.floor(p.at / 1440) + 1} — ${p.attendees.size} came`), hearts: S.villagers.map(v => `${v.id}${v.partner ? ' 💞 ' + v.partner : v.crush ? ' 💘 ' + v.crush : ''}`), keepsakes: [...S.keepsakes.values()].filter(k => k.holder !== k.owner).map(k => `${k.owner}'s ${k.name} -> ${k.holder}`), memories: Object.fromEntries(S.villagers.map(v => [v.id, v.mem.items.length])), beliefs: Object.fromEntries(S.villagers.map(v => [v.id, v.thought])), feed };
 }, DAYS);
 // 3) after the soak the renderer still runs
-await p.waitForTimeout(3000); const fps2 = await ev(() => terrarium.fps); const perfInfo = await ev(() => ({ pixelRatio: +terrarium.pixelRatio.toFixed(2), cpuMs: +terrarium.cpuMs.toFixed(2), simMs: +terrarium.simMs.toFixed(2), quality: terrarium.quality }));
+await p.waitForTimeout(5000); const fps2 = await ev(async () => { const t0 = performance.now(); let n = 0; await new Promise(r => { const f = () => { n++; if (performance.now() - t0 < 4000) requestAnimationFrame(f); else r(); }; requestAnimationFrame(f); }); return n / ((performance.now() - t0) / 1000); }); const perfInfo = await ev(() => ({ pixelRatio: +terrarium.pixelRatio.toFixed(2), cpuMs: +terrarium.cpuMs.toFixed(2), simMs: +terrarium.simMs.toFixed(2), quality: terrarium.quality }));
 const checks = [
   ['no console/page/HTTP errors', errs.length === 0, errs.slice(0, 10)],
-  ['villagers move in real time (4x, 6 s)', realMoved >= 3, `${realMoved}/8 moved (others are indoors baking, sorting post, brewing)`],
+  ['villagers move in real time (4x, 6 s)', realMoved >= 3, `${realMoved}/${a0.length} moved (others are indoors baking, sorting post, brewing)`],
   ['every villager travelled > 150 m', Object.values(soak.dist).every(d => d > 150), Object.fromEntries(Object.entries(soak.dist).map(([k, d]) => [k, Math.round(d)]))],
   ['no stuck / out-of-bounds / NaN needs', soak.bad.length === 0, soak.bad],
   ['>= 10 event kinds', Object.keys(soak.kinds).length >= 10, soak.kinds],

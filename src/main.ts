@@ -71,7 +71,7 @@ function portrait(id: string) {
   let c = portraits.get(id); if (!c) { c = document.createElement('canvas'); c.width = c.height = 192; c.className = 'portrait'; portraits.set(id, c); }
   const v = sim.byId.get(id)!; const now = performance.now(); if (now - (pTime.get(id) ?? 0) < 400) return c;
   if (pBudget <= 0) { pQueue.add(id); return c; } pBudget--; pQueue.delete(id); pTime.set(id, now);
-  const r = v.avatar.root as THREE.Object3D, rotY = r.rotation.y, wasVis = r.visible, oldA = v.avatar.alpha, body = v.avatar.body as THREE.Object3D, bodyVis = body.visible; body.visible = true; // the perf governor may have culled it pSave.copy(r.position);
+  const r = v.avatar.root as THREE.Object3D, rotY = r.rotation.y, wasVis = r.visible, oldA = v.avatar.alpha, body = v.avatar.body as THREE.Object3D, bodyVis = body.visible; body.visible = true; pSave.copy(r.position); // body: the perf governor may have culled it
   const st = controls.target; r.position.set(st.x, 80, st.z); r.rotation.y = 0; r.visible = true; const tf = v.avatar.mats.map((m: THREE.Material) => [m.transparent, m.opacity, m.depthWrite] as const); if (oldA < 1) for (const m of v.avatar.mats) { m.opacity = 1; m.transparent = m.name === 'face'; m.depthWrite = m.name !== 'face'; } r.updateMatrixWorld(true);
   const head = new THREE.Vector3(); v.avatar.bones.Head.getWorldPosition(head); head.y += .12;
   pcam.position.set(head.x + Math.sin(.35) * 2.7, head.y + .14, head.z + Math.cos(.35) * 2.7); pcam.lookAt(head.x, head.y + .02, head.z); pcam.updateMatrixWorld();
@@ -132,7 +132,7 @@ let last = performance.now(), simMsAvg = 0;
 // ---- performance governor ---------------------------------------------------------------------------
 // fps = frames actually drawn per wall-clock second (the old EMA of 1/dt overstated it badly).
 // Levers, cheapest first: villager LOD (no ink outline / real shadow when far, culled off-screen, blob shadow instead),
-// shadow map refreshed every other frame, then dynamic resolution between 0.6x and the device ratio.
+// shadow map refreshed every other frame, then dynamic resolution between 0.65x (0.5x on software rasterisers) and the device ratio.
 const perf = (() => {
   const q = params0(), dynRes = q.get('dynres') !== '0', maxPR = Math.min(devicePixelRatio, mobile ? 1.25 : 1.75), minPR = Math.min(maxPR, SOFT && !q.has('capture') ? .5 : mobile ? .6 : .65);
   let pr = maxPR, frames = 0, t0 = performance.now(), fps = 60, n = 0, lastAdjust = 0;
@@ -143,7 +143,7 @@ const perf = (() => {
   return {
     get fps() { return fps; }, get pr() { return pr; },
     tick(now: number) { frames++; if (now - t0 >= 1000) { fps = frames * 1000 / (now - t0); frames = 0; t0 = now;
-        if (dynRes && now - lastAdjust > 1500) { const want = fps < 50 ? pr - .1 : fps > 58 ? pr + .05 : pr; const np = Math.max(minPR, Math.min(maxPR, want)); if (Math.abs(np - pr) > .01) { pr = np; renderer.setPixelRatio(pr); renderer.setSize(innerWidth, innerHeight); lastAdjust = now; } } } },
+        if (dynRes && now - lastAdjust > 1000) { const want = fps < 30 ? pr - .2 : fps < 50 ? pr - .1 : fps > 58 ? pr + .05 : pr; const np = Math.max(minPR, Math.min(maxPR, want)); if (Math.abs(np - pr) > .01) { pr = np; renderer.setPixelRatio(pr); renderer.setSize(innerWidth, innerHeight); lastAdjust = now; } } } },
     beforeRender() {
       n++; if (n % shadowEvery === 0) renderer.shadowMap.needsUpdate = true;
       camera.updateMatrixWorld(); pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); frus.setFromProjectionMatrix(pm);

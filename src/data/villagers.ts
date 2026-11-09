@@ -89,5 +89,5 @@ export const GOAL_LABEL: Record<Goal, string> = { liked: 'Be liked by everyone',
 export const KEEPSAKES: Record<string, [string, string]> = {
   mara: ['📖', 'grandma\u2019s recipe book'], tom: ['🎖️', 'his father\u2019s medal'], jen: ['📿', 'her silver locket'], ollie: ['⌚', 'his pocket watch'],
   pip: ['🪃', 'his lucky slingshot'], rosa: ['💎', 'her lucky geode'], wren: ['🐔', 'her carved wooden hen'], edgar: ['📓', 'his little black book'],
-  bram: ['🪨', 'his lucky millstone chip'], sol: ['🧭', 'a sailor’s brass compass'], posy: ['🌼', 'her pressed-flower book'], agnes: ['🔔', 'her old school bell'],
+  bram: ['🪨', 'his lucky millstone chip'], sol: ['🧭', 'his old sailor’s compass'], posy: ['🌼', 'her pressed-flower book'], agnes: ['🔔', 'her old school bell'],
 };
