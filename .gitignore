@@ -9,3 +9,7 @@ shots/
 *.fbx
 *.mp4
 *.webm
+licensed
+node_modules
+dist
+CLAUDE_*.txt
