@@ -558,6 +558,7 @@ function start() {
   }
   setInterval(autosave, 20000); addEventListener('pagehide', autosave); document.addEventListener('visibilitychange', () => { if (document.hidden) autosave(); });
   sim.on('dawn', () => setTimeout(autosave, 50));
+  sim.on('letterRead', (l, v) => { if (!ffing && (selected === v.id || follow === v.id || Math.hypot(camera.position.x - v.x, camera.position.z - v.z) < 24)) ui.showLetter(l, true); });
   sim.on('sound', (k: string, x: number, z: number) => sound.play(k, Math.max(0, 1 - Math.hypot(x - controls.target.x, z - controls.target.z) / 40)));
   sim.on('dawn', (day: number) => { if (ffing) return; const p = director.papers[director.papers.length - 1]; if (p && ui.autoPaper && !params.has('nopaper')) { const show = () => { ui.showPaper(p); setTimeout(() => { if (ui.modal.querySelector('.paper')) ui.closeModal(); }, 20000); }; if (!(mode === 'director' && !selected && !intro && !params.has('nomontage') && speed > 0 && speed <= 4 && startMontage(day, show))) show(); } });
   sim.on('event', (e: SimEvent) => { if (mode === 'director' && !selected && !intro && !ui.quiet && !params.has('nobeats')) startBeat(e); });
@@ -632,6 +633,7 @@ function frame(now: number) {
 
 // ---- hooks for headless verification & power users -------------------------------------------------
 (window as any).terrarium = {
+  letters: () => sim.letterArchive.map(l => ({ ...l, readers: [...l.readers] })),
   season: () => ({ name: world.season.name, snow: world.season.snow, day: sim.day }),
   sim, director, world, camera, controls, renderer, scene, perfStats,
   characterTriangles: () => sim.villagers.map(v => ({ id: v.id, ...v.avatar.triangleCounts() })), get fps() { return perf.fps; }, get pixelRatio() { return perf.pr; }, quality: { soft: SOFT, aa: AA }, get simMs() { return simMsAvg; }, get cpuMs() { return cpuMsAvg; },
