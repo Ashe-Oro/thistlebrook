@@ -40,6 +40,26 @@ controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE } as an
 addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
 
 const world = new World(scene); const sky = new Sky(scene, mobile || (SOFT && !params0().has('capture')));
+// Presentation lighting only: a broad, shadow-free camera-side key keeps dark faces readable.
+const cineKey = new THREE.DirectionalLight('#c4d7ff', 0);
+cineKey.visible = false; scene.add(cineKey, cineKey.target);
+let cineLightFade = 0;
+const cineSide = new THREE.Vector3(), cineNightTint = new THREE.Color('#abcaff');
+function cinematicLight(dt: number) {
+  const on = !!(beat || montage || intro);
+  cineLightFade = Math.max(0, Math.min(1, cineLightFade + (on ? 1 : -1) * dt / .4));
+  const darkness = Math.max(sky.night, Math.max(0, 1 - sky.sun.intensity / 1.8));
+  cineKey.intensity = cineLightFade * (.15 + darkness * 1.5);
+  cineKey.visible = cineLightFade > 0;
+  if (cineKey.visible) {
+    cineSide.copy(camera.position).sub(controls.target).setY(0).normalize();
+    cineSide.applyAxisAngle(THREE.Object3D.DEFAULT_UP, .3).multiplyScalar(8);
+    cineKey.position.copy(controls.target).add(cineSide); cineKey.position.y = controls.target.y + 7;
+    cineKey.target.position.copy(controls.target);
+    cineKey.color.set('#eef2ff').lerp(cineNightTint, sky.night * .75);
+  }
+  renderer.toneMappingExposure *= 1 + cineLightFade * darkness * .24;
+}
 const sim = new Sim(world); const sound = new Sound();
 const params = new URLSearchParams(location.search);
 // ?seed=N makes a whole run reproducible (the sim's own RNG plus any Math.random flavour rolls).
@@ -150,6 +170,7 @@ function syncAvatar(v: Villager, dt: number) {
     av.setExpression(o.expr); av.update(dt, .8); return;
   }
   av.root.position.set(v.x, 0, v.z); av.targetHeading = v.heading; av.anim = v.anim as any;
+  if (beat && !v.inside && (beat.ids.includes(v.id) || beat.fixed) && av.alpha < .999) av.snapAlpha(1);
   av.targetAlpha = v.inside || (montage && montageHidden.has(v.id)) ? 0 : 1; av.seated = !!v.seat && v.anim !== 'walk' && v.anim !== 'run' && Math.hypot(v.x - v.seat.x, v.z - v.seat.z) < .35; av.sitH = (v.anim === 'sit' || av.seated) && v.seat ? v.seat.y + .04 : .5;
   const tool = WORK_TOOLS[v.anim] ?? ''; if (av.toolKind !== tool && !(window as any).__noTool) av.setTool(tool);
   const busyHands = ['chop', 'mine', 'hammer', 'hoe', 'water', 'feed', 'sit', 'fight', 'dance', 'cheer', 'pickup'].includes(v.anim);
@@ -285,12 +306,13 @@ function stageShot(sh: MontageShot, prefYaw: number) {
   const cx = spots.reduce((a, s) => a + s.x, 0) / spots.length, cz = spots.reduce((a, s) => a + s.z, 0) / spots.length;
   for (const v of sim.villagers) if (!cast.includes(v) && !v.inside && Math.hypot(v.x - cx, v.z - cz) < 11) montageHidden.add(v.id); // keep extras out of the memory
   const heads = spots.map(s => new THREE.Vector3(s.x, 1.6, s.z));
-  const f = frameShot(new THREE.Vector3(cx, 1.1, cz), heads, prefYaw, 4.2, 9.5, [2.4, 3.3, 4.4], new Set(cast.map(v => v.id)));
+  const f = frameShot(new THREE.Vector3(cx, 1.1, cz), heads, prefYaw, 4.2, 9.5, [3.3, 4.4, 5.5], new Set(cast.map(v => v.id)));
   cast.forEach((v, i) => {
     const s = spots[i], pose = flashbackPose(sh.kind, sh.icon, i);
     const heading = n >= 2 ? Math.atan2((n === 2 ? spots[1 - i].x : cx) - s.x, (n === 2 ? spots[1 - i].z : cz) - s.z) : f.yaw + .4;
     montageOverride.set(v.id, { x: s.x, z: s.z, heading, ...pose });
-    v.avatar.heading = heading; // snap the turn; the alpha fade covers the cut
+    v.avatar.heading = heading; v.avatar.snapAlpha(1); // cuts must never expose a fading body
+    syncAvatar(v, 0); // stageShot runs after the normal avatar pass: place this cut immediately
   });
   sh.target = new THREE.Vector3(cx, 1.1, cz); sh.frame = f;
 }
@@ -308,7 +330,7 @@ function montageCamera(dt: number) {
   if (idx >= m.shots.length) { endMontage(); return; }
   const sh = m.shots[idx], u = (m.t % m.per) / m.per;
   if (idx !== m.i) { m.i = idx; m.yaw += 1.9; (cine.querySelector('em') as HTMLElement).textContent = sh.icon; (cine.querySelector('span') as HTMLElement).textContent = `Yesterday, ${fmtTime(sh.t)}: ${sh.text}`; cine.classList.remove('cut'); void cine.offsetWidth; cine.classList.add('cut'); sound.play('pop', .25); stageShot(sh, m.yaw); }
-  const f = sh.frame!, yaw = f.yaw + u * .06, dist = f.dist * (1 - u * .07); // slow drift and push-in across the cut
+  const f = sh.frame!, yaw = f.yaw, dist = f.dist; // preserve the cached clearance across the cut
   controls.target.copy(sh.target!); camera.position.set(sh.target!.x + Math.sin(yaw) * dist, f.h, sh.target!.z + Math.cos(yaw) * dist); camera.lookAt(controls.target);
 }
 
@@ -357,7 +379,7 @@ const occluders: THREE.Object3D[] = [], rayHits: THREE.Intersection[] = [];
 function cacheOccluders() {
   occluders.length = 0; scene.updateMatrixWorld(true);
   const excluded = new Set<THREE.Object3D>([...world.animals.map(a => a.obj), ...world.ducks.map(a => a.obj), ...(world.dog ? [world.dog.obj] : [])]);
-  scene.traverse(o => { for (let p: THREE.Object3D | null = o; p; p = p.parent) if (excluded.has(p)) return; const m = o as THREE.Mesh; if (!m.isMesh || (m as any).isSkinnedMesh || !m.castShadow || /ground|water|sky|border-plants/i.test(m.name)) return; const mats = Array.isArray(m.material) ? m.material : [m.material]; if (mats.every(v => v.transparent && v.opacity < .8)) return; occluders.push(m); });
+  scene.traverse(o => { for (let p: THREE.Object3D | null = o; p; p = p.parent) if (excluded.has(p)) return; const m = o as THREE.Mesh; if (!m.isMesh || (m as any).isSkinnedMesh || /ground|water|sky/i.test(m.name)) return; const mats = Array.isArray(m.material) ? m.material : [m.material]; if (mats.every(v => v.transparent && v.opacity < .8)) return; occluders.push(m); });
 }
 function visibleObject(o: THREE.Object3D) { for (let p: THREE.Object3D | null = o; p; p = p.parent) if (!p.visible) return false; return true; }
 function shotTarget(x: number, z: number, ids: string[]) {
@@ -372,14 +394,13 @@ function shotTarget(x: number, z: number, ids: string[]) {
 //     every subject sits inside the frustum with a margin (clamped to the shot's min/max distance);
 //  2. candidates — a short ladder of yaw offsets around the preferred bearing (the action-line side /
 //     the previous camera side, for continuity), two distances and the caller's height rungs;
-//  3. score — raycast each subject's head to the candidate camera against the cached solid-scenery
+//  3. score — raycast from the candidate lens to heads and shoulders against cached solid-scenery
 //     occluders (roofs, walls, trees), count other avatars within ~1.5 m of the camera→subject
 //     segment on the near-camera half (foreground blockers), reject low camera spots whose ground
 //     cell fails world.nav.isFree (inside a building footprint), and charge a small preference cost
 //     for straying from the preferred yaw/distance/height.
-// Iteration order is preference order, so the first fully clear candidate wins outright (keeping the
-// raycast budget tiny); otherwise the least-bad one, and as a last resort the camera pulls in and
-// rises above the clutter. Callers cache the result per shot, or re-run it every 0.5 s when following.
+// Cheap clearance ranking selects six diverse candidates, including higher alternatives;
+// at most ten rays per candidate keep each solve within sixty raycasts. Callers cache the result per shot, or re-run it every 0.5 s when following.
 // Presentation-only: reads sim state, never writes it, never touches sim RNG.
 interface Framing { yaw: number; dist: number; h: number }
 const fsCam = new THREE.Vector3(), fsSeg = new THREE.Vector3(), fsTmp = new THREE.Vector3();
@@ -389,37 +410,62 @@ function frameShot(target: THREE.Vector3, subjects: THREE.Vector3[], prefYaw: nu
   const halfV = camera.fov * Math.PI / 360, halfF = Math.min(halfV, Math.atan(Math.tan(halfV) * camera.aspect));
   let spread = .4; for (const s of subjects) spread = Math.max(spread, Math.hypot(s.x - target.x, s.z - target.z) + .45);
   const base = Math.min(maxDist, Math.max(minDist, spread / Math.tan(halfF * .72)));
-  let best: Framing = { yaw: prefYaw, dist: base * .65, h: heights[heights.length - 1] + 2.5 }, bestScore = Infinity;
-  for (const off of [0, .45, -.45, .9, -.9, 1.4, -1.4, Math.PI]) for (const d of [base, Math.min(maxDist * 1.2, base * 1.3)]) for (const y of heights) {
-    const yaw = prefYaw + off; fsCam.set(target.x + Math.sin(yaw) * d, y, target.z + Math.cos(yaw) * d);
-    let hard = 0;
-    if (fsCam.y < 7 && !world.nav.isFree(fsCam.x, fsCam.z)) hard += 9; // camera standing inside a wall or prop
-    if (!hard && fsCam.y < 7) for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; if (!world.nav.isFree(fsCam.x + Math.cos(a) * 1.1, fsCam.z + Math.sin(a) * 1.1)) { hard += 3; break; } } // hugging a wall
-    if (!hard) { // a wall or roof filling one side of the frame: short rays from the lens toward the frame edges
-      const fwd = fsTmp.copy(target).sub(fsCam).normalize();
-      for (const [ax, ay] of [[halfF * .85, 0], [-halfF * .85, 0], [0, -halfV * .8]]) {
-        rDir.copy(fwd); if (ax) rDir.applyAxisAngle(THREE.Object3D.DEFAULT_UP, ax); if (ay) { fsSeg.crossVectors(fwd, THREE.Object3D.DEFAULT_UP).normalize(); rDir.applyAxisAngle(fsSeg, ay); }
-        rc.set(fsCam, rDir); rc.near = 0; rc.far = Math.min(4, d * .45); rayHits.length = 0; rc.intersectObjects(solid, false, rayHits); if (rayHits.length) { hard += 3; break; }
+  // Rank cheaply first; at most six candidates receive ten rays each (60 per shot).
+  const candidates: { frame: Framing; penalty: number }[] = [];
+  const rungs = [...new Set([...heights, 5.5])];
+  for (const off of [0, .45, -.45, .9, -.9, 1.4, -1.4, Math.PI]) for (const d of [base, Math.min(maxDist * 1.2, base * 1.3)]) for (const y of rungs) {
+    const yaw = prefYaw + off, x = target.x + Math.sin(yaw) * d, z = target.z + Math.cos(yaw) * d;
+    let penalty = Math.abs(off) * .2 + (d - base) * .04 + Math.abs(y - heights[0]) * .04;
+    if (y < 7) {
+      // Exact cell-box clearance, including diagonal wall corners, rather than eight sparse samples.
+      const nav = world.nav, radius = y <= 5.5 ? 1.6 : .8;
+      for (let j = nav.iz(z - radius); j <= nav.iz(z + radius); j++) for (let i = nav.ix(x - radius); i <= nav.ix(x + radius); i++) {
+        if (nav.inside(i, j) && !nav.blocked[j * nav.w + i]) continue;
+        const dx = Math.max(0, Math.abs(nav.wx(i) - x) - nav.cell / 2), dz = Math.max(0, Math.abs(nav.wz(j) - z) - nav.cell / 2);
+        if (dx * dx + dz * dz < radius * radius) penalty += 10;
       }
     }
-    for (const s of subjects) { // clear line of sight from each subject's head
-      rDir.copy(fsCam).sub(s); const L = rDir.length(); rDir.divideScalar(L);
-      rc.set(s, rDir); rc.near = .5; rc.far = L; rayHits.length = 0; rc.intersectObjects(solid, false, rayHits);
-      if (rayHits.length) { hard += 4; break; }
+    candidates.push({ frame: { yaw, dist: d, h: y }, penalty });
+  }
+  candidates.sort((a, b) => a.penalty - b.penalty);
+  // Spread bearings/heights so a wall at the preferred angle cannot consume the whole budget.
+  const shortlist = candidates.filter((c, i, all) => all.findIndex(q => Math.abs(q.frame.yaw - c.frame.yaw) < .01 && q.frame.h === c.frame.h) === i);
+  const chosen = [shortlist[0]];
+  for (const c of shortlist) {
+    if (chosen.length >= 3) break;
+    if (!chosen.some(q => Math.abs(q.frame.yaw - c.frame.yaw) < .4)) chosen.push(c);
+  }
+  for (const q of [...chosen]) {
+    const high = shortlist.find(c => Math.abs(c.frame.yaw - q.frame.yaw) < .01 && c.frame.h >= 5.5 && c !== q);
+    if (high && chosen.length < 6) chosen.push(high);
+  }
+  if (chosen.length < 6) for (const c of shortlist) { if (!chosen.includes(c)) chosen.push(c); if (chosen.length === 6) break; }
+  let best = chosen[0].frame, bestScore = Infinity;
+  for (const c of chosen) {
+    const { yaw, dist: d, h: y } = c.frame;
+    fsCam.set(target.x + Math.sin(yaw) * d, y, target.z + Math.cos(yaw) * d);
+    let hard = c.penalty;
+    const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+    // Head rays protect faces; shoulder, midpoint and frame-center rays catch thin trunks/poles.
+    const probes = subjects.slice(0, 3).map(s => s.clone());
+    for (const s of subjects.slice(0, 2)) for (const side of [-1, 1]) probes.push(s.clone().addScaledVector(right, side * .4).add(new THREE.Vector3(0, -.4, 0)));
+    probes.push(target.clone());
+    if (subjects.length > 1) probes.push(subjects[0].clone().add(subjects[1]).multiplyScalar(.5));
+    probes.push(target.clone().addScaledVector(right, d * Math.tan(halfF) * .7));
+    for (const [i, point] of probes.slice(0, 10).entries()) {
+      rDir.copy(point).sub(fsCam); const L = rDir.length(); if (L < .01) continue;
+      rc.set(fsCam, rDir.divideScalar(L)); rc.near = .05; rc.far = Math.max(.05, L - .35);
+      rayHits.length = 0; rc.intersectObjects(solid, false, rayHits); // native InstancedMesh.raycast preserves instance transforms
+      if (rayHits.length) hard += rayHits[0].distance < L * .6 ? 12 : i < subjects.length ? 8 : 2;
     }
-    for (const v of sim.villagers) { // foreground blockers loitering between camera and subjects
+    for (const v of sim.villagers) {
       if (subjectIds?.has(v.id) || v.inside || montageHidden.has(v.id) || montageOverride.has(v.id)) continue;
       const p = v.avatar.root.position;
-      for (const s of subjects) {
-        fsSeg.copy(s).sub(fsCam); const L2 = fsSeg.lengthSq(); if (!L2) continue;
-        const t = Math.min(.5, Math.max(0, fsTmp.set(p.x - fsCam.x, 1 - fsCam.y, p.z - fsCam.z).dot(fsSeg) / L2));
-        const dx = fsCam.x + fsSeg.x * t - p.x, dy = fsCam.y + fsSeg.y * t - 1, dz = fsCam.z + fsSeg.z * t - p.z;
-        if (dx * dx + dy * dy + dz * dz < 2.25) { hard += 2; break; }
-      }
-      if (hard >= 8) break;
+      fsSeg.copy(target).sub(fsCam); const L2 = fsSeg.lengthSq(); if (!L2) continue;
+      const t = Math.max(0, Math.min(.6, fsTmp.set(p.x - fsCam.x, 1 - fsCam.y, p.z - fsCam.z).dot(fsSeg) / L2));
+      if (fsTmp.copy(fsCam).addScaledVector(fsSeg, t).distanceToSquared(new THREE.Vector3(p.x, 1, p.z)) < 2.25) hard += 4;
     }
-    const score = hard + Math.abs(off) * .5 + (d - base) * .04 + Math.abs(y - heights[0]) * .1;
-    if (score < bestScore) { bestScore = score; best = { yaw, dist: d, h: y }; if (!hard) return best; } // first clear candidate = most preferred clear one
+    if (hard < bestScore) { bestScore = hard; best = c.frame; }
   }
   return best;
 }
@@ -434,9 +480,9 @@ function beatCamera(dt: number) {
   if (!b.fixed) bT.copy(shotTarget(b.e.x, b.e.z, b.ids));
   if (!b.clear) { // framed once per beat: subjects' heads, action-line side as the preferred bearing
     const heads = vs.length ? vs.map(v => new THREE.Vector3(v.x, v.avatar.height + .25, v.z)) : [new THREE.Vector3(bT.x, bT.y + .5, bT.z)];
-    b.clear = frameShot(bT, heads, yaw, Math.max(4.5, dist * .8), Math.max(dist, 10), [h, h + 1.2], new Set(b.ids));
+    b.clear = frameShot(bT, heads, yaw, Math.max(4.5, dist * .8), Math.max(dist, 10), vs.length === 1 ? [5.5, 4.8] : [h, Math.min(5.5, h + 1.2)], new Set(b.ids));
   }
-  yaw = b.clear.yaw + b.t * .02; dist = b.clear.dist; h = b.clear.h;
+  yaw = b.clear.yaw; dist = b.clear.dist; h = b.clear.h;
   if (b.e.kind === 'rainbow') dist += b.t * .5;
   bP.set(bT.x + Math.sin(yaw) * dist, h, bT.z + Math.cos(yaw) * dist);
   const k = Math.min(1, b.t / .9), e = k * k * (3 - 2 * k); // ease in from where the camera was
@@ -510,7 +556,7 @@ function frame(now: number) {
   if (montage) { montageCamera(Math.min(.25, dt)); }
   else if (intro) { introCamera(Math.min(.25, (now - (beatLast || now)) / 1000)); beatLast = now; }
   else if (!beat) controls.update(); else beatCamera(Math.min(.25, (now - (beatLast || now)) / 1000)); beatLast = now;
-  sky.setShadowSpan(camera.position.distanceTo(controls.target)); sky.update(sim.hour, sim.rain, controls.target, dt * Math.max(speed, .0001)); renderer.toneMappingExposure = 1.05 + sky.golden * .1 + sky.flash * .45; world.fx.setRain(sim.rain > .12); world.fx.update(dt, controls.target);
+  sky.setShadowSpan(camera.position.distanceTo(controls.target)); sky.update(sim.hour, sim.rain, controls.target, dt * Math.max(speed, .0001)); renderer.toneMappingExposure = 1.05 + sky.golden * .1 + sky.flash * .45; cinematicLight(dt); world.fx.setRain(sim.rain > .12); world.fx.update(dt, controls.target);
   ambient?.update(dt, dt * speed * slow * MIN_PER_SEC, sim.hour, sim.rain, sky.night, controls.target, camera.position);
   sound.ambient(sky.night, sim.rain, dt);
   document.body.classList.toggle('cinematic', cine.classList.contains('on') || !!intro || !!montage);
