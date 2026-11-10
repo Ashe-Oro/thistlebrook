@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { World } from './world/world';
 import { Sky } from './world/sky';
-import { Avatar } from './agents/avatar';
+import { Avatar, type Anim } from './agents/avatar';
 import { VILLAGERS } from './data/villagers';
 import { Sim, MIN_PER_SEC } from './sim/sim';
 import { UtilityBrain } from './sim/brain';
@@ -141,8 +141,16 @@ function exprFor(v: Villager): string {
 }
 const WORK_TOOLS: Record<string, string> = { chop: 'axe', mine: 'pickaxe', hammer: 'hammer', hoe: 'hoe', water: 'can', feed: 'basket', drink: 'mug' };
 function syncAvatar(v: Villager, dt: number) {
-  const av = v.avatar; av.root.position.set(v.x, 0, v.z); av.targetHeading = v.heading; av.anim = v.anim as any;
-  av.targetAlpha = v.inside ? 0 : 1; av.seated = !!v.seat && v.anim !== 'walk' && v.anim !== 'run' && Math.hypot(v.x - v.seat.x, v.z - v.seat.z) < .35; av.sitH = (v.anim === 'sit' || av.seated) && v.seat ? v.seat.y + .04 : .5;
+  const av = v.avatar;
+  const o = montage ? montageOverride.get(v.id) : null;
+  if (o) { // flashback ghost: a montage actor restaged at the recorded event spot, render layer only — sim fields untouched
+    av.root.position.set(o.x, 0, o.z); av.targetHeading = o.heading; av.anim = o.anim;
+    av.targetAlpha = 1; av.seated = false; av.sitH = .5;
+    if (av.toolKind) av.setTool(''); if (av.carryKind) av.setCarry('');
+    av.setExpression(o.expr); av.update(dt, .8); return;
+  }
+  av.root.position.set(v.x, 0, v.z); av.targetHeading = v.heading; av.anim = v.anim as any;
+  av.targetAlpha = v.inside || (montage && montageHidden.has(v.id)) ? 0 : 1; av.seated = !!v.seat && v.anim !== 'walk' && v.anim !== 'run' && Math.hypot(v.x - v.seat.x, v.z - v.seat.z) < .35; av.sitH = (v.anim === 'sit' || av.seated) && v.seat ? v.seat.y + .04 : .5;
   const tool = WORK_TOOLS[v.anim] ?? ''; if (av.toolKind !== tool && !(window as any).__noTool) av.setTool(tool);
   const busyHands = ['chop', 'mine', 'hammer', 'hoe', 'water', 'feed', 'sit', 'fight', 'dance', 'cheer', 'pickup'].includes(v.anim);
   av.setCarry(busyHands ? '' : sim.carryFor(v));
@@ -188,8 +196,10 @@ const perf = (() => {
 
 // ---- director camera care -----------------------------------------------------------------------
 // Twice a second: if the followed villager went indoors (or everyone is asleep), cut to a lit outdoor spot instead of
-// staring at a wall; if a roof, wall or tree blocks the line of sight, swing round to a clear angle.
-let careT = 0, yawFix = 0; const careT0 = new THREE.Vector3();
+// staring at a wall; otherwise re-run the shared frameShot helper on the subject and ease toward its
+// clear framing (yaw via yawFix, distance/height nudged a third of the way per tick) so the camera
+// never sits behind a roof, a wall or a foreground villager for long.
+let careT = 0, yawFix = 0; const careT0 = new THREE.Vector3(), careHead = new THREE.Vector3();
 function directorCare(dt: number) {
   if (yawFix) { const step = Math.sign(yawFix) * Math.min(Math.abs(yawFix), dt * 1.6); yawFix -= step; const off = camera.position.clone().sub(controls.target); off.applyAxisAngle(THREE.Object3D.DEFAULT_UP, step); camera.position.copy(controls.target).add(off); if (Math.abs(yawFix) < 1e-3) yawFix = 0; }
   careT -= dt; if (careT > 0) return; careT = .5;
@@ -202,8 +212,13 @@ function directorCare(dt: number) {
   if (!fv && !focusTarget) { const out = sim.villagers.filter(v => !v.inside); if (out.length) follow = out[0].id; }
   if (!fv || yawFix) return;
   careT0.set(fv.x, 1.2, fv.z); if (careT0.distanceTo(controls.target) > 3) return; // still travelling to the subject
-  bT.copy(careT0); const off = camera.position.clone().sub(controls.target); const dist = Math.hypot(off.x, off.z), yaw = Math.atan2(off.x, off.z);
-  const fix = clearYaw(yaw, dist, camera.position.y); camera.position.set(bT.x + Math.sin(yaw) * fix.dist, fix.h, bT.z + Math.cos(yaw) * fix.dist); if (fix.yaw) { yawFix = Math.atan2(Math.sin(fix.yaw), Math.cos(fix.yaw)); controls.autoRotate = false; }
+  const off = camera.position.clone().sub(controls.target); const dist = Math.hypot(off.x, off.z), yaw = Math.atan2(off.x, off.z);
+  careHead.set(fv.x, fv.avatar.height + .3, fv.z); const h0 = Math.max(2.4, camera.position.y);
+  const f = frameShot(careT0, [careHead], yaw, dist, dist * 1.25, [h0, h0 + 1.4], new Set([fv.id]));
+  const nd = dist + (f.dist - dist) * .35, nh = camera.position.y + (f.h - camera.position.y) * .35; // ease, never snap
+  camera.position.set(careT0.x + Math.sin(yaw) * nd, nh, careT0.z + Math.cos(yaw) * nd);
+  const dy = Math.atan2(Math.sin(f.yaw - yaw), Math.cos(f.yaw - yaw));
+  if (Math.abs(dy) > .03) { yawFix = dy; controls.autoRotate = false; }
 }
 // phones: with the villager card up as a bottom sheet, shift the picture up so the villager sits in the open space above it
 let vOff = false;
@@ -228,12 +243,55 @@ function afterRain() {
   }
 }
 // ---- dawn montage: "Previously in Thistlebrook…" — quick sepia cuts to yesterday's biggest moments, then the paper ----
-let montage: { shots: { x: number; z: number; actors: string[]; target?: THREE.Vector3; clear?: Clearance; icon: string; text: string; t: number }[]; i: number; t: number; per: number; yaw: number; then: (() => void) | null } | null = null;
-function pickShots(day: number) {
+// Each shot is a true flashback: the event's actors (up to 3) are restaged at the recorded x,z in a
+// kind-appropriate pose even if the real villager is now asleep indoors, and bystanders who would
+// wander through the frame are faded out. All of it lives in the render layer: syncAvatar consults
+// montageOverride / montageHidden and resumes normal control the moment the shot changes or the
+// montage ends (including a click-to-skip). No villager sim fields are touched and no sim RNG runs.
+interface MontageShot { x: number; z: number; actors: string[]; kind: string; icon: string; text: string; t: number; target?: THREE.Vector3; frame?: Framing }
+let montage: { shots: MontageShot[]; i: number; t: number; per: number; yaw: number; then: (() => void) | null } | null = null;
+const montageOverride = new Map<string, { x: number; z: number; heading: number; anim: Anim; expr: string }>();
+const montageHidden = new Set<string>();
+function pickShots(day: number): MontageShot[] {
   const evs = (sim.dayStats[day] ?? []).filter(e => e.imp >= 5 && !['headline', 'weather', 'reflect', 'work'].includes(e.kind) && !/Nobody knows/i.test(e.text) && Number.isFinite(e.x) && Number.isFinite(e.z)).sort((a, b) => b.imp - a.imp);
   const at = arcs(sim), used = new Set<string>(), picked: SimEvent[] = [];
   for (const e of evs) { const a = at.arcForEvent(e.id)?.arc.id ?? `${e.kind}:${e.actors.slice().sort().join()}`; if (used.has(a)) continue; if (picked.some(p => Math.hypot(p.x - e.x, p.z - e.z) < 4 && p.kind === e.kind)) continue; used.add(a); picked.push(e); if (picked.length >= 4) break; }
-  return picked.sort((a, b) => a.t - b.t).map(e => ({ x: e.x, z: e.z, actors: [...e.actors], icon: e.icon, t: e.t, text: e.text.includes("(It isn't true.)") ? e.text.replace(/\s*\(It isn't true\.\)/gi, '') + ' (a false rumour)' : e.text }));
+  return picked.sort((a, b) => a.t - b.t).map(e => ({ x: e.x, z: e.z, actors: [...e.actors], kind: e.kind, icon: e.icon, t: e.t, text: e.text.includes("(It isn't true.)") ? e.text.replace(/\s*\(It isn't true\.\)/gi, '') + ' (a false rumour)' : e.text }));
+}
+// kind → how each restaged actor plays the memory (index 0 is the event's protagonist)
+function flashbackPose(kind: string, icon: string, i: number): { anim: Anim; expr: string } {
+  if (kind === 'fight') return { anim: 'fight', expr: 'angry' };
+  if (kind === 'theft') return i === 0 ? { anim: 'pickup', expr: 'smirk' } : { anim: 'point', expr: 'surprised' };
+  if (kind === 'romance') return icon === '💔' ? { anim: 'sad', expr: 'sad' } : { anim: i === 0 ? 'talk' : 'cheer', expr: 'love' };
+  if (kind === 'party' || kind === 'festival') return { anim: 'dance', expr: 'grin' };
+  if (kind === 'argue' || kind === 'accuse') return { anim: 'talk', expr: 'angry' };
+  if (kind === 'gossip' || kind === 'rumor') return { anim: 'talk', expr: i === 0 ? 'smirk' : 'surprised' };
+  if (kind === 'ally' || kind === 'reconcile') return { anim: 'cheer', expr: 'happy' };
+  return { anim: 'talk', expr: 'happy' };
+}
+// Restage a montage shot: place the cast around the recorded spot facing each other, hide bystanders,
+// then frame the group with a low, close two/three-shot. Cached on the shot; cleared with the montage.
+function stageShot(sh: MontageShot, prefYaw: number) {
+  montageOverride.clear(); montageHidden.clear();
+  const cast = sh.actors.map(id => sim.byId.get(id)).filter((v): v is Villager => !!v).slice(0, 3);
+  const n = cast.length, sep = sh.kind === 'fight' ? .95 : 1.3;
+  const px = Math.sin(prefYaw + Math.PI / 2), pz = Math.cos(prefYaw + Math.PI / 2);
+  const spots: { x: number; z: number }[] = n === 2
+    ? [{ x: sh.x + px * sep * .5, z: sh.z + pz * sep * .5 }, { x: sh.x - px * sep * .5, z: sh.z - pz * sep * .5 }]
+    : n === 3 ? [0, 1, 2].map(k => { const a = prefYaw + Math.PI / 2 + k * Math.PI * 2 / 3; return { x: sh.x + Math.sin(a) * .85, z: sh.z + Math.cos(a) * .85 }; })
+    : [{ x: sh.x, z: sh.z }];
+  for (const s of spots) if (!world.nav.isFree(s.x, s.z)) [s.x, s.z] = world.nav.nearestFree(s.x, s.z);
+  const cx = spots.reduce((a, s) => a + s.x, 0) / spots.length, cz = spots.reduce((a, s) => a + s.z, 0) / spots.length;
+  for (const v of sim.villagers) if (!cast.includes(v) && !v.inside && Math.hypot(v.x - cx, v.z - cz) < 11) montageHidden.add(v.id); // keep extras out of the memory
+  const heads = spots.map(s => new THREE.Vector3(s.x, 1.6, s.z));
+  const f = frameShot(new THREE.Vector3(cx, 1.1, cz), heads, prefYaw, 4.2, 9.5, [2.4, 3.3, 4.4], new Set(cast.map(v => v.id)));
+  cast.forEach((v, i) => {
+    const s = spots[i], pose = flashbackPose(sh.kind, sh.icon, i);
+    const heading = n >= 2 ? Math.atan2((n === 2 ? spots[1 - i].x : cx) - s.x, (n === 2 ? spots[1 - i].z : cz) - s.z) : f.yaw + .4;
+    montageOverride.set(v.id, { x: s.x, z: s.z, heading, ...pose });
+    v.avatar.heading = heading; // snap the turn; the alpha fade covers the cut
+  });
+  sh.target = new THREE.Vector3(cx, 1.1, cz); sh.frame = f;
 }
 function startMontage(day: number, then: (() => void) | null = null): boolean {
   if (ffing) return false;
@@ -243,22 +301,21 @@ function startMontage(day: number, then: (() => void) | null = null): boolean {
   (cine.querySelector('b') as HTMLElement).textContent = 'Previously in Thistlebrook…'; cine.classList.add('on'); document.body.classList.add('montage');
   follow = null; focusTarget = null; return true;
 }
-function endMontage() { if (!montage) return; const then = montage.then; montage = null; cine.classList.remove('on'); document.body.classList.remove('montage'); if (mode === 'director') dirT = 0; then?.(); }
+function endMontage() { if (!montage) return; const then = montage.then; montage = null; montageOverride.clear(); montageHidden.clear(); cine.classList.remove('on'); document.body.classList.remove('montage'); if (mode === 'director') dirT = 0; then?.(); }
 function montageCamera(dt: number) {
   const m = montage!; m.t += dt; const idx = Math.floor(m.t / m.per);
   if (idx >= m.shots.length) { endMontage(); return; }
   const sh = m.shots[idx], u = (m.t % m.per) / m.per;
-  if (idx !== m.i) { m.i = idx; m.yaw += 1.9; (cine.querySelector('em') as HTMLElement).textContent = sh.icon; (cine.querySelector('span') as HTMLElement).textContent = `Yesterday, ${fmtTime(sh.t)}: ${sh.text}`; cine.classList.remove('cut'); void cine.offsetWidth; cine.classList.add('cut'); sound.play('pop', .25); }
-  if (!sh.target) { sh.target = shotTarget(sh.x, sh.z, sh.actors); bT.copy(sh.target); sh.clear = clearYaw(m.yaw, 8, 4.2); }
-  const c = sh.clear!, yaw = m.yaw + c.yaw, dist = c.dist;
-  controls.target.copy(sh.target); camera.position.set(sh.target.x + Math.sin(yaw) * dist, c.h, sh.target.z + Math.cos(yaw) * dist); camera.lookAt(controls.target);
+  if (idx !== m.i) { m.i = idx; m.yaw += 1.9; (cine.querySelector('em') as HTMLElement).textContent = sh.icon; (cine.querySelector('span') as HTMLElement).textContent = `Yesterday, ${fmtTime(sh.t)}: ${sh.text}`; cine.classList.remove('cut'); void cine.offsetWidth; cine.classList.add('cut'); sound.play('pop', .25); stageShot(sh, m.yaw); }
+  const f = sh.frame!, yaw = f.yaw + u * .06, dist = f.dist * (1 - u * .07); // slow drift and push-in across the cut
+  controls.target.copy(sh.target!); camera.position.set(sh.target!.x + Math.sin(yaw) * dist, f.h, sh.target!.z + Math.cos(yaw) * dist); camera.lookAt(controls.target);
 }
 
 // ---- cinematic beats ---------------------------------------------------------------------------------
 // When something big happens while the director has the camera, cut to a framed, letterboxed shot of it:
 // a low two-shot across the action line (or a three-quarter on one subject), a slow push-in, a title card,
 // a touch of slow motion for brawls and a punch of camera shake on every hit. Then hand back to the director.
-interface Beat { e: SimEvent; title: string; icon: string; t: number; dur: number; ids: string[]; slow: number; side: number; clear?: Clearance; fixed?: [number, number, number, number]; from: { p: THREE.Vector3; t: THREE.Vector3 } }
+interface Beat { e: SimEvent; title: string; icon: string; t: number; dur: number; ids: string[]; slow: number; side: number; clear?: Framing; fixed?: [number, number, number, number]; from: { p: THREE.Vector3; t: THREE.Vector3 } }
 let beat: Beat | null = null, beatCool = 0, shake = 0, beatLast = 0;
 const cine = document.createElement('div'); cine.className = 'cine'; cine.innerHTML = '<i class="bar t"></i><i class="bar b"></i><div class="ct"><em></em><b></b><span></span></div>'; document.body.appendChild(cine);
 function beatTitle(e: SimEvent): string | null {
@@ -294,8 +351,7 @@ function startBeat(e: SimEvent, force = false) {
 }
 function endBeat() { if (!beat) return; const b = beat; beat = null; cine.classList.remove('on'); beatCool = performance.now() + 6000; if (mode === 'director') { follow = b.ids[0] ?? null; if (b.fixed) focusPoint(b.fixed[0], b.fixed[1], 16); director.focus = { id: b.ids[0] ?? null, until: sim.clock + 30, reason: b.e.text }; } }
 const bT = new THREE.Vector3(), bP = new THREE.Vector3(), rc = new THREE.Raycaster(), rDir = new THREE.Vector3();
-interface Clearance { yaw: number; dist: number; h: number }
-const occluders: THREE.Object3D[] = [], rayHits: THREE.Intersection[] = [], rayOrigin = new THREE.Vector3();
+const occluders: THREE.Object3D[] = [], rayHits: THREE.Intersection[] = [];
 // Capture solid world scenery after build, before avatars, ambient animals and effects are added.
 function cacheOccluders() {
   occluders.length = 0; scene.updateMatrixWorld(true);
@@ -309,16 +365,54 @@ function shotTarget(x: number, z: number, ids: string[]) {
   if (!world.nav.isFree(x, z)) { const p = [...world.places.values()].filter(p => p.enterable).sort((a, b) => Math.hypot(a.cx - x, a.cz - z) - Math.hypot(b.cx - x, b.cz - z))[0]; [x, z] = p && Math.hypot(p.cx - x, p.cz - z) < 7 ? world.nav.nearestFree(p.x, p.z) : world.nav.nearestFree(x, z); }
   return new THREE.Vector3(x, 1.1, z);
 }
-// h is absolute camera height; dist is horizontal distance. Test that exact camera position.
-function clearYaw(yaw: number, dist: number, h: number): Clearance {
-  rayOrigin.copy(bT); rayOrigin.y = Math.max(1.9, bT.y + .8);
+// ---- shared framing system -----------------------------------------------------------------------
+// frameShot() picks the camera for every presentation shot (beats, montage flashbacks, director care):
+//  1. fit — from the subjects' spread and the live camera fov/aspect, derive the distance at which
+//     every subject sits inside the frustum with a margin (clamped to the shot's min/max distance);
+//  2. candidates — a short ladder of yaw offsets around the preferred bearing (the action-line side /
+//     the previous camera side, for continuity), two distances and the caller's height rungs;
+//  3. score — raycast each subject's head to the candidate camera against the cached solid-scenery
+//     occluders (roofs, walls, trees), count other avatars within ~1.5 m of the camera→subject
+//     segment on the near-camera half (foreground blockers), reject low camera spots whose ground
+//     cell fails world.nav.isFree (inside a building footprint), and charge a small preference cost
+//     for straying from the preferred yaw/distance/height.
+// Iteration order is preference order, so the first fully clear candidate wins outright (keeping the
+// raycast budget tiny); otherwise the least-bad one, and as a last resort the camera pulls in and
+// rises above the clutter. Callers cache the result per shot, or re-run it every 0.5 s when following.
+// Presentation-only: reads sim state, never writes it, never touches sim RNG.
+interface Framing { yaw: number; dist: number; h: number }
+const fsCam = new THREE.Vector3(), fsSeg = new THREE.Vector3(), fsTmp = new THREE.Vector3();
+function frameShot(target: THREE.Vector3, subjects: THREE.Vector3[], prefYaw: number, minDist: number, maxDist: number, heights: number[], subjectIds?: Set<string>): Framing {
   scene.updateMatrixWorld(true);
-  for (const off of [0, .45, -.45, .9, -.9, Math.PI, 1.4, -1.4]) for (const [d, y] of [[dist, h], [dist * .8, h], [dist * .8, h + 1.2]]) {
-    bP.set(bT.x + Math.sin(yaw + off) * d, y, bT.z + Math.cos(yaw + off) * d); rDir.copy(bP).sub(rayOrigin); const L = rDir.length(); rDir.divideScalar(L);
-    rc.set(rayOrigin, rDir); rc.near = .5; rc.far = L; rayHits.length = 0; rc.intersectObjects(occluders.filter(visibleObject), false, rayHits);
-    if (!rayHits.some(i => i.distance >= .5 && i.distance <= L)) return { yaw: off, dist: d, h: y };
+  const solid = occluders.filter(visibleObject);
+  const halfV = camera.fov * Math.PI / 360, halfF = Math.min(halfV, Math.atan(Math.tan(halfV) * camera.aspect));
+  let spread = .4; for (const s of subjects) spread = Math.max(spread, Math.hypot(s.x - target.x, s.z - target.z) + .45);
+  const base = Math.min(maxDist, Math.max(minDist, spread / Math.tan(halfF * .72)));
+  let best: Framing = { yaw: prefYaw, dist: base * .65, h: heights[heights.length - 1] + 2.5 }, bestScore = Infinity;
+  for (const off of [0, .45, -.45, .9, -.9, 1.4, -1.4, Math.PI]) for (const d of [base, Math.min(maxDist * 1.2, base * 1.3)]) for (const y of heights) {
+    const yaw = prefYaw + off; fsCam.set(target.x + Math.sin(yaw) * d, y, target.z + Math.cos(yaw) * d);
+    let hard = 0;
+    if (fsCam.y < 3.2 && !world.nav.isFree(fsCam.x, fsCam.z)) hard += 9; // camera standing inside a wall or prop
+    for (const s of subjects) { // clear line of sight from each subject's head
+      rDir.copy(fsCam).sub(s); const L = rDir.length(); rDir.divideScalar(L);
+      rc.set(s, rDir); rc.near = .5; rc.far = L; rayHits.length = 0; rc.intersectObjects(solid, false, rayHits);
+      if (rayHits.length) { hard += 4; break; }
+    }
+    for (const v of sim.villagers) { // foreground blockers loitering between camera and subjects
+      if (subjectIds?.has(v.id) || v.inside || montageHidden.has(v.id) || montageOverride.has(v.id)) continue;
+      const p = v.avatar.root.position;
+      for (const s of subjects) {
+        fsSeg.copy(s).sub(fsCam); const L2 = fsSeg.lengthSq(); if (!L2) continue;
+        const t = Math.min(.5, Math.max(0, fsTmp.set(p.x - fsCam.x, 1 - fsCam.y, p.z - fsCam.z).dot(fsSeg) / L2));
+        const dx = fsCam.x + fsSeg.x * t - p.x, dy = fsCam.y + fsSeg.y * t - 1, dz = fsCam.z + fsSeg.z * t - p.z;
+        if (dx * dx + dy * dy + dz * dz < 2.25) { hard += 2; break; }
+      }
+      if (hard >= 8) break;
+    }
+    const score = hard + Math.abs(off) * .5 + (d - base) * .04 + Math.abs(y - heights[0]) * .1;
+    if (score < bestScore) { bestScore = score; best = { yaw, dist: d, h: y }; if (!hard) return best; } // first clear candidate = most preferred clear one
   }
-  return { yaw: 0, dist: dist * .65, h: h + 2.5 };
+  return best;
 }
 function beatCamera(dt: number) {
   if (!beat) return; const b = beat; b.t += dt; if (b.t >= b.dur || mode !== 'director' || selected) { endBeat(); return; }
@@ -329,7 +423,12 @@ function beatCamera(dt: number) {
   else if (vs.length) { const a = vs[0]; bT.set(a.x, 1.2, a.z); yaw = a.avatar.heading + .55 + b.t * .04; dist = 7.5; h = 3.8; }
   else { bT.copy(shotTarget(b.e.x, b.e.z, [])); yaw = b.side; dist = 8; h = 4.2; }
   if (!b.fixed) bT.copy(shotTarget(b.e.x, b.e.z, b.ids));
-  if (!b.clear) { b.side = yaw; b.clear = clearYaw(yaw, dist, h); } yaw = b.side + b.clear.yaw; dist = b.clear.dist; h = b.clear.h;
+  if (!b.clear) { // framed once per beat: subjects' heads, action-line side as the preferred bearing
+    const heads = vs.length ? vs.map(v => new THREE.Vector3(v.x, v.avatar.height + .25, v.z)) : [new THREE.Vector3(bT.x, bT.y + .5, bT.z)];
+    b.clear = frameShot(bT, heads, yaw, Math.max(4.5, dist * .8), Math.max(dist, 10), [h, h + 1.2], new Set(b.ids));
+  }
+  yaw = b.clear.yaw + b.t * .02; dist = b.clear.dist; h = b.clear.h;
+  if (b.e.kind === 'rainbow') dist += b.t * .5;
   bP.set(bT.x + Math.sin(yaw) * dist, h, bT.z + Math.cos(yaw) * dist);
   const k = Math.min(1, b.t / .9), e = k * k * (3 - 2 * k); // ease in from where the camera was
   controls.target.lerpVectors(b.from.t, bT, e); camera.position.lerpVectors(b.from.p, bP, e);
@@ -384,7 +483,8 @@ function frame(now: number) {
   const slow = montage ? .25 : beat && beat.t < 3.2 ? beat.slow : 1;
   const t0 = performance.now(); if (speed > 0) stepSim(dt * speed * slow); simMsAvg = simMsAvg * .9 + (performance.now() - t0) * .1;
   const adt = speed === 0 ? dt * .25 : dt * Math.min(speed, 2.5) * slow;
-  for (const v of sim.villagers) syncAvatar(v, speed === 0 ? 0 : adt);
+  for (const v of sim.villagers) syncAvatar(v, montage ? dt : speed === 0 ? 0 : adt); // flashback ghosts play/fade at wall-clock rate
+
   if (nell) { const on = sim.visitorUntil > sim.clock; nell.targetAlpha = on ? 1 : 0; if (on || nell.alpha > .05) { nellT += adt; nell.root.position.set(NELL[0], 0, NELL[1]); nell.targetHeading = Math.sin(nellT * .4) * .5; const k = Math.floor(nellT / 2.5) % 4; nell.anim = (['talk', 'wave', 'talk', 'cheer'] as any)[k]; nell.setExpression(k === 3 ? 'grin' : 'happy'); nell.update(speed === 0 ? 0 : adt, .8); } }
   animateGifts(sim, dt);
   world.update(adt, dt * speed * MIN_PER_SEC, sim.clock, sky.night);
