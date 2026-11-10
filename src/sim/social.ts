@@ -4,7 +4,7 @@ import { JOB_INFO } from '../data/villagers';
 import type { Fact } from '../agents/memory';
 import { clamp } from '../core/util';
 import { say, smalltalk, pr } from './lines';
-import { planWedding, recordProposal } from './gatherings';
+import { planWedding, recordProposal, proposalReady } from './gatherings';
 
 const COLORS = ['#e05a47', '#3f7fd6', '#e0b13a', '#8a4fc9', '#2fa37a', '#e57fb0'];
 const ALLIANCE_NAMES = ['the Lantern Pact', 'the Copper Circle', 'the Hearth Guild', 'the Oak Accord', 'the Thistle League', 'the Ember Society'];
@@ -95,6 +95,7 @@ export function resolveSocial(sim: Sim, v: Villager, t: Villager, a: Action): nu
       return convo(sim, [[v, say(sim, v, 'confess', { t: t.first }), '💗'], [t, say(sim, t, 'confessNo'), '😟'], [v, say(sim, v, 'confessHeartbroken', { t: t.first }), '💔']], 5);
     }
     case 'propose': { // a long-standing sweetheart pops the question (gatherings.ts gates how often)
+      if (!proposalReady(sim, v, t)) return convo(sim, [[v, smalltalk(sim, v), '💞']], 3); // the other one already asked this very moment
       recordProposal(sim, v, t); soc(v, 25); soc(t, 25);
       const yes = op(t, v) >= 60 && !(op(t, v) < 78 && R.chance(.1 + t.traits.ambition * .08)); // rarely, cold feet
       const lines: Line[] = [[v, say(sim, v, 'propose', { t: t.first }), '💍']];

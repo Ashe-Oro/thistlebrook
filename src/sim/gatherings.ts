@@ -280,7 +280,7 @@ function tickSearch(sim: Sim, g: Gathering) {
   if (sim.clock > g.until) { // the dog saunters home on his own as the light fades
     g.done = true; releaseTeam(sim, g);
     sim.pet = { ...pet, state: 'home', x: -9, z: 8, spot: null };
-    sim.log(`No luck by dusk — and then ${pet.name} trotted home on his own, tail high, entirely unrepentant.`, 5, [g.host], 'search', '🐾');
+    sim.log(`No luck after hours of searching, and then ${pet.name} trotted home on his own, tail high, entirely unrepentant.`, 5, [g.host], 'search', '🐾');
     return;
   }
   const assign: Record<string, string[]> = g.data.assign, visited: string[] = g.data.visited;
@@ -391,7 +391,7 @@ function tickMeeting(sim: Sim, g: Gathering) {
     const [choice, n] = tally[0];
     sim.decrees.push({ day: sim.day, topic: g.data.topic, question: g.data.question, choice, votes });
     const bloc = sim.alliances.find(al => al.members.filter(m => votes[m] !== undefined).length >= 2 && al.members.every(m => votes[m] === undefined || votes[m] === choice));
-    sim.log(`The town meeting voted on ${g.data.question}: "${choice}" carried, ${n} votes to ${tally[1]?.[1] ?? 0}.${bloc ? ` ${bloc.name} voted as one.` : ''}`, 6, [g.host, ...Object.keys(votes).filter(id => id !== g.host).slice(0, 5)], 'meeting', '🗳️');
+    sim.log(`The town meeting voted on ${g.data.question}: "${choice}" carried, ${n} votes to ${tally[1]?.[1] ?? 0}.${bloc ? ` ${bloc.name.charAt(0).toUpperCase() + bloc.name.slice(1)} voted as one.` : ''}`, 6, [g.host, ...Object.keys(votes).filter(id => id !== g.host).slice(0, 5)], 'meeting', '🗳️');
     p.cheerUntil = sim.clock + 5; p.quietUntil = 0;
     const f = sim.fact('news', `the village voted: ${choice} (${g.data.question})`, g.host, g.host, .2, 6);
     for (const v of voters) {
