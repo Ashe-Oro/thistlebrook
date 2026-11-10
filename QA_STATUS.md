@@ -51,3 +51,16 @@ Tested build: 54eb4c4. These fixes landed on master in round 3.
 - **Bigger village:** 4 new villagers (16 in total), plus about 8 background passers-by, festival visitors, washing lines and a cat in `src/world/extras.ts`. These are cosmetic only and use their own RNG.
 - **Setting interactions:** 8 leisure activities: feeding the ducks, fishing off the dock at dawn, chats at the well, people-watching from benches, sketching, tending flowers, the campfire at night, stargazing, and sheltering under the tavern awning in the rain.
 
+
+## Round 5
+
+- **Montage faces and night shots:** cinematics get a temporary lift on the existing hemisphere fill (stronger in the dark) plus a small exposure boost. No extra light is toggled, so no shaders recompile per beat. Restaged actors snap to full opacity on the cut. Each cut opens the cast toward the chosen camera yaw (up to a 0.65 rad heading cheat), and `frameShot` penalises overlapping subjects.
+- **Beats near walls or trunks (Codex):** occluders now include batched trees, and the camera keeps 1.6 m of nav clearance.
+- **Grey statue extras (Codex):** extras use coloured stand-ins.
+- **Draw calls (Codex):** each near villager is one merged mesh with 2 draws (it was 12). Same-scene plaza calls went from about 117 to 59–74.
+- **Life entries (Codex):** there is a new `life` event kind with a Life filter. Its rows are folded and muted, and it is left out of captions, beats and the paper.
+- **Calendar and seasons (Opus):** the week runs Moonday to Sunday with market, town-meeting, festival-eve and rest days. There are 4 seasons of 7 days each. The top bar shows the weekday, season and day, and opens a calendar popover. Seasons tint grass, foliage and sky, and in winter precipitation falls as snow (render-only).
+- **Gatherings (Fable):** villagers start their own group events: proposals and weddings at the chapel (with an objection chance), a festival showdown between feuding villagers, a search party for the lost dog Biscuit, and a town meeting vote that sets the festival theme and decrees. Each gets its own beat titles, flashback poses and director headlines.
+- **Fixes:** on day 1, the Moonday market invite cleared `replan` before the first plan, so everyone stayed asleep; this is fixed. Proposal readiness is re-checked at resolve time, so there are no double proposals or weddings.
+- **Gallery:** new shots 29_town_meeting, 30_wedding and 31_winter.
+- **Still open:** crowd performance during the market and plaza gatherings; fights and arguments are high (about 88 and 201 in 8 days); wedding crowds are small (3); the dog search doesn't find Biscuit on seed 7; full dark beards still read dark; the winter tint is subtle (the grass stays fairly green).
