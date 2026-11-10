@@ -9,6 +9,7 @@ import { arcs } from '../sim/arcs';
 import type { Arc } from '../sim/arcs';
 import { storylines, findStory } from './storylines';
 import { calendarFor } from '../sim/calendar';
+import { shortLine, moodOf, eventBubble } from './bubbletext';
 
 export const VCOLOR: Record<string, string> = { mara: '#e8875b', tom: '#6c8fd1', jen: '#c96bd6', ollie: '#d8b23b', pip: '#6dbb5a', rosa: '#d4574a', wren: '#5fc0c4', edgar: '#a98a62', bram: '#b5763a', sol: '#4f7fa0', posy: '#e58fb1', agnes: '#8c7bc0', hugh: '#7a8a96', hazel: '#9fbf4a', mabel: '#c98a9a', kit: '#e0a040' };
 const setHTML = (el: Element, html: string) => { if ((el as any)._html !== html) { (el as any)._html = html; el.innerHTML = html; } };
@@ -16,18 +17,26 @@ const h = (tag: string, cls = '', html = '') => { const e = document.createEleme
 const esc = (s: string) => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' } as any)[c]);
 export interface AppApi { sim: Sim; director: Director; setSpeed(s: number): void; togglePause(): void; speed: number; select(id: string | null): void; selected: string | null; portrait(id: string): HTMLCanvasElement; setMode(m: 'director' | 'free'): void; mode: string;
   pinStory(id: string | null): boolean; pinnedStory: string | null;
+  hovered: string | null; focus: string | null; camPos(): { x: number; y: number; z: number }; occluded(x: number, y: number, z: number): boolean;
   god(kind: string): boolean; newVillage(): void; sound: { setMuted(m: boolean): void; muted: boolean; play(k: string, v?: number): void }; project(x: number, y: number, z: number): { x: number; y: number; on: boolean }; camDist(): number; }
 
 function sim0(v: Villager, s: any) { const f = s.villagers.filter((u: Villager) => u.crush === v.id && u.partner !== v.id && u !== v); return f.length ? `<span class="it love" title="Only you can see this">💌 ${f.map((u: Villager) => u.first).join(' & ')} ${f.length > 1 ? 'are' : 'is'} sweet on them</span>` : ''; }
+interface Bubble { el: HTMLElement; until: number; t0: number; full: string; occ: boolean; occT: number; rewriteToken?: object }
+// Panels (chronicle, leaderboard, storylines) start closed; the open/closed choice is remembered.
+const PANEL_KEY = 'thistlebrook.panels';
+type PanelId = 'feed' | 'lb' | 'story';
+function loadPanels(): Record<PanelId, boolean> { try { const j = JSON.parse(localStorage.getItem(PANEL_KEY) ?? '{}'); return { feed: !!j.feed, lb: !!j.lb, story: !!j.story }; } catch { return { feed: false, lb: false, story: false }; } }
+const narrow = () => matchMedia('(max-width: 900px), (pointer: coarse)').matches;
 const cleanLie = (t: string) => t.replace(/\s*\(It isn't true\.\)/gi, '').replace(/\.\s*,/g, ',').replace(/\s+/g, ' ').trim();
 export class UI {
   root: HTMLElement; feed!: HTMLElement; card!: HTMLElement; clock!: HTMLElement; overlay!: HTMLElement; toasts!: HTMLElement; caption!: HTMLElement; lb!: HTMLElement; modal!: HTMLElement;
   marks: { el: HTMLElement; x: number; z: number }[] = []; markT = 0; cardRect: { l: number; r: number; t: number; b: number } | null = null;
-  tags = new Map<string, HTMLElement>(); bubbles = new Map<string, { el: HTMLElement; until: number; t0: number }>(); icons: { glyph: HTMLCanvasElement; id: string; t: number }[] = []; convo: { who: string; text: string; emoji: string; at: number; listener?: string }[] = [];
+  tags = new Map<string, HTMLElement>(); bubbles = new Map<string, Bubble>(); icons: { glyph: HTMLCanvasElement; id: string; t: number }[] = []; convo: { who: string; text: string; emoji: string; at: number; listener?: string }[] = [];
   tab = 'rel'; cardT = 0; lbKind: 'popularity' | 'power' | 'mischief' = 'popularity'; feedFilter = 'all'; autoPaper = true;
   feedDay = 0; safeTop = 70; hint: HTMLElement | null = null;
   storyPanel!: HTMLElement; storyChip!: HTMLElement; storyT = 0; storyCards = new Map<string, HTMLElement>();
   calPop!: HTMLElement; calOpen = false;
+  feedWrap!: HTMLElement; dock!: HTMLElement; panels = loadPanels(); unread = 0;
   constructor(public app: AppApi, parent: HTMLElement) {
     this.root = h('div', 'ui'); parent.appendChild(this.root); this.build();
     const s = app.sim;
@@ -40,7 +49,7 @@ export class UI {
   }
   build() {
     const r = this.root;
-    const top = h('div', 'topbar'); top.innerHTML = `<div class="brand"><span class="logo">🌿</span><div><b>Thistlebrook</b><small>a digital terrarium</small></div></div><div class="clock" id="clock"></div>
+    const top = h('div', 'topbar'); top.innerHTML = `<div class="brand" title="Thistlebrook, a digital terrarium"><span class="logo">🌿</span><div><b>Thistlebrook</b></div></div><div class="clock" id="clock"></div>
       <div class="speeds">${[[0, '⏸'], [1, '1×'], [4, '4×'], [16, '16×']].map(([s, l]) => `<button data-speed="${s}">${l}</button>`).join('')}</div>
       <div class="toggles"><span id="llm-status" role="status" hidden></span><button id="mode" title="Camera: cinematic director / free">🎬 Director</button><button id="snd" title="Sound">🔇</button></div>`;
     r.appendChild(top); this.clock = top.querySelector('#clock')!;
@@ -54,30 +63,36 @@ export class UI {
     top.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach(b => b.onclick = () => this.app.setSpeed(+b.dataset.speed!));
     (top.querySelector('#mode') as HTMLButtonElement).onclick = () => this.app.setMode(this.app.mode === 'director' ? 'free' : 'director');
     (top.querySelector('#snd') as HTMLButtonElement).onclick = (e) => { this.app.sound.setMuted(!this.app.sound.muted); (e.target as HTMLElement).textContent = this.app.sound.muted ? '🔇' : '🔊'; };
-    const fw = h('div', 'feedwrap'); fw.innerHTML = `<div class="ph"><b>📜 Village chronicle</b><div class="ff"><button data-f="all" class="on">All</button><button data-f="drama">Drama</button><button data-f="social">Social</button><button data-f="work">Work</button><button data-f="life">Life</button></div><button class="feedtog" title="Collapse chronicle">▾</button></div>`;
+    const fw = h('div', 'feedwrap'); fw.innerHTML = `<div class="ph"><b>📜 Village chronicle</b><div class="ff"><button data-f="all" class="on">All</button><button data-f="drama">Drama</button><button data-f="social">Social</button><button data-f="work">Work</button><button data-f="life">Life</button></div><button class="feedtog" title="Close chronicle" aria-label="Close chronicle">✕</button></div>`;
     this.feed = h('div', 'feed'); fw.appendChild(this.feed); r.appendChild(fw);
     // one delegated listener for every name link and story chip in the chronicle (rows come and go; listeners don't pile up)
     this.feed.addEventListener('click', (ev) => { const t = ev.target as HTMLElement; const nm = t.closest<HTMLElement>('.nm'); if (nm) { ev.stopPropagation(); this.app.select(nm.dataset.id!); return; } const ch = t.closest<HTMLElement>('.arcchip'); if (ch) { ev.stopPropagation(); this.showArc(ch.dataset.arc!); } });
     fw.querySelectorAll<HTMLButtonElement>('[data-f]').forEach(b => b.onclick = () => { this.feedFilter = b.dataset.f!; fw.querySelectorAll('[data-f]').forEach(x => x.classList.toggle('on', x === b)); this.refilter(); });
-    const ftog = fw.querySelector<HTMLButtonElement>('.feedtog')!; ftog.onclick = () => { const col = fw.classList.toggle('collapsed'); ftog.textContent = col ? '▸' : '▾'; ftog.title = col ? 'Expand chronicle' : 'Collapse chronicle'; };
-    if (matchMedia('(max-width: 700px), (pointer: coarse)').matches) ftog.click(); // phones start with the chronicle folded to a one-line strip
+    fw.querySelector<HTMLButtonElement>('.feedtog')!.onclick = () => this.setPanel('feed', false);
+    this.feedWrap = fw;
     const letterStyle = document.createElement('style'); letterStyle.textContent = `.handwritten{background:#f8edcf;color:#513b31;padding:22px;border:1px solid #d2b984;border-radius:3px;box-shadow:0 6px 22px #30201040;font:16px/1.6 "Segoe Print","Bradley Hand","Comic Neue",cursive;transform:rotate(-1deg);text-align:left;overflow-wrap:anywhere}.handwritten p{margin:8px 0}.letter-float{display:block;width:min(320px,82vw);border:0;background:none;padding:4px;cursor:pointer;pointer-events:auto}.letter-view{width:min(420px,86vw);max-height:85vh;overflow:auto;margin:auto}.letter-close{margin-bottom:12px}.tb .handwritten{margin:10px 5px;font-size:14px}`; r.appendChild(letterStyle);
     this.card = h('div', 'card hidden'); r.appendChild(this.card);
     this.lb = h('div', 'lb'); r.appendChild(this.lb);
-    const dock = h('div', 'dock'); dock.innerHTML = `<div class="grp"><span class="lbl">God powers</span><button data-g="gift">🎁<i>Drop gift</i><b class="s">Gift</b></button><button data-g="rain">🌧️<i>Rain</i><b class="s">Rain</b></button><button data-g="traveller">🧳<i>Traveller</i><b class="s">Visitor</b></button><button data-g="festival">🎪<i>Festival</i><b class="s">Fest</b></button></div>
-      <div class="grp"><span class="lbl">Views</span><button data-v="storylines">📺<i>Storylines</i><b class="s">Stories</b></button><button data-v="web">🕸️<i>Relationships</i><b class="s">Web</b></button><button data-v="paper">📰<i>Gazette</i><b class="s">Paper</b></button><button data-v="recap">📈<i>Recap</i><b class="s">Recap</b></button><button data-v="villagers">👥<i>Villagers</i><b class="s">People</b></button></div>`;
+    // Compact icon dock: god powers | panels you can open | full-screen views. Labels live in tooltips.
+    const B = (attr: string, icon: string, label: string) => `<button ${attr} title="${label}" aria-label="${label}"><span class="ico">${icon}</span><i>${label}</i></button>`;
+    const dock = h('div', 'dock'); dock.innerHTML = `<div class="grp g-god">${B('data-g="gift"', '🎁', 'Drop a gift')}${B('data-g="rain"', '🌧️', 'Summon rain')}${B('data-g="traveller"', '🧳', 'Send a traveller')}${B('data-g="festival"', '🎪', 'Start a festival')}</div>
+      <div class="grp g-panel">${B('data-p="feed"', '📜', 'Village chronicle')}${B('data-p="story"', '📺', 'Storylines')}${B('data-p="lb"', '🏆', 'Leaderboard')}</div>
+      <div class="grp g-view">${B('data-v="web"', '🕸️', 'Who likes whom')}${B('data-v="paper"', '📰', 'The Gazette')}${B('data-v="recap"', '📈', 'Recap')}${B('data-v="villagers"', '👥', 'Villagers')}</div>`;
+    this.dock = dock;
     r.appendChild(dock);
     this.storyPanel = h('section', 'storyguide panelish'); this.storyPanel.setAttribute('aria-label', 'Storylines');
     this.storyPanel.innerHTML = '<header><b>📺 Storylines</b><small>Previously… and what happens next?</small><button aria-label="Collapse storylines">▾</button></header><div class="storycards"></div>';
     r.appendChild(this.storyPanel);
-    this.storyPanel.querySelector('header button')!.addEventListener('click', () => { if (matchMedia('(max-width:1100px), (pointer:coarse)').matches) this.storyPanel.classList.remove('expanded'); else this.storyPanel.classList.toggle('folded'); });
+    this.storyPanel.querySelector('header button')!.setAttribute('aria-label', 'Close storylines'); this.storyPanel.querySelector('header button')!.textContent = '✕';
+    this.storyPanel.querySelector('header button')!.addEventListener('click', () => this.setPanel('story', false));
     this.storyPanel.addEventListener('click', e => { const el = e.target as HTMLElement, pin = el.closest<HTMLElement>('[data-pin]'), nm = el.closest<HTMLElement>('.nm'); if (pin) this.app.pinStory(this.app.pinnedStory === pin.dataset.pin ? null : pin.dataset.pin!); else if (nm) this.app.select(nm.dataset.id!); });
     this.storyChip = h('button', 'storyfollow hidden'); this.storyChip.title = 'Stop following storyline'; this.storyChip.onclick = () => this.app.pinStory(null); r.appendChild(this.storyChip);
 
     // god powers cool down (a sweep fills the button) so spamming can't flood the chronicle
     const COOL: Record<string, number> = { gift: 8, rain: 25, traveller: 30, festival: 30 };
     dock.querySelectorAll<HTMLButtonElement>('[data-g]').forEach(b => b.onclick = () => { if (b.classList.contains('cool')) return; const k = b.dataset.g!; if (!this.app.god(k)) return; b.classList.add('flash'); setTimeout(() => b.classList.remove('flash'), 600);
-      const sec = COOL[k] ?? 10; b.classList.add('cool'); b.setAttribute('aria-disabled', 'true'); b.style.setProperty('--cool', `${sec}s`); b.title = 'Recharging…'; setTimeout(() => { b.classList.remove('cool'); b.removeAttribute('aria-disabled'); b.title = ''; }, sec * 1000); });
+      const sec = COOL[k] ?? 10; b.classList.add('cool'); b.setAttribute('aria-disabled', 'true'); b.style.setProperty('--cool', `${sec}s`); const t0 = b.title; b.title = 'Recharging…'; setTimeout(() => { b.classList.remove('cool'); b.removeAttribute('aria-disabled'); b.title = t0; }, sec * 1000); });
+    dock.querySelectorAll<HTMLButtonElement>('[data-p]').forEach(b => b.onclick = () => this.setPanel(b.dataset.p as PanelId, !this.panels[b.dataset.p as PanelId]));
     dock.querySelectorAll<HTMLButtonElement>('[data-v]').forEach(b => b.onclick = () => this.view(b.dataset.v!));
     this.overlay = h('div', 'overlay'); r.appendChild(this.overlay); this.toasts = h('div', 'toasts'); r.appendChild(this.toasts); this.caption = h('div', 'caption'); r.appendChild(this.caption);
     this.modal = h('div', 'modal hidden'); r.appendChild(this.modal); this.modal.onclick = (e) => { if (e.target === this.modal) this.closeModal(); };
@@ -89,9 +104,26 @@ export class UI {
     const measure = () => { this.root.style.setProperty('--top-h', `${top.offsetHeight}px`); this.root.style.setProperty('--dock-h', `${dock.offsetHeight}px`); };
     addEventListener('resize', measure); requestAnimationFrame(measure); setTimeout(measure, 500);
     // first-visit tip: goes away on the first villager click (or when tapped)
-    if (!localStorage.getItem('thistlebrook.hinted')) { const hint = h('div', 'hint', '👆 Click a villager to read their mind'); hint.onclick = () => hint.classList.add('gone'); r.appendChild(hint); this.hint = hint; setTimeout(() => hint.classList.add('gone'), 45000); }
-    window.addEventListener('keydown', e => { if (e.key === 'Escape') { this.closeModal(); this.storyPanel.classList.remove('expanded'); this.app.select(null); } if (e.key === ' ') { this.app.togglePause(); e.preventDefault(); } });
+    // one-time tip: shown on the very first visit only, gone after a few seconds or the first tap
+    if (!localStorage.getItem('thistlebrook.hinted')) { const hint = h('div', 'hint', '👆 Tap a villager to peek at their thoughts'); hint.onclick = () => hint.classList.add('gone'); r.appendChild(hint); this.hint = hint; try { localStorage.setItem('thistlebrook.hinted', '1'); } catch {} setTimeout(() => hint.classList.add('gone'), 12000); }
+    this.applyPanels();
+    window.addEventListener('keydown', e => { if (e.key === 'Escape') { this.closeModal(); this.app.select(null); } if (e.key === ' ') { this.app.togglePause(); e.preventDefault(); } });
   }
+  // ---- panels: closed by default, opened from the dock, remembered in localStorage ----
+  setPanel(id: PanelId, open: boolean) {
+    if (open && narrow()) for (const k of Object.keys(this.panels) as PanelId[]) if (k !== id) this.panels[k] = false; // one sheet at a time on small screens
+    this.panels[id] = open; if (id === 'feed' && open) this.unread = 0;
+    try { localStorage.setItem(PANEL_KEY, JSON.stringify(this.panels)); } catch {}
+    this.applyPanels(); if (id === 'story' && open) this.renderStorylines(); if (id === 'lb' && open) this.renderLB();
+  }
+  applyPanels() {
+    const p = this.panels;
+    this.feedWrap.classList.toggle('open', p.feed); this.lb.classList.toggle('open', p.lb);
+    this.storyPanel.classList.toggle('open', p.story); this.storyPanel.classList.toggle('expanded', p.story && narrow()); this.storyPanel.classList.remove('folded');
+    this.dock.querySelectorAll<HTMLElement>('[data-p]').forEach(b => { const on = p[b.dataset.p as PanelId]; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); });
+    this.updateUnread();
+  }
+  updateUnread() { const b = this.dock.querySelector<HTMLElement>('[data-p="feed"]'); if (!b) return; const n = this.panels.feed ? 0 : this.unread; const t = n ? String(Math.min(n, 9)) + (n > 9 ? '+' : '') : ''; if (b.dataset.badge !== t) { b.dataset.badge = t; b.classList.toggle('badge-on', !!t); } }
   name(id: string) { const v = this.app.sim.byId.get(id); return v ? `<a class="nm" data-id="${id}" style="--c:${VCOLOR[id]}">${v.first}</a>` : id; }
   linkify(text: string) { let t = esc(text); for (const v of this.app.sim.villagers) t = t.replace(new RegExp(`\\b${v.first}(?!\\w)`, 'g'), this.name(v.id)); return t; }
   // text with a fabricated rumour inside gets the same badge everywhere (chronicle, Gazette, recap, story tab, arcs)
@@ -122,6 +154,8 @@ export class UI {
     this.arcChip(el, e.id);
     this.applyFilter(el);
     this.feed.prepend(el); while (this.feed.children.length > 100) this.feed.lastChild!.remove();
+    if (!this.panels.feed && e.imp >= 5) { this.unread++; this.updateUnread(); }
+    this.eventBubble(e);
     if (minor) { const m = this.feed.querySelectorAll('[data-minor]'); for (let i = 30; i < m.length; i++) m[i].remove(); }
     this.promoteCaption(e, el);
   }
@@ -149,14 +183,23 @@ export class UI {
     this.applyFilter(el); this.feed.prepend(el);
     while (this.feed.children.length > 100) this.feed.lastChild!.remove();
   }
+  // a short bubble over the actor for an interaction that has no spoken line of its own (the chronicle keeps the full text)
+  eventBubble(e: SimEvent) {
+    const s = this.app.sim, eb = eventBubble(e, id => s.byId.get(id)?.first ?? ''); if (!eb) return;
+    const v = s.byId.get(eb.who); if (!v || v.inside) return;
+    const b = this.bubbles.get(eb.who); if (b && b.until > performance.now()) return;
+    if (this.convo.some(c => c.who === eb.who && c.at < s.clock + 12)) return; // they're about to say something themselves
+    this.bubble(eb.who, eb.text, eb.emoji, 2.6, e.actors[1]);
+  }
   promoteCaption(e: SimEvent, el: HTMLElement) {
     if (e.kind === 'life') return;
-    let visibleInFeed = el.style.display !== 'none' && !this.feed.parentElement!.classList.contains('collapsed') && this.feed.getClientRects().length > 0;
+    let visibleInFeed = el.style.display !== 'none' && this.panels.feed && this.feed.getClientRects().length > 0;
     for (let panel: HTMLElement | null = this.feed; visibleInFeed && panel; panel = panel.parentElement) {
       const style = getComputedStyle(panel);
       if (style.display === 'none' || style.visibility !== 'visible' || style.opacity === '0') visibleInFeed = false;
     }
-    if (e.imp >= 7 && !visibleInFeed) this.captionText(`${e.icon} ${this.linkify(this.isLie(e) ? cleanLie(e.text) : e.text)}`);
+    // one short line only; the full story is a tap away in the chronicle
+    if (e.imp >= 7 && !visibleInFeed) this.captionText(`${e.icon} ${this.linkify(shortLine(this.isLie(e) ? cleanLie(e.text) : e.text, 12))}`);
   }
   refreshFeedRow(el: HTMLElement, e: SimEvent) {
     const cat = this.cat(e), n = +(el.dataset.n ?? 1);
@@ -191,10 +234,14 @@ export class UI {
     this.modal.querySelectorAll<HTMLElement>('.nm').forEach(a => a.onclick = () => { this.closeModal(); this.app.select(a.dataset.id!); });
     this.modal.querySelector('.x')?.addEventListener('click', () => this.closeModal());
   }
-  captionTO: any; captionText(html: string) { this.caption.innerHTML = html; this.caption.classList.add('show'); clearTimeout(this.captionTO); this.captionTO = setTimeout(() => this.caption.classList.remove('show'), 6000); }
+  captionTO: any; captionText(html: string) { if (this.quiet) return; this.caption.innerHTML = html; this.caption.classList.add('show'); clearTimeout(this.captionTO); this.captionTO = setTimeout(() => this.caption.classList.remove('show'), 4500); }
   letterHTML(l: import('../sim/letters').Letter) { return `<article class="handwritten"><span aria-hidden="true">💮 ✉️</span><p>${esc(l.text).replace(/\n/g, '<br>')}</p></article>`; }
   showLetter(l: import('../sim/letters').Letter, floating = false) {
-    if (floating) { if (this.quiet) return; const el = h('button', 'letter-float', this.letterHTML(l)); el.title = 'Dismiss letter'; el.onclick = () => el.remove(); this.toasts.appendChild(el); setTimeout(() => el.remove(), 6000); }
+    // floating = a small toast ("✉️ A note from Ollie") that expands into the handwritten card when tapped
+    if (floating) { if (this.quiet) return; const s = this.app.sim, from = s.byId.get(l.from)?.first ?? 'someone', to = s.byId.get(l.to)?.first ?? '';
+      this.toasts.querySelector('.letter-toast')?.remove();
+      const el = h('button', 'letter-toast', `<span class="lt-ic">✉️</span><span class="lt-tx"><b>${esc(from)} → ${esc(to)}</b><small>${esc(shortLine(l.text.split('\n').find(x => x.trim()) ?? '', 6))}</small></span>`);
+      el.title = 'Read the letter'; el.onclick = () => { el.remove(); this.showLetter(l); }; this.toasts.appendChild(el); setTimeout(() => el.classList.add('out'), 6500); setTimeout(() => el.remove(), 7300); }
     else { this.modal.innerHTML = `<div class="letter-view"><button class="letter-close">Close</button>${this.letterHTML(l)}</div>`; this.modal.classList.remove('hidden'); this.modal.querySelector<HTMLButtonElement>('.letter-close')!.onclick = () => this.closeModal(); }
   }
   toastQ: [string, string][] = []; quiet = false;
@@ -206,16 +253,24 @@ export class UI {
   }
   toast(title: string, desc: string) { if (this.quiet) return;
     // the same achievement again (a story reaching more people) refreshes the toast already showing or queued, never stacks a twin
-    const same = [...this.toasts.children].find(t => t.querySelector('b')?.textContent === title); if (same) { same.querySelector('span')!.innerHTML = this.linkify(desc); this.refreshToast(same); return; }
+    const same = [...this.toasts.children].find(t => t.querySelector('b')?.textContent === title); if (same) { same.querySelector('span')!.innerHTML = this.linkify(shortLine(desc, 10)); this.refreshToast(same); return; }
     const q = this.toastQ.find(t => t[0] === title); if (q) { q[1] = desc; return; }
-    if (this.toasts.children.length >= 2) { if (this.toastQ.length < 6) this.toastQ.push([title, desc]); return; } const t = h('div', 'toast', `<b>${title}</b><span>${this.linkify(desc)}</span>`); this.toasts.appendChild(t); this.app.sound.play('toast'); this.refreshToast(t); }
+    if (this.toasts.children.length >= 2) { if (this.toastQ.length < 6) this.toastQ.push([title, desc]); return; } const t = h('div', 'toast', `<b>${title}</b><span>${this.linkify(shortLine(desc, 10))}</span>`); t.title = desc; this.toasts.appendChild(t); this.app.sound.play('toast'); this.refreshToast(t); }
+  // Speech bubble: a short line (the full text stays in sim.transcripts / the chronicle), tinted by mood.
+  // In a two-way exchange the listener's bubble steps aside so the pair alternates.
   bubble(id: string, text: string, emoji: string, dur: number, listener?: string) {
-    let b = this.bubbles.get(id); if (!b) { const el = h('div', 'bubble'); this.overlay.appendChild(el); b = { el, until: 0, t0: 0 }; this.bubbles.set(id, b); }
-    b.el.innerHTML = `${emoji ? `<span class="em">${emoji}</span>` : ''}${esc(text)}`; b.el.classList.add('pop'); for (const animation of b.el.getAnimations()) { animation.cancel(); animation.play(); } b.t0 = performance.now(); b.until = performance.now() + dur * 1000 / Math.max(1, Math.sqrt(this.app.speed || 1));
+    let b = this.bubbles.get(id); if (!b) { const el = h('div', 'bubble'); this.overlay.appendChild(el); b = { el, until: 0, t0: 0, full: '', occ: false, occT: 0 }; this.bubbles.set(id, b); }
+    const now = performance.now(), short = shortLine(text), mood = moodOf(emoji);
+    const paint = (t: string) => setHTML(b!.el, `${emoji ? `<span class="em">${emoji}</span>` : ''}<span class="bt">${esc(t)}</span>`);
+    paint(short); b.full = text; b.el.className = `bubble m-${mood}`;
+    void b.el.offsetWidth; b.el.classList.add('pop');
+    b.t0 = now; b.until = now + Math.max(2.2, dur) * 1000 / Math.max(1, Math.sqrt(this.app.speed || 1));
+    if (listener) { const o = this.bubbles.get(listener); if (o && o.until > now) o.until = Math.min(o.until, now + 250); }
     const v = this.app.sim.byId.get(id), bubble = b, token = {};
-    (bubble as any).rewriteToken = token;
-    if (v && llm.status().enabled) void llm.rewrite(text, this.rewriteContext(v, 'Spoken while ' + v.doing, listener)).then(rewritten => {
-      if ((bubble as any).rewriteToken === token && performance.now() < bubble.until && llm.status().enabled) bubble.el.innerHTML = `${emoji ? `<span class="em">${emoji}</span>` : ''}${esc(rewritten)}`;
+    bubble.rewriteToken = token;
+    // the optional LLM may rephrase, but whatever it says is clipped back to bubble length
+    if (v && llm.status().enabled) void llm.rewrite(text, this.rewriteContext(v, 'Spoken aloud in a small speech bubble (keep it under 8 words) while ' + v.doing, listener)).then(rewritten => {
+      if (bubble.rewriteToken === token && performance.now() < bubble.until && llm.status().enabled) paint(shortLine(rewritten));
     });
   }
   private rewriteContext(v: Villager, context: string, listener?: string): RewriteContext {
@@ -250,52 +305,54 @@ export class UI {
     chip.hidden = !status.enabled; const label = status.ok ? '🧠 LLM · ok' : '🧠 LLM · offline'; if (chip.textContent !== label) chip.textContent = label;
     while (this.convo.length && this.convo[0].at <= s.clock) { const c = this.convo.shift()!; const v = s.byId.get(c.who); if (v && !v.inside) this.bubble(c.who, c.text, c.emoji, 3, c.listener); }
     if (this.convo.length > 60) this.convo.splice(0, this.convo.length - 60);
-    const close = this.app.camDist() < 30, W = window.innerWidth, HT = this.safeTop;
+    const W = window.innerWidth, HT = this.safeTop;
     { const far = this.app.camDist() > 42; this.markT += dt; for (const m of this.marks) { if (!far) { this.setDisp(m.el, false); continue; } const p = this.app.project(m.x, 5, m.z); const on = p.on && p.y > HT + 10; this.setDisp(m.el, on); if (on) m.el.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, -100%)`; } }
-    /* Batch visibility writes, then measure new text before positioning any labels. */
-    for (const v of s.villagers) {
-      const pos = v.avatar.root.position, p = this.app.project(pos.x, v.avatar.height + .55, pos.z), vis = p.on && !v.inside && v.avatar.alpha > .3;
-      const tag = this.tags.get(v.id)!; this.setDisp(tag, vis && (close || this.app.selected === v.id));
-      const b = this.bubbles.get(v.id); if (b) this.setDisp(b.el, vis && now < b.until);
-    }
-    for (const tag of this.tags.values()) if (tag.style.display !== 'none') this.sz(tag);
-    for (const b of this.bubbles.values()) if (b.el.style.display !== 'none') this.sz(b.el);
+    // ---- name tags & speech bubbles ----------------------------------------------------------------
+    // Tags: only on hover, or for the selected / followed villager at close range.
+    // Bubbles: at most 4 (3 on phones), nearest the camera / focus first; they shrink with distance, hide when far
+    // or behind a building, fade in and out, and never cover the open villager card.
+    const cam = this.app.camPos(), sel = this.app.selected, foc = this.app.focus, hov = this.app.hovered, maxB = narrow() ? 3 : 4;
+    type Cand = { id: string; el: HTMLElement; x: number; y: number; w: number; h: number; sc: number; below: boolean; pri: number; fading: boolean };
+    const cands: Cand[] = [];
     for (const v of s.villagers) {
       const pos = v.avatar.root.position, hh = v.avatar.height, tag = this.tags.get(v.id)!, p = this.app.project(pos.x, hh + .55, pos.z);
-      const vis = p.on && !v.inside && v.avatar.alpha > .3;
-      this.setDisp(tag, vis && (close || this.app.selected === v.id)); const isSel = this.app.selected === v.id; if (tag.classList.contains('sel') !== isSel) tag.classList.toggle('sel', isSel);
-      const tagHidden = tag.style.display === 'none';
-      if (vis && !tagHidden) { const { w: tw, h: th } = this.sz(tag); const tx = Math.max(tw / 2 + 4, Math.min(W - tw / 2 - 4, p.x)), ty = Math.max(HT + th, p.y); tag.style.transform = `translate(${tx}px, ${ty}px) translate(-50%, -100%)`; }
-      const b = this.bubbles.get(v.id);
-      if (b) { const show = vis && now < b.until; this.setDisp(b.el, show);
-        if (show) { const q = this.app.project(pos.x, hh + 1.0, pos.z), { w: bw, h: bh } = this.sz(b.el);
-          let bx = q.x, by = q.y - (tagHidden ? 0 : 18), below = false;
-          if (by - bh < HT) { below = true; by = q.y + 16; } // flip bubble below the head if it would clip the topbar
-          bx = Math.max(bw / 2 + 4, Math.min(W - bw / 2 - 4, bx));
-          if (b.el.classList.contains('below') !== below) b.el.classList.toggle('below', below); b.el.style.transform = `translate(${bx}px, ${by}px) translate(-50%, ${below ? '0%' : '-100%'})`; } }
+      const vis = p.on && !v.inside && v.avatar.alpha > .3, d = Math.hypot(cam.x - pos.x, cam.y - (pos.y + hh), cam.z - pos.z);
+      const key = v.id === sel || v.id === foc;
+      const showTag = vis && (v.id === hov || (key && d < 24));
+      this.setDisp(tag, showTag); const isSel = sel === v.id; if (tag.classList.contains('sel') !== isSel) tag.classList.toggle('sel', isSel);
+      if (showTag) { const { w: tw, h: th } = this.sz(tag); const tx = Math.max(tw / 2 + 4, Math.min(W - tw / 2 - 4, p.x)), ty = Math.max(HT + th, p.y); tag.style.transform = `translate(${tx}px, ${ty}px) translate(-50%, -100%)`; }
+      const b = this.bubbles.get(v.id); if (!b) continue;
+      const live = now < b.until + 350, fading = now >= b.until;
+      let show = vis && live && d < (key ? 60 : 42);
+      if (show && now - b.occT > 250) { b.occT = now; b.occ = !key && this.app.occluded(pos.x, pos.y + hh + .4, pos.z); }
+      if (show && b.occ) show = false;
+      if (!show) { this.setDisp(b.el, false); continue; }
+      this.setDisp(b.el, true);
+      const q = this.app.project(pos.x, hh + .95, pos.z), sc = Math.max(.8, Math.min(1.08, 21 / d)), z = this.sz(b.el);
+      const cx = q.x - W / 2, cy = q.y - innerHeight / 2;
+      const pri = (v.id === sel ? 1e9 : v.id === foc ? 1e8 : 0) + (1000 - d * 12) - Math.hypot(cx, cy) * .05 + (fading ? -500 : 0) + b.t0 * 1e-6;
+      cands.push({ id: v.id, el: b.el, x: q.x, y: q.y - (showTag ? 16 : 0), w: z.w * sc, h: z.h * sc, sc, below: false, pri, fading });
     }
-    // Declutter: the selected villager and the newest speakers win; each bubble may stack at most twice above a
-    // neighbour; at most 3 bubbles per crowd; anything that still collides (or sits under the open villager card) fades out.
-    const shown: { id: string; el: HTMLElement; x: number; y: number; ax: number; ay: number; w: number; h: number; off: string; below: boolean; pri: number }[] = [];
-    for (const [id, b] of this.bubbles) { if (b.el.style.display === 'none') continue; const m = /translate\(([-\d.]+)px, ([-\d.]+)px\) translate\(-50%, ([^)]+)\)/.exec(b.el.style.transform); if (!m) continue; const z = this.sz(b.el); shown.push({ id, el: b.el, x: +m[1], y: +m[2], ax: +m[1], ay: +m[2], w: z.w, h: z.h, off: m[3], below: m[3].trim() === '0%', pri: id === this.app.selected ? 1e15 : b.t0 }); }
-    shown.sort((a, b) => b.pri - a.pri);
-    const rect = (a: { x: number; y: number; w: number; h: number; below: boolean }) => ({ l: a.x - a.w / 2 - 3, r: a.x + a.w / 2 + 3, t: a.below ? a.y - 3 : a.y - a.h - 3, b: a.below ? a.y + a.h + 3 : a.y + 3 });
+    cands.sort((a, b) => b.pri - a.pri);
+    const rect = (a: Cand) => ({ l: a.x - a.w / 2 - 3, r: a.x + a.w / 2 + 3, t: a.below ? a.y - 3 : a.y - a.h - 3, b: a.below ? a.y + a.h + 3 : a.y + 3 });
     const hit = (p: { l: number; r: number; t: number; b: number }, q: { l: number; r: number; t: number; b: number }) => p.l < q.r && q.l < p.r && p.t < q.b && q.t < p.b;
     const obst: { l: number; r: number; t: number; b: number }[] = [];
-    if (this.app.selected && this.cardRect) obst.push(this.cardRect);
-    const placed: typeof shown = [];
-    for (const a of shown) {
-      if (a.below) { if (a.y < HT) a.y = HT; } else if (a.y - a.h < HT) a.y = HT + a.h;
-      let ok = false;
-      for (let tries = 0; tries < 3; tries++) {
-        const ra = rect(a), blocker = placed.find(b => hit(ra, rect(b)));
-        if (!blocker) { ok = true; break; }
-        if (a.below) break; a.y = blocker.y - blocker.h - 8; if (a.y - a.h < HT) break;
+    if (sel && this.cardRect) obst.push(this.cardRect);
+    const placed: Cand[] = [];
+    for (const a of cands) {
+      a.x = Math.max(a.w / 2 + 4, Math.min(W - a.w / 2 - 4, a.x));
+      if (a.y - a.h < HT) { a.below = true; a.y = Math.max(HT, a.y + 30); }
+      let ok = placed.length < maxB;
+      if (ok) for (let tries = 0; tries < 3; tries++) {
+        const blocker = placed.find(o => hit(rect(a), rect(o)));
+        if (!blocker) break;
+        if (a.below || tries === 2) { ok = false; break; } a.y = blocker.y - blocker.h - 6; if (a.y - a.h < HT) { ok = false; break; }
       }
-      const crowd = placed.filter(b => Math.abs(b.ax - a.ax) < 170 && Math.abs(b.ay - a.ay) < 130).length;
-      if (ok && a.pri < 1e15 && (crowd >= 3 || obst.some(o => hit(rect(a), o)))) ok = false;
-      if (ok) { placed.push(a); a.el.style.transform = `translate(${a.x}px, ${a.y}px) translate(-50%, ${a.off})`; }
-      const op = ok ? '' : '0'; if (a.el.style.opacity !== op) a.el.style.opacity = op;
+      if (ok && a.pri < 1e8 && obst.some(o => hit(rect(a), o))) ok = false;
+      if (ok) placed.push(a);
+      if (a.el.classList.contains('below') !== a.below) a.el.classList.toggle('below', a.below);
+      const out = !ok || a.fading; if (a.el.classList.contains('out') !== out) a.el.classList.toggle('out', out);
+      if (ok) a.el.style.transform = `translate(${a.x.toFixed(1)}px, ${a.y.toFixed(1)}px) translate(-50%, ${a.below ? '0%' : '-100%'}) scale(${a.sc.toFixed(3)})`;
     }
     if (this.iconCanvas) {
       const c = this.iconCanvas, H = innerHeight, ratio = Math.min(devicePixelRatio, 2), w = Math.round(W * ratio), h = Math.round(H * ratio);
@@ -316,7 +373,7 @@ export class UI {
     this.cardT -= dt; if (this.cardT <= 0) { this.cardT = .35; const cal = calendarFor(s.day); setHTML(this.clock, `<b><span class="wkd">${cal.weekday} · </span>${cal.dayOfSeason} ${cal.season}<span class="dno"> · Day ${s.day}</span></b> · ${fmtTime(s.clock)} ${s.rain > .4 ? '🌧️' : s.hour >= 20 || s.hour < 6 ? '🌙' : s.hour < 8 ? '🌅' : '☀️'}${s.finaleUntil > s.clock ? ' 🎆' : s.festivalUntil > s.clock ? ' 🎪' : ''}${s.visitorUntil > s.clock ? ' 🧳' : ''}`); if (this.calOpen) this.renderCal();
       this.measureChrome();
       this.root.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach(b => b.classList.toggle('on', +b.dataset.speed! === this.app.speed)); { const m = this.root.querySelector('#mode') as HTMLElement, html = this.app.mode === 'director' ? '🎬<span> Director</span>' : '🕹️<span> Free cam</span>'; if (m.innerHTML !== html) m.innerHTML = html; }
-      this.renderCard(); this.renderLB(); this.storyT -= .35; if (this.storyT <= 0) { this.storyT = 1.05; this.renderStorylines(); }
+      this.renderCard(); if (this.panels.lb) this.renderLB(); this.storyT -= .35; if (this.storyT <= 0) { this.storyT = 1.05; this.renderStorylines(); }
       { const r = this.card.classList.contains('hidden') ? null : this.card.getBoundingClientRect(); this.cardRect = r && r.width ? { l: r.left, r: r.right, t: r.top, b: r.bottom } : null; } }
   }
   // measure real topbar/dock heights so overlays and panels never assume a fixed chrome size
@@ -418,7 +475,7 @@ export class UI {
     this.storyChip.classList.toggle('hidden', !pin); if (pin) this.storyChip.textContent = `📌 Following: ${title ?? 'storyline'}  ✕`;
   }
   view(kind: string) {
-    if (kind === 'storylines') { this.storyPanel.classList.toggle('expanded'); this.storyPanel.classList.remove('folded'); return; }
+    if (kind === 'storylines') { this.setPanel('story', !this.panels.story); return; }
     const s = this.app.sim; this.modal.classList.remove('hidden');
     if (kind === 'paper') { const p = this.app.director.papers[this.app.director.papers.length - 1] ?? { ...this.app.director.paper(s.day), early: true }; this.showPaper(p); return; }
     if (kind === 'web') { this.modal.innerHTML = `<div class="sheet web"><button class="x">✕</button><h2>🕸️ Who likes whom</h2><p class="muted">Green = fondness, red = resentment, thickness = strength. Hover or tap a face to see who <b>they</b> like (→ outgoing) and who likes <b>them</b> (← incoming). 💞 sweethearts · 💗 crushes · 🚩 alliances.</p><canvas width="760" height="560"></canvas></div>`; drawWeb(this.modal.querySelector('canvas')!, s, VCOLOR, (id) => this.app.portrait(id)); }

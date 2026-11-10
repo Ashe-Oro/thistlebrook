@@ -18,6 +18,7 @@ import { saveGame, loadGame, clearSave, peekSave } from './core/save';
 import { arcs } from './sim/arcs';
 import { Ambient } from './world/ambient';
 import { fmtTime } from './core/util';
+import { shortLine } from './ui/bubbletext';
 import { Extras } from './world/extras'; let extras: Extras | null = null;
 
 const mobile = matchMedia('(pointer: coarse)').matches || innerWidth < 760;
@@ -121,7 +122,7 @@ function portrait(id: string) {
   renderer.setScissorTest(false); renderer.setViewport(0, 0, renderer.domElement.width / pr, renderer.domElement.height / pr);
   return c;
 }
-const tmpV = new THREE.Vector3();
+const tmpV = new THREE.Vector3(), bubP = new THREE.Vector3(); let occSolid: THREE.Object3D[] = [], occSolidAt = 0;
 const api: AppApi = {
   sim, director, get speed() { return speed; }, setSpeed(s) { if (s === 0 && speed > 0) lastSpeed = speed; speed = s; }, togglePause() { api.setSpeed(speed ? 0 : lastSpeed || 1); }, get selected() { return selected; },
   pinStory, get pinnedStory() { return pinnedStory; },
@@ -133,6 +134,16 @@ const api: AppApi = {
     if (kind === 'gift') { const v = selected ? sim.byId.get(selected) : null; const g = dropGift(sim, v ? v.x + 3 : undefined, v ? v.z + 2 : undefined); focusPoint(g.x, g.z); } if (kind === 'rain') summonRain(sim); if (kind === 'traveller' || kind === 'merchant') { spawnTraveller(sim); focusPoint(NELL[0], NELL[1] + 2); } if (kind === 'festival') { startFestival(sim); focusPoint(-9, 5); } return true; },
   sound, project(x, y, z) { tmpV.set(x, y, z).project(camera); return { x: (tmpV.x * .5 + .5) * innerWidth, y: (-tmpV.y * .5 + .5) * innerHeight, on: tmpV.z < 1 && Math.abs(tmpV.x) < 1.1 && Math.abs(tmpV.y) < 1.1 }; },
   camDist() { return camera.position.distanceTo(controls.target); },
+  get hovered() { return hovered; }, get focus() { return follow; },
+  camPos() { return camera.position; },
+  // is a point hidden behind solid scenery (roofs, walls, trees) from the live camera? Presentation-only.
+  occluded(x, y, z) {
+    if (!occluders.length) return false;
+    bubP.set(x, y, z); rDir.copy(bubP).sub(camera.position); const L = rDir.length(); if (L < 1) return false;
+    rc.set(camera.position, rDir.divideScalar(L)); rc.near = .05; rc.far = L - .6;
+    const now = performance.now(); if (now - occSolidAt > 1000) { occSolidAt = now; occSolid = occluders.filter(visibleObject); }
+    rayHits.length = 0; rc.intersectObjects(occSolid, false, rayHits); return rayHits.length > 0;
+  },
   newVillage() { noSave = true; clearSave(); const q = new URLSearchParams(location.search); q.set('seed', String(1 + Math.floor(Math.random() * 1e6))); q.delete('resume'); location.search = q.toString(); },
 };
 // ---- save / resume -------------------------------------------------------------------------------
@@ -162,6 +173,14 @@ function storyEvent(e: SimEvent): boolean {
 }
 function focusPoint(x: number, z: number, dist = 22) { focusTarget = new THREE.Vector3(x, 0, z); focusDist = dist; follow = null; }
 
+// hover a villager to see their name tag (mouse only; throttled screen-space pick)
+let hovered: string | null = null, hoverAt = 0;
+renderer.domElement.addEventListener('pointermove', e => {
+  if (e.pointerType !== 'mouse') return; const now = performance.now(); if (now - hoverAt < 80) return; hoverAt = now;
+  let best: Villager | null = null, bd = 34; for (const v of sim.villagers) { if (v.inside) continue; for (const yy of [.6, 1.3]) { const p = api.project(v.x, yy, v.z); const dd = Math.hypot(p.x - e.clientX, p.y - e.clientY); if (p.on && dd < bd) { bd = dd; best = v; } } }
+  hovered = best ? best.id : null; renderer.domElement.style.cursor = best ? 'pointer' : '';
+});
+renderer.domElement.addEventListener('pointerleave', () => { hovered = null; });
 // click to select a villager (screen-space pick)
 renderer.domElement.addEventListener('pointerdown', e => { if (intro) { endIntro(); return; } if (montage) { endMontage(); return; } (renderer.domElement as any)._down = [e.clientX, e.clientY]; if (pinnedStory) pinStory(null); if (mode === 'director') { mode = 'free'; } focusTarget = null; });
 renderer.domElement.addEventListener('pointerup', e => {
@@ -381,7 +400,7 @@ function montageCamera(dt: number) {
   const m = montage!; m.t += dt; const idx = Math.floor(m.t / m.per);
   if (idx >= m.shots.length) { endMontage(); return; }
   const sh = m.shots[idx], u = (m.t % m.per) / m.per;
-  if (idx !== m.i) { m.i = idx; m.yaw += 1.9; (cine.querySelector('em') as HTMLElement).textContent = sh.icon; (cine.querySelector('span') as HTMLElement).textContent = `Yesterday, ${fmtTime(sh.t)}: ${sh.text}`; cine.classList.remove('cut'); void cine.offsetWidth; cine.classList.add('cut'); sound.play('pop', .25); stageShot(sh, m.yaw); }
+  if (idx !== m.i) { m.i = idx; m.yaw += 1.9; (cine.querySelector('em') as HTMLElement).textContent = sh.icon; (cine.querySelector('span') as HTMLElement).textContent = `Yesterday, ${fmtTime(sh.t)}: ${shortLine(sh.text, 9)}`; cine.classList.remove('cut'); void cine.offsetWidth; cine.classList.add('cut'); sound.play('pop', .25); stageShot(sh, m.yaw); }
   const f = sh.frame!, yaw = f.yaw, dist = f.dist; // preserve the cached clearance across the cut
   controls.target.copy(sh.target!); camera.position.set(sh.target!.x + Math.sin(yaw) * dist, f.h, sh.target!.z + Math.cos(yaw) * dist); camera.lookAt(controls.target);
 }
@@ -433,7 +452,7 @@ function startBeat(e: SimEvent, force = false) {
   // the wedding gets a straight-down-the-aisle shot, computed directly from the arch (e.x,e.z), held through the kiss
   if (e.kind === 'wedding' && title === 'The Wedding') { beat.aisle = { x: e.x, z: e.z }; beat.dur = 7; }
   (cine.querySelector('em') as HTMLElement).textContent = e.icon; (cine.querySelector('b') as HTMLElement).textContent = beat.title;
-  (cine.querySelector('span') as HTMLElement).textContent = e.text.replace(/\s*\(It isn't true\.\)/gi, '').replace(/\s+/g, ' ');
+  (cine.querySelector('span') as HTMLElement).textContent = shortLine(e.text, 9); // one brief line; the chronicle keeps the full text
   cine.classList.add('on'); follow = null; focusTarget = null; controls.autoRotate = false;
   return true;
 }
@@ -594,7 +613,7 @@ let intro: { t: number; dur: number } | null = null;
 const iA = new THREE.Vector3(), iB = new THREE.Vector3();
 function startIntro() {
   intro = { t: 0, dur: 11 }; (cine.querySelector('em') as HTMLElement).textContent = '🌿'; (cine.querySelector('b') as HTMLElement).textContent = 'Thistlebrook';
-  (cine.querySelector('span') as HTMLElement).textContent = `${sim.villagers.length} villagers, ${world.places.size} places, and every one of them has an opinion. Click anywhere to take over.`; cine.classList.add('on'); document.body.classList.add('intro');
+  (cine.querySelector('span') as HTMLElement).textContent = `${sim.villagers.length} villagers, each with a story. Click anywhere to look around.`; cine.classList.add('on'); document.body.classList.add('intro');
 }
 function endIntro() { if (!intro) return; intro = null; cine.classList.remove('on'); document.body.classList.remove('intro'); }
 function introCamera(dt: number) {
