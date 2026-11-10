@@ -77,12 +77,17 @@ export class ArcTracker {
       if (!a || !b) return null;
       return { family: 'romance', key: `romance:${pairKey(a, b)}`, beat, title: `${this.fn(a)} & ${this.fn(b)}`, pairable: true, terminal };
     }
-    // ---- FEUD (argue / fight / reconcile / resentment) -----------------------
-    if (k === 'argue' || k === 'fight' || k === 'reconcile' || (k === 'bond' && /resent|😠/.test(t + e.icon))) {
+    // ---- FEUD (argue / fight / reconcile / mediate / contest / resentment) ----
+    if (k === 'mediate') { // actors are [mediator, a, b]: the feud is between the second and third
+      const a = A[1], b = A[2]; if (!a || !b) return null;
+      return { family: 'feud', key: `feud:${pairKey(a, b)}`, beat: 'Defused', title: `Feud: ${this.fn(a)} vs ${this.fn(b)}`, pairable: true };
+    }
+    if (k === 'argue' || k === 'fight' || k === 'reconcile' || k === 'contest' || (k === 'bond' && /resent|😠/.test(t + e.icon))) {
       if (!pair) return null;
       let beat = 'Argument', terminal = false;
       if (k === 'fight') beat = /dust settled|came out on top/i.test(t) ? 'Aftermath' : 'Fight';
       else if (k === 'reconcile') { if (/wasn't ready to forgive/i.test(t)) beat = 'Rebuffed'; else { beat = 'Reconciled'; terminal = true; } }
+      else if (k === 'contest') beat = 'Contest';
       else if (k === 'bond') beat = 'Bad blood';
       else beat = 'Argument';
       return { family: 'feud', key: `feud:${pair}`, beat, title: `Feud: ${this.fn(A[0])} vs ${this.fn(A[1])}`, pairable: true, terminal };

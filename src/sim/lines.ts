@@ -207,6 +207,46 @@ const LIB: Record<string, Variant[]> = {
     'Sorry doesn’t cut it.', 'Not yet. Maybe not ever.', 'You can’t just say sorry and go.',
     'I need time. A lot of it.', 'Fine words. I’ve heard them before.', ['Get out of my sight.', hot],
   ],
+  // mediation: a kind bystander steps between two raised voices
+  mediate: [
+    'Now, now — not like this.', 'Easy, both of you. Breathe.', 'Neighbours! Half the village can hear you.',
+    'Whatever it is, it can wait till supper.', 'Come on. You two are better than this.',
+    ['Walk with me. Both of you.', calm], ['Please — no shouting on my street.', kind],
+  ],
+  mediateStandDown: [
+    '...Fine. For {m}’s sake.', 'Hmph. Lucky {m} was passing.', 'This isn’t finished. But fine.',
+    'Alright, alright. I’m calm.', ['One day {m} won’t be here.', hot], ['Thank you, {m}. I… got carried away.', kind],
+  ],
+  // friendly-rivalry contests (stone-skipping, races, pie-offs)
+  contestChallenge: [
+    'Settle it like neighbours: a contest!', 'You and me, {t}. Right here, right now.', 'Loser draws the water for a week!',
+    'Put your boasting where your boots are.', ['A friendly wager of pride, {t}?', calm], ['I was born for this.', ambi],
+  ],
+  contestAccept: [
+    'Ha! You’re on.', 'Oh, you’ll regret that.', 'Easiest win of my week.', 'Right. No crying after.',
+    ['Gladly. Watch and learn.', brave],
+  ],
+  contestWin: [
+    'Ha-HA! And THAT is how it’s done.', 'The champion will take cider, thanks.', 'Still got it!',
+    ['Good game. Honestly.', kind],
+  ],
+  contestLose: [
+    'Best of three? ...No? Fine.', 'You got lucky and we both know it.', 'Well fought. Rematch someday.',
+    ['Fair’s fair. Well won.', honest],
+  ],
+  contestSore: [ 'Rematch. Tomorrow. Same spot.', 'The ground was uneven!', ['This isn’t over.', hot] ],
+  // pranks
+  prankSpring: [
+    'Don’t look at me.', 'Pfft— keep a straight face— pfft—', 'Morning, {t}! Sleep well?',
+    ['It was the frog’s idea.', sly], ['You should see your face!', outgoing],
+  ],
+  prankLaugh: [
+    'HA! Alright, that’s a good one.', 'I can’t even be cross. Look at it!', 'You absolute menace. I love it.',
+    ['Oh, well played. WELL played.', outgoing],
+  ],
+  prankGrumble: [
+    'Very funny. Hilarious.', 'I know it was you.', 'Grow up, would you?', ['You’ll regret this.', hot],
+  ],
   // accusations
   accuseDemand: [
     'Where is {thing}?', 'You took {thing}. Admit it.', 'Give back {thing}, {t}!', 'I know you took it, {t}.',
