@@ -132,13 +132,16 @@ export class Sim {
   // Fixed-step, fixed-order avoidance; social and fight choreography owns its positions.
   separate(dt: number) {
     const vs = this.villagers, nav = this.world.nav, R = .55;
-    const eligible = (v: Villager) => !v.inside && !v.seat && v.act?.type !== 'fight' && v.anim !== 'fight' && v.anim !== 'talk' && this.clock >= v.busyUntil && !v.act?._met;
+    // movers yield; anchored villagers (talking, fighting, busy at a spot) act as solid bodies the movers step around
+    const out = (v: Villager) => !v.inside && !v.seat;
+    const mover = (v: Villager) => out(v) && v.act?.type !== 'fight' && v.anim !== 'fight' && v.anim !== 'talk' && this.clock >= v.busyUntil && !v.act?._met;
     const shift = (v: Villager, dx: number, dz: number) => { if (nav.lineFree(v.x, v.z, v.x + dx, v.z + dz)) { v.x += dx; v.z += dz; } };
     for (let i = 0; i < vs.length; i++) for (let j = i + 1; j < vs.length; j++) {
-      const a = vs[i], b = vs[j]; if (!eligible(a) || !eligible(b)) continue;
+      const a = vs[i], b = vs[j]; if (!out(a) || !out(b)) continue; const ma = mover(a), mb = mover(b); if (!ma && !mb) continue;
       const dx = b.x - a.x, dz = b.z - a.z; if (Math.abs(dx) > 1.1 || Math.abs(dz) > 1.1) continue;
       const d = Math.hypot(dx, dz), nx = d > 1e-3 ? dx / d : 1, nz = d > 1e-3 ? dz / d : 0;
-      if (d < R) { const push = Math.min((R - d) * .5, dt * 1.5); shift(a, -nx * push, -nz * push); shift(b, nx * push, nz * push); }
+      if (d < R) { const push = Math.min((R - d) * (ma && mb ? .5 : 1), dt * 2.4); if (ma) shift(a, -nx * push, -nz * push); if (mb) shift(b, nx * push, nz * push); }
+      if (!ma || !mb) continue;
       // Both walkers keep right, yielding opposite world-space offsets in a head-on approach.
       if (d < 1.1 && a.path && b.path) {
         const ap = a.path[a.pathI], bp = b.path[b.pathI]; if (!ap || !bp) continue;
@@ -275,6 +278,7 @@ export class Sim {
       if (Math.hypot(t.x - v.x, t.z - v.z) < 1.9) {
         if ((!stealth && this.clock < t.busyUntil) || t.act?.type === 'fight' || t.act?.type === 'flee' || t.act?.type === 'chase') { if (a.t > 60) return true; v.anim = 'idle'; return false; }
         a._met = 1; a.t1 = a.t; v.path = null; this.leaveSeat(v);
+        { const dd = Math.hypot(v.x - t.x, v.z - t.z); if (a.type !== 'steal' && dd < 1.05) { const k = dd > 1e-3 ? 1.1 / dd : 0, nx = dd > 1e-3 ? t.x + (v.x - t.x) * k : t.x + 1.1, nz = dd > 1e-3 ? t.z + (v.z - t.z) * k : t.z; if (this.world.nav.lineFree(v.x, v.z, nx, nz)) { v.x = nx; v.z = nz; } } } // conversational distance, never nose to nose
         const dur = resolveSocial(this, v, t, a);
         v.heading = Math.atan2(t.x - v.x, t.z - v.z); if (!a._noFace) t.heading = Math.atan2(v.x - t.x, v.z - t.z); t.avatar.targetHeading = t.heading;
         if (a.type !== 'steal') { t.busyUntil = this.clock + dur; t.anim = 'talk'; } a.dur = dur;
