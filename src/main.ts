@@ -63,7 +63,7 @@ function cinematicLight(dt: number) {
   }
   renderer.toneMappingExposure *= 1 + cineLightFade * darkness * .24;
 }
-const sim = new Sim(world); const sound = new Sound();
+const sim = new Sim(world); const sound = new Sound(); let musicState: import('./audio/music').MusicState = { night: 0, plaza: 0, rain: 0, winter: 0, festival: false, finale: false };
 const params = new URLSearchParams(location.search);
 // ?seed=N makes a whole run reproducible (the sim's own RNG plus any Math.random flavour rolls).
 if (params.has('seed')) { let a = (+params.get('seed')! || 1) >>> 0; Math.random = () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -454,6 +454,7 @@ function startBeat(e: SimEvent, force = false) {
   (cine.querySelector('em') as HTMLElement).textContent = e.icon; (cine.querySelector('b') as HTMLElement).textContent = beat.title;
   (cine.querySelector('span') as HTMLElement).textContent = shortLine(e.text, 9); // one brief line; the chronicle keeps the full text
   cine.classList.add('on'); follow = null; focusTarget = null; controls.autoRotate = false;
+  if (vows) sound.cue('wedding'); else if (beat.title === 'Found!') sound.cue('flourish'); else if (e.kind === 'fight' || e.kind === 'showdown') sound.cue('sting');
   return true;
 }
 function endBeat() { if (!beat) return; const b = beat; beat = null; cine.classList.remove('on'); beatCool = performance.now() + 6000; if (mode === 'director') { follow = b.ids[0] ?? null; if (b.fixed) focusPoint(b.fixed[0], b.fixed[1], 16); director.focus = { id: b.ids[0] ?? null, until: sim.clock + 30, reason: b.e.text }; } }
@@ -680,7 +681,7 @@ function frame(now: number) {
   // camera
   if (beat || montage) { controls.autoRotate = false; }
   else if (mode === 'director' && !selected) { dirT -= dt; if (dirT <= 0) { dirT = 1; const story = pinnedStory ? findStory(sim, pinnedStory) : null;
-      if (pinnedStory && (!story || story.resolved)) { const title = story?.title ?? 'The chapter has closed'; pinStory(null); ui.toast('📺 Storyline resolved', title); }
+      if (pinnedStory && (!story || story.resolved)) { const title = story?.title ?? 'The chapter has closed'; pinStory(null); ui.toast('📺 Storyline resolved', title); sound.cue('flourish'); }
       const subject = story && !story.resolved ? storySubject(sim, story, follow) : null;
       const pick = pinnedStory ? (subject ? { id: subject } : null) : director.pick(sim.clock, follow); if (pick && pick.id !== follow) { follow = pick.id; } } controls.autoRotate = true; controls.autoRotateSpeed = .35; }
   else controls.autoRotate = false;
@@ -698,7 +699,9 @@ function frame(now: number) {
   world.fx.winter.update(dt, controls.target, world.season.snow, sim.rain);
   for (const v of sim.villagers) world.fx.winter.breath(dt, v.avatar, !v.inside);
   ambient?.update(dt, dt * speed * slow * MIN_PER_SEC, sim.hour, sim.rain, sky.night, controls.target, camera.position);
-  sound.ambient(sky.night, sim.rain, dt);
+  { const pz = sim.place('plaza'), dPlaza = Math.hypot(controls.target.x - pz.cx, controls.target.z - pz.cz);
+    musicState = { night: sky.night, plaza: Math.max(0, Math.min(1, 1 - (dPlaza - 12) / 22)), rain: sim.rain, winter: world.season.snow, festival: sim.festivalUntil > sim.clock, finale: sim.finaleUntil > sim.clock };
+    sound.update(musicState); }
   document.body.classList.toggle('cinematic', cine.classList.contains('on') || !!intro || !!montage);
   phases.world += performance.now() - phaseStart - extraMs; phaseStart = performance.now();
   ui.frame(dt);
@@ -717,7 +720,7 @@ function frame(now: number) {
   season: () => ({ name: world.season.name, snow: world.season.snow, day: sim.day }),
   sim, director, world, camera, controls, renderer, scene, perfStats,
   characterTriangles: () => sim.villagers.map(v => ({ id: v.id, ...v.avatar.triangleCounts() })), get fps() { return perf.fps; }, get pixelRatio() { return perf.pr; }, quality: { soft: SOFT, aa: AA }, get simMs() { return simMsAvg; }, get cpuMs() { return cpuMsAvg; },
-  storylines: () => storylines(sim), pinStory,
+  storylines: () => storylines(sim), pinStory, musicState: () => ({ ...musicState }),
   setSpeed: (s: number) => (speed = s), select: (id: string | null) => api.select(id), setMode: (m: any) => api.setMode(m), god: (k: string) => api.god(k), ui: () => ui,
   fastForward(minutes: number, coarse = false) { if (!Number.isFinite(minutes) || minutes <= 0) return; const quiet = ui.quiet, wasFfing = ffing; ffing = true; ui.quiet = true; try { if (coarse) stepSimCoarse(minutes / MIN_PER_SEC); else { const n = Math.max(1, Math.ceil(minutes / MIN_PER_SEC / SIM_H - 1e-6)); for (let i = 0; i < n; i++) { sim.step(SIM_H); tickTraveller(sim); tickFestival(sim); } } } finally { ffing = wasFfing; ui.quiet = quiet; } for (const v of sim.villagers) syncAvatar(v, .016); },
   cineState() { camera.updateMatrixWorld(); const f = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)); return { beat: !!beat, montage: !!montage, target: { x: controls.target.x, y: controls.target.y, z: controls.target.z }, visible: sim.villagers.filter(v => !v.inside && visibleObject(v.avatar.root) && f.containsPoint(new THREE.Vector3(v.x, 1.1, v.z))).map(v => v.id) }; },

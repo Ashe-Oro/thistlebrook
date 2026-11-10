@@ -240,6 +240,11 @@ body.cinematic .storyguide, body:has(.cine.on) .storyguide { opacity:0; pointer-
 .guidelast { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media (min-width: 1101px) and (pointer: fine) { .storyguide:not(.expanded) { max-height: 36vh; } .storyguide:not(.expanded) .guidecard:nth-child(n+4) { display: none; } .storyguide:not(.expanded) .guidecard small { display: none; } }
 .storyfollow.hidden { display: none; }
+/* sound mixer popover */
+.sndpop { position: fixed; z-index: 12; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; min-width: 200px; background: var(--paper); border-radius: 12px; box-shadow: var(--shadow); font-size: 13px; pointer-events: auto; }
+.sndpop.hidden { display: none; }
+.sndpop label { display: flex; align-items: center; gap: 6px; cursor: pointer; } .sndpop label.vol { flex-direction: column; align-items: stretch; gap: 2px; font-size: 11.5px; opacity: .85; }
+.sndpop input[type=range] { width: 100%; accent-color: #b5653a; } .sndpop button { text-align: left; }
 
 /* ==== Round 8: cozy, decluttered default — the village is the star ==================================== */
 /* top bar: no big slab, just a few soft floating pills */
