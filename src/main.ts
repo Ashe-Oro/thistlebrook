@@ -6,7 +6,7 @@ import { Avatar, type Anim } from './agents/avatar';
 import { VILLAGERS } from './data/villagers';
 import { Sim, MIN_PER_SEC } from './sim/sim';
 import { UtilityBrain } from './sim/brain';
-import { LLMBrain, type LLMConfig } from './sim/llm';
+import { llm, type LLMConfig } from './sim/llm';
 import { Director } from './sim/director';
 import { UI, type AppApi } from './ui/ui';
 import { Sound } from './ui/sound';
@@ -65,9 +65,12 @@ const sim = new Sim(world); const sound = new Sound();
 const params = new URLSearchParams(location.search);
 // ?seed=N makes a whole run reproducible (the sim's own RNG plus any Math.random flavour rolls).
 if (params.has('seed')) { let a = (+params.get('seed')! || 1) >>> 0; Math.random = () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
-let brain: UtilityBrain = new UtilityBrain();
-const llmCfg = localStorage.getItem('terrarium.llm'); if (llmCfg && params.get('llm') !== '0') { try { brain = new LLMBrain(JSON.parse(llmCfg) as LLMConfig); } catch {} }
-sim.brain = brain;
+sim.brain = new UtilityBrain();
+try {
+  const endpoint = params.get('llm');
+  if (endpoint && endpoint !== '0') llm.configure({ endpoint, model: params.get('llmModel') ?? 'Qwen3-8B', apiKey: params.get('llmKey') ?? undefined });
+  else if (endpoint !== '0') { const saved = localStorage.getItem('terrarium.llm'); if (saved) llm.configure(JSON.parse(saved) as LLMConfig); }
+} catch { /* Invalid or inaccessible browser config leaves rewrites off. */ }
 
 async function boot() {
   await world.build((n, t) => setProg(n / t * .8, `Building the village… ${n}/${t}`));
@@ -642,8 +645,9 @@ function frame(now: number) {
   closeUp(id: string, dist = 3.2, side = .3) { const v = sim.byId.get(id)!; follow = null; focusTarget = null; mode = 'free'; const hd = v.avatar.heading; const hy = v.avatar.height * .8; controls.target.set(v.x, hy, v.z); camera.position.set(v.x + Math.sin(hd + side) * dist, hy + .5, v.z + Math.cos(hd + side) * dist); controls.update(); },
   beat(id?: number) { const e = id === undefined ? [...sim.events].reverse().find(x => beatTitle(x)) : sim.events.find(x => x.id === id); mode = 'director'; selected = null; return e ? startBeat(e, true) : false; }, get beatOn() { return !!beat; }, montage: (day?: number) => startMontage(day ?? Math.max(1, sim.day - 1)), get montageOn() { return !!montage; }, endMontage: () => endMontage(), rainbow: () => { ambient?.force(controls.target, camera.position); afterRain(); }, ambient: () => ambient, strike: () => sky.strike(),
   forceExpr(id: string, expr: string) { forced.set(id, { expr, until: 0 }); }, clearExpr() { forced.clear(); },
-  enableLLM(cfg: LLMConfig) { localStorage.setItem('terrarium.llm', JSON.stringify(cfg)); sim.brain = new LLMBrain(cfg); console.info('LLM brain enabled (plans + reflections).'); },
-  disableLLM() { localStorage.removeItem('terrarium.llm'); sim.brain = new UtilityBrain(); },
+  enableLLM(cfg: LLMConfig) { llm.configure(cfg); try { localStorage.setItem('terrarium.llm', JSON.stringify(cfg)); } catch {} },
+  disableLLM() { llm.configure(null); try { localStorage.removeItem('terrarium.llm'); } catch {} },
+  llmStatus() { return llm.status(); },
   summary() { return { day: sim.day, clock: sim.clock, events: sim.events.length, villagers: sim.villagers.map(v => ({ id: v.id, x: +v.x.toFixed(1), z: +v.z.toFixed(1), doing: v.doing, crush: v.crush, partner: v.partner, holding: sim.holding(v).map(k => k.id), food: Math.round(v.needs.food), energy: Math.round(v.needs.energy), opinions: { ...v.opinion }, alliance: v.alliance, expr: v.avatar.expr })), alliances: sim.alliances.map(a => a.name + ':' + a.members.join(',')), parties: sim.parties.map(p => `${p.title}@${p.place} invited ${p.invited.size} came ${p.attendees.size}`), kinds: sim.events.reduce((m: any, e) => (m[e.kind] = (m[e.kind] ?? 0) + 1, m), {}) }; },
 };
 boot().catch(e => { console.error(e); loading.querySelector('small')!.textContent = 'Something went wrong: ' + e.message; });

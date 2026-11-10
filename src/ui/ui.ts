@@ -1,3 +1,4 @@
+import { llm, type RewriteContext } from '../sim/llm';
 import type { Sim } from '../sim/sim';
 import type { Villager, SimEvent, PlanBlock } from '../sim/types';
 import type { Director, Paper } from '../sim/director';
@@ -20,7 +21,7 @@ const cleanLie = (t: string) => t.replace(/\s*\(It isn't true\.\)/gi, '').replac
 export class UI {
   root: HTMLElement; feed!: HTMLElement; card!: HTMLElement; clock!: HTMLElement; overlay!: HTMLElement; toasts!: HTMLElement; caption!: HTMLElement; lb!: HTMLElement; modal!: HTMLElement;
   marks: { el: HTMLElement; x: number; z: number }[] = []; markT = 0; cardRect: { l: number; r: number; t: number; b: number } | null = null;
-  tags = new Map<string, HTMLElement>(); bubbles = new Map<string, { el: HTMLElement; until: number; t0: number }>(); icons: { glyph: HTMLCanvasElement; id: string; t: number }[] = []; convo: { who: string; text: string; emoji: string; at: number }[] = [];
+  tags = new Map<string, HTMLElement>(); bubbles = new Map<string, { el: HTMLElement; until: number; t0: number }>(); icons: { glyph: HTMLCanvasElement; id: string; t: number }[] = []; convo: { who: string; text: string; emoji: string; at: number; listener?: string }[] = [];
   tab = 'rel'; cardT = 0; lbKind: 'popularity' | 'power' | 'mischief' = 'popularity'; feedFilter = 'all'; autoPaper = true;
   feedDay = 0; safeTop = 70; hint: HTMLElement | null = null;
   calPop!: HTMLElement; calOpen = false;
@@ -31,14 +32,14 @@ export class UI {
     s.on('event', (e: SimEvent) => this.addFeed(e)); s.on('eventUpdate', (e: SimEvent) => this.updateFeed(e));
     s.on('bubble', (v: Villager, text: string, emoji: string, dur: number) => this.bubble(v.id, text, emoji, dur));
     s.on('icon', (v: Villager, emoji: string) => this.icon(v.id, emoji));
-    s.on('convo', (lines: any[]) => this.convo.push(...lines));
+    s.on('convo', (lines: { who: string; text: string; emoji: string; at: number }[]) => this.convo.push(...lines.map(l => ({ ...l, listener: lines.find(other => other.who !== l.who)?.who }))));
     s.on('achievement', (a: any) => this.toast(`🏆 ${a.title}`, a.desc));
   }
   build() {
     const r = this.root;
     const top = h('div', 'topbar'); top.innerHTML = `<div class="brand"><span class="logo">🌿</span><div><b>Thistlebrook</b><small>a digital terrarium</small></div></div><div class="clock" id="clock"></div>
       <div class="speeds">${[[0, '⏸'], [1, '1×'], [4, '4×'], [16, '16×']].map(([s, l]) => `<button data-speed="${s}">${l}</button>`).join('')}</div>
-      <div class="toggles"><button id="mode" title="Camera: cinematic director / free">🎬 Director</button><button id="snd" title="Sound">🔇</button></div>`;
+      <div class="toggles"><span id="llm-status" role="status" hidden></span><button id="mode" title="Camera: cinematic director / free">🎬 Director</button><button id="snd" title="Sound">🔇</button></div>`;
     r.appendChild(top); this.clock = top.querySelector('#clock')!;
     // The date/clock is a button: click it for a small popover of this week's fixtures and the season.
     this.clock.style.cursor = 'pointer'; this.clock.title = 'This week in Thistlebrook';
@@ -191,10 +192,20 @@ export class UI {
     const same = [...this.toasts.children].find(t => t.querySelector('b')?.textContent === title); if (same) { same.querySelector('span')!.innerHTML = this.linkify(desc); this.refreshToast(same); return; }
     const q = this.toastQ.find(t => t[0] === title); if (q) { q[1] = desc; return; }
     if (this.toasts.children.length >= 2) { if (this.toastQ.length < 6) this.toastQ.push([title, desc]); return; } const t = h('div', 'toast', `<b>${title}</b><span>${this.linkify(desc)}</span>`); this.toasts.appendChild(t); this.app.sound.play('toast'); this.refreshToast(t); }
-  bubble(id: string, text: string, emoji: string, dur: number) {
+  bubble(id: string, text: string, emoji: string, dur: number, listener?: string) {
     let b = this.bubbles.get(id); if (!b) { const el = h('div', 'bubble'); this.overlay.appendChild(el); b = { el, until: 0, t0: 0 }; this.bubbles.set(id, b); }
     b.el.innerHTML = `${emoji ? `<span class="em">${emoji}</span>` : ''}${esc(text)}`; b.el.classList.add('pop'); for (const animation of b.el.getAnimations()) { animation.cancel(); animation.play(); } b.t0 = performance.now(); b.until = performance.now() + dur * 1000 / Math.max(1, Math.sqrt(this.app.speed || 1));
+    const v = this.app.sim.byId.get(id), bubble = b, token = {};
+    (bubble as any).rewriteToken = token;
+    if (v && llm.status().enabled) void llm.rewrite(text, this.rewriteContext(v, 'Spoken while ' + v.doing, listener)).then(rewritten => {
+      if ((bubble as any).rewriteToken === token && performance.now() < bubble.until && llm.status().enabled) bubble.el.innerHTML = `${emoji ? `<span class="em">${emoji}</span>` : ''}${esc(rewritten)}`;
+    });
   }
+  private rewriteContext(v: Villager, context: string, listener?: string): RewriteContext {
+    const u = listener ? this.app.sim.byId.get(listener) : undefined;
+    return { speaker: v.id, persona: `${v.name}, ${JOB_INFO[v.job].label}. ${v.def.bio}. Traits: ${JSON.stringify(v.traits)}. Mood: ${JSON.stringify(v.emotions)}. Listener: ${u ? `${u.name}; opinion ${v.opinion[u.id] ?? 0}; ${v.partner === u.id ? 'sweetheart' : v.family.includes(u.id) ? 'family' : 'fellow villager'}` : 'private thought or no specific listener'}.`, context };
+  }
+  private mindText(v: Villager, text: string, about?: string) { return llm.status().enabled ? llm.display(text, this.rewriteContext(v, 'Private reflection; ' + v.doing, about)) : text; }
   private iconsDirty = false;
   private iconCanvas?: HTMLCanvasElement; private iconGlyphs = new Map<string, HTMLCanvasElement>();
   icon(id: string, emoji: string) {
@@ -218,7 +229,9 @@ export class UI {
 
   frame(dt: number) {
     const s = this.app.sim, now = performance.now();
-    while (this.convo.length && this.convo[0].at <= s.clock) { const c = this.convo.shift()!; const v = s.byId.get(c.who); if (v && !v.inside) this.bubble(c.who, c.text, c.emoji, 3); }
+    const status = llm.status(), chip = this.root.querySelector<HTMLElement>('#llm-status')!;
+    chip.hidden = !status.enabled; const label = status.ok ? '🧠 LLM · ok' : '🧠 LLM · offline'; if (chip.textContent !== label) chip.textContent = label;
+    while (this.convo.length && this.convo[0].at <= s.clock) { const c = this.convo.shift()!; const v = s.byId.get(c.who); if (v && !v.inside) this.bubble(c.who, c.text, c.emoji, 3, c.listener); }
     if (this.convo.length > 60) this.convo.splice(0, this.convo.length - 60);
     const close = this.app.camDist() < 30, W = window.innerWidth, HT = this.safeTop;
     { const far = this.app.camDist() > 42; this.markT += dt; for (const m of this.marks) { if (!far) { this.setDisp(m.el, false); continue; } const p = this.app.project(m.x, 5, m.z); const on = p.on && p.y > HT + 10; this.setDisp(m.el, on); if (on) m.el.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, -100%)`; } }
@@ -333,7 +346,7 @@ export class UI {
   // cheaply refresh the volatile header fields without tearing down the whole card (avoids flicker / focus loss)
   updateCardLive(v: Villager, s: Sim) {
     const md = this.card.querySelector('.md'); if (md) md.textContent = this.mood(v);
-    const th = this.card.querySelector('.thought'); if (th) setHTML(th, `💭 ${esc(v.thought)}`);
+    const th = this.card.querySelector('.thought'); if (th) setHTML(th, `💭 ${esc(this.mindText(v, v.thought))}`);
     const dg = this.card.querySelector('.doing'); if (dg) setHTML(dg, `▶ ${esc(v.doing)}${v.inside ? ` <span class="muted">(inside ${s.place(v.inside).name})</span>` : ''}`);
     const bars = this.card.querySelectorAll<HTMLElement>('.need i'); if (bars.length >= 3) { bars[0].style.width = `${v.needs.food}%`; bars[1].style.width = `${v.needs.energy}%`; bars[2].style.width = `${v.needs.social}%`; }
   }
@@ -350,9 +363,9 @@ export class UI {
     const lost = s.missing(v); const heart = v.partner ? `<span class="it love">💞 Sweetheart: <b>${s.byId.get(v.partner)!.first}</b></span>` : v.crush ? `<span class="it love" title="Only you can see this">💘 Secretly sweet on <b>${s.byId.get(v.crush)!.first}</b></span>` : sim0(v, s) ;
     const inv = held + (lost ? `<span class="it miss">❓ ${esc(lost.name.replace(/^(his|her) /, ''))} is missing</span>` : '') + heart || '<span class="muted">nothing in their pockets</span>';
     let body = '';
-    if (this.tab === 'rel') body = [...s.villagers].filter(u => u !== v).sort((a, b) => (v.opinion[b.id] ?? 0) - (v.opinion[a.id] ?? 0)).map(u => { const o = Math.round(v.opinion[u.id] ?? 0), back = Math.round(u.opinion[v.id] ?? 0), bel = v.mem.belief(u.id); return `<div class="rel" data-id="${u.id}"><span class="dot" style="background:${VCOLOR[u.id]}"></span><span class="n">${u.first}${v.family.includes(u.id) ? ' 👪' : ''}${u.alliance && u.alliance === v.alliance ? ' 🚩' : ''}</span><span class="ob"><i class="${o < 0 ? 'neg' : 'pos'}" style="${o < 0 ? 'right:50%' : 'left:50%'};width:${Math.abs(o) / 2}%"></i></span><span class="lab">${this.relLabel(o)}</span><span class="back" title="How ${u.first} feels about ${v.first}">${back >= 35 ? '💚' : back <= -35 ? '💢' : '·'}</span>${bel ? `<div class="bel">“${esc(bel.text)}”</div>` : ''}</div>`; }).join('');
+    if (this.tab === 'rel') body = [...s.villagers].filter(u => u !== v).sort((a, b) => (v.opinion[b.id] ?? 0) - (v.opinion[a.id] ?? 0)).map(u => { const o = Math.round(v.opinion[u.id] ?? 0), back = Math.round(u.opinion[v.id] ?? 0), bel = v.mem.belief(u.id); return `<div class="rel" data-id="${u.id}"><span class="dot" style="background:${VCOLOR[u.id]}"></span><span class="n">${u.first}${v.family.includes(u.id) ? ' 👪' : ''}${u.alliance && u.alliance === v.alliance ? ' 🚩' : ''}</span><span class="ob"><i class="${o < 0 ? 'neg' : 'pos'}" style="${o < 0 ? 'right:50%' : 'left:50%'};width:${Math.abs(o) / 2}%"></i></span><span class="lab">${this.relLabel(o)}</span><span class="back" title="How ${u.first} feels about ${v.first}">${back >= 35 ? '💚' : back <= -35 ? '💢' : '·'}</span>${bel ? `<div class="bel">“${esc(this.mindText(v, bel.text, u.id))}”</div>` : ''}</div>`; }).join('');
     if (this.tab === 'plan') body = v.plan.filter(b => b.to > s.clock - 60).reduce((acc: PlanBlock[], b) => { const p = acc[acc.length - 1]; if (p && p.act === b.act && p.note === b.note && Math.abs(p.to - b.from) < 1) acc[acc.length - 1] = { ...p, to: b.to }; else acc.push(b); return acc; }, []).map(b => `<div class="pl ${s.clock >= b.from && s.clock < b.to ? 'now' : ''} ${b.act === 'event' ? 'evt' : ''}"><span class="t">${fmtTime(b.from)}–${fmtTime(b.to)}</span>${esc(b.note)}${dayOf(b.from) > s.day ? ' <i class="muted">(tomorrow)</i>' : ''}</div>`).join('') + (v.intent ? `<div class="intent">🎯 ${esc(v.intent)}</div>` : '');
-    if (this.tab === 'mem') body = `${v.mem.beliefs.length ? `<div class="sub">Beliefs (from reflection)</div>${v.mem.beliefs.map(b => `<div class="mem refl">💭 ${esc(b.text)}</div>`).join('')}` : ''}<div class="sub">Most salient memories</div>` + v.mem.retrieve(s.clock, [], 10).map(m => `<div class="mem k-${m.kind}"><span class="t">${fmtTime(m.t)}</span><span class="imp" title="importance">${'●'.repeat(Math.ceil(m.imp / 2))}</span> ${esc(m.text)}</div>`).join('') + `<div class="sub">Knows ${v.mem.known.size} pieces of news · ${v.mem.items.length} memories</div>`;
+    if (this.tab === 'mem') body = `${v.mem.beliefs.length ? `<div class="sub">Beliefs (from reflection)</div>${v.mem.beliefs.map(b => `<div class="mem refl">💭 ${esc(this.mindText(v, b.text, b.about))}</div>`).join('')}` : ''}<div class="sub">Most salient memories</div>` + v.mem.retrieve(s.clock, [], 10).map(m => `<div class="mem k-${m.kind}"><span class="t">${fmtTime(m.t)}</span><span class="imp" title="importance">${'●'.repeat(Math.ceil(m.imp / 2))}</span> ${esc(m.text)}</div>`).join('') + `<div class="sub">Knows ${v.mem.known.size} pieces of news · ${v.mem.items.length} memories</div>`;
     if (this.tab === 'story') body = v.story.slice().reverse().slice(0, 30).map(x => `<div class="st"><span class="t">${fmtTime(x.t)}</span>${this.rich(x.text)}</div>`).join('') || '<div class="muted">Nothing yet.</div>';
     if (refresh) {
       const tb = this.card.querySelector<HTMLElement>('.tb')!, top = tb.scrollTop, left = tb.scrollLeft, cardTop = this.card.scrollTop;
@@ -360,7 +373,7 @@ export class UI {
       tb.scrollTop = top; tb.scrollLeft = left; this.card.scrollTop = cardTop;
     } else {
     this.card.innerHTML = `<button class="x">✕</button><div class="hd"><div class="pt"></div><div><div class="nmb" style="color:${VCOLOR[v.id]}">${v.name} <span class="md">${this.mood(v)}</span></div><div class="jb">${JOB_INFO[v.job].label} · ${v.def.age}</div><div class="gl">🎯 ${GOAL_LABEL[v.goal]}</div>${al ? `<div class="al" style="--c:${al.color}">🚩 ${al.name}</div>` : ''}</div></div>
-      <div class="thought">💭 ${esc(v.thought)}</div><div class="doing">▶ ${esc(v.doing)}${v.inside ? ` <span class="muted">(inside ${s.place(v.inside).name})</span>` : ''}</div>
+      <div class="thought">💭 ${esc(this.mindText(v, v.thought))}</div><div class="doing">▶ ${esc(v.doing)}${v.inside ? ` <span class="muted">(inside ${s.place(v.inside).name})</span>` : ''}</div>
       ${bar('🍞 Fed', v.needs.food, '#e0a64a')}${bar('⚡ Energy', v.needs.energy, '#6cc36c')}${bar('💬 Social', v.needs.social, '#6aa6e8')}
       <div class="inv">${inv}</div><div class="traits">${traits}</div>
       <div class="tabs">${[['rel', 'Relationships'], ['plan', 'Plan'], ['mem', 'Mind'], ['story', 'Story']].map(([k, l]) => `<button data-t="${k}" class="${this.tab === k ? 'on' : ''}">${l}</button>`).join('')}</div><div class="tb">${body}</div>`;
