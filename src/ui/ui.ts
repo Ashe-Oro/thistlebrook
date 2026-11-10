@@ -20,7 +20,7 @@ const cleanLie = (t: string) => t.replace(/\s*\(It isn't true\.\)/gi, '').replac
 export class UI {
   root: HTMLElement; feed!: HTMLElement; card!: HTMLElement; clock!: HTMLElement; overlay!: HTMLElement; toasts!: HTMLElement; caption!: HTMLElement; lb!: HTMLElement; modal!: HTMLElement;
   marks: { el: HTMLElement; x: number; z: number }[] = []; markT = 0; cardRect: { l: number; r: number; t: number; b: number } | null = null;
-  tags = new Map<string, HTMLElement>(); bubbles = new Map<string, { el: HTMLElement; until: number; t0: number }>(); icons: { el: HTMLElement; id: string; t: number }[] = []; convo: { who: string; text: string; emoji: string; at: number }[] = [];
+  tags = new Map<string, HTMLElement>(); bubbles = new Map<string, { el: HTMLElement; until: number; t0: number }>(); icons: { glyph: HTMLCanvasElement; id: string; t: number }[] = []; convo: { who: string; text: string; emoji: string; at: number }[] = [];
   tab = 'rel'; cardT = 0; lbKind: 'popularity' | 'power' | 'mischief' = 'popularity'; feedFilter = 'all'; autoPaper = true;
   feedDay = 0; safeTop = 70; hint: HTMLElement | null = null;
   calPop!: HTMLElement; calOpen = false;
@@ -193,13 +193,27 @@ export class UI {
     if (this.toasts.children.length >= 2) { if (this.toastQ.length < 6) this.toastQ.push([title, desc]); return; } const t = h('div', 'toast', `<b>${title}</b><span>${this.linkify(desc)}</span>`); this.toasts.appendChild(t); this.app.sound.play('toast'); this.refreshToast(t); }
   bubble(id: string, text: string, emoji: string, dur: number) {
     let b = this.bubbles.get(id); if (!b) { const el = h('div', 'bubble'); this.overlay.appendChild(el); b = { el, until: 0, t0: 0 }; this.bubbles.set(id, b); }
-    b.el.innerHTML = `${emoji ? `<span class="em">${emoji}</span>` : ''}${esc(text)}`; b.el.classList.remove('pop'); void b.el.offsetWidth; b.el.classList.add('pop'); b.t0 = performance.now(); b.until = performance.now() + dur * 1000 / Math.max(1, Math.sqrt(this.app.speed || 1));
+    b.el.innerHTML = `${emoji ? `<span class="em">${emoji}</span>` : ''}${esc(text)}`; b.el.classList.add('pop'); for (const animation of b.el.getAnimations()) { animation.cancel(); animation.play(); } b.t0 = performance.now(); b.until = performance.now() + dur * 1000 / Math.max(1, Math.sqrt(this.app.speed || 1));
   }
-  icon(id: string, emoji: string) { const el = h('div', 'icon', emoji); this.overlay.appendChild(el); this.icons.push({ el, id, t: 0 }); if (this.icons.length > 40) { this.icons.shift()!.el.remove(); } }
+  private iconsDirty = false;
+  private iconCanvas?: HTMLCanvasElement; private iconGlyphs = new Map<string, HTMLCanvasElement>();
+  icon(id: string, emoji: string) {
+    if (!this.iconCanvas) { const c = this.iconCanvas = document.createElement('canvas'); c.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none'; c.setAttribute('aria-hidden', 'true'); this.overlay.appendChild(c); }
+    let glyph = this.iconGlyphs.get(emoji);
+    if (!glyph) {
+      glyph = document.createElement('canvas'); glyph.width = glyph.height = 96;
+      const ctx = glyph.getContext('2d')!; ctx.scale(2, 2); ctx.font = '26px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.shadowColor = 'rgba(0,0,0,.3)'; ctx.shadowOffsetY = 2; ctx.shadowBlur = 3; ctx.fillText(emoji, 24, 24);
+      /* Glyphs rasterize once; each active icon is just a cached image instance. */
+      if (this.iconGlyphs.size >= 128) this.iconGlyphs.delete(this.iconGlyphs.keys().next().value!);
+      this.iconGlyphs.set(emoji, glyph);
+    }
+    this.icons.push({ glyph, id, t: 0 }); if (this.icons.length > 40) this.icons.shift();
+  }
 
   // Measured element sizes are cached per (text, class) so the per-frame layout pass never reads offsetWidth after a write (layout thrash).
   private szCache = new WeakMap<HTMLElement, { k: string; w: number; h: number }>();
-  private sz(el: HTMLElement) { const k = el.className + '|' + el.textContent; let c = this.szCache.get(el); if (!c || c.k !== k || !c.w) { c = { k, w: el.offsetWidth, h: el.offsetHeight }; this.szCache.set(el, c); } return c; }
+  private sz(el: HTMLElement) { const k = innerWidth + '|' + el.textContent; let c = this.szCache.get(el); if (!c || c.k !== k || !c.w) { c = { k, w: el.offsetWidth, h: el.offsetHeight }; this.szCache.set(el, c); } return c; }
   private setDisp(el: HTMLElement, show: boolean) { const d = show ? '' : 'none'; if (el.style.display !== d) el.style.display = d; }
 
   frame(dt: number) {
@@ -208,6 +222,14 @@ export class UI {
     if (this.convo.length > 60) this.convo.splice(0, this.convo.length - 60);
     const close = this.app.camDist() < 30, W = window.innerWidth, HT = this.safeTop;
     { const far = this.app.camDist() > 42; this.markT += dt; for (const m of this.marks) { if (!far) { this.setDisp(m.el, false); continue; } const p = this.app.project(m.x, 5, m.z); const on = p.on && p.y > HT + 10; this.setDisp(m.el, on); if (on) m.el.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, -100%)`; } }
+    /* Batch visibility writes, then measure new text before positioning any labels. */
+    for (const v of s.villagers) {
+      const pos = v.avatar.root.position, p = this.app.project(pos.x, v.avatar.height + .55, pos.z), vis = p.on && !v.inside && v.avatar.alpha > .3;
+      const tag = this.tags.get(v.id)!; this.setDisp(tag, vis && (close || this.app.selected === v.id));
+      const b = this.bubbles.get(v.id); if (b) this.setDisp(b.el, vis && now < b.until);
+    }
+    for (const tag of this.tags.values()) if (tag.style.display !== 'none') this.sz(tag);
+    for (const b of this.bubbles.values()) if (b.el.style.display !== 'none') this.sz(b.el);
     for (const v of s.villagers) {
       const pos = v.avatar.root.position, hh = v.avatar.height, tag = this.tags.get(v.id)!, p = this.app.project(pos.x, hh + .55, pos.z);
       const vis = p.on && !v.inside && v.avatar.alpha > .3;
@@ -245,8 +267,22 @@ export class UI {
       if (ok) { placed.push(a); a.el.style.transform = `translate(${a.x}px, ${a.y}px) translate(-50%, ${a.off})`; }
       const op = ok ? '' : '0'; if (a.el.style.opacity !== op) a.el.style.opacity = op;
     }
-    for (const ic of this.icons) { ic.t += dt; const v = s.byId.get(ic.id)!; const pos = v.avatar.root.position; const bub = this.bubbles.get(ic.id), talking = !!bub && bub.until > performance.now(); const p = this.app.project(pos.x, v.avatar.height + (talking ? 1.9 : .9) + ic.t * .9, pos.z); const ix = Math.max(16, Math.min(W - 16, p.x)), iy = Math.max(HT, p.y); ic.el.style.transform = `translate(${ix}px, ${iy}px) translate(-50%, -50%) scale(${Math.min(1, ic.t * 5)})`; ic.el.style.opacity = String(Math.max(0, 1 - ic.t / 2.2)); this.setDisp(ic.el, p.on && !v.inside); }
-    this.icons = this.icons.filter(ic => { if (ic.t > 2.2) { ic.el.remove(); return false; } return true; });
+    if (this.iconCanvas) {
+      const c = this.iconCanvas, H = innerHeight, ratio = Math.min(devicePixelRatio, 2), w = Math.round(W * ratio), h = Math.round(H * ratio);
+      if (c.width !== w || c.height !== h) { c.width = w; c.height = h; c.style.width = `${W}px`; c.style.height = `${H}px`; }
+      const ctx = c.getContext('2d')!; ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      if (this.icons.length || this.iconsDirty) ctx.clearRect(0, 0, W, H);
+      this.iconsDirty = this.icons.length > 0; let alive = 0;
+      for (const ic of this.icons) {
+        ic.t += dt; if (ic.t > 2.2) continue; this.icons[alive++] = ic;
+        const v = s.byId.get(ic.id); if (!v || v.inside) continue;
+        const pos = v.avatar.root.position, bub = this.bubbles.get(ic.id), talking = !!bub && bub.until > now;
+        const p = this.app.project(pos.x, v.avatar.height + (talking ? 1.9 : .9) + ic.t * .9, pos.z); if (!p.on) continue;
+        const x = Math.max(16, Math.min(W - 16, p.x)), y = Math.max(HT, p.y), size = 48 * Math.min(1, ic.t * 5);
+        ctx.globalAlpha = Math.max(0, 1 - ic.t / 2.2); ctx.drawImage(ic.glyph, x - size / 2, y - size / 2, size, size);
+      }
+      ctx.globalAlpha = 1; this.icons.length = alive;
+    }
     this.cardT -= dt; if (this.cardT <= 0) { this.cardT = .35; const cal = calendarFor(s.day); setHTML(this.clock, `<b>${cal.weekday} · ${cal.dayOfSeason} ${cal.season} · Day ${s.day}</b> · ${fmtTime(s.clock)} ${s.rain > .4 ? '🌧️' : s.hour >= 20 || s.hour < 6 ? '🌙' : s.hour < 8 ? '🌅' : '☀️'}${s.festivalUntil > s.clock ? ' 🎪' : ''}${s.visitorUntil > s.clock ? ' 🧳' : ''}`); if (this.calOpen) this.renderCal();
       this.measureChrome();
       this.root.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach(b => b.classList.toggle('on', +b.dataset.speed! === this.app.speed)); { const m = this.root.querySelector('#mode') as HTMLElement, html = this.app.mode === 'director' ? '🎬<span> Director</span>' : '🕹️<span> Free cam</span>'; if (m.innerHTML !== html) m.innerHTML = html; }

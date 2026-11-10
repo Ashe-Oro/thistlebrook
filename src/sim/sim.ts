@@ -166,8 +166,10 @@ export class Sim {
     const mover = (v: Villager) => out(v) && v.act?.type !== 'fight' && v.anim !== 'fight' && v.anim !== 'talk' && this.clock >= v.busyUntil && !v.act?._met;
     const shift = (v: Villager, dx: number, dz: number) => { if (nav.lineFree(v.x, v.z, v.x + dx, v.z + dz)) { v.x += dx; v.z += dz; } };
     for (let i = 0; i < vs.length; i++) for (let j = i + 1; j < vs.length; j++) {
-      const a = vs[i], b = vs[j]; if (!out(a) || !out(b)) continue; const ma = mover(a), mb = mover(b); if (!ma && !mb) continue;
+      const a = vs[i], b = vs[j];
+      /* Broad rejection first: retain pair order and all movement/RNG behaviour. */
       const dx = b.x - a.x, dz = b.z - a.z; if (Math.abs(dx) > 1.1 || Math.abs(dz) > 1.1) continue;
+      if (!out(a) || !out(b)) continue; const ma = mover(a), mb = mover(b); if (!ma && !mb) continue;
       const d = Math.hypot(dx, dz), nx = d > 1e-3 ? dx / d : 1, nz = d > 1e-3 ? dz / d : 0;
       if (d < R) { const push = Math.min((R - d) * (ma && mb ? .5 : 1), dt * 2.4); if (ma) shift(a, -nx * push, -nz * push); if (mb) shift(b, nx * push, nz * push); }
       if (!ma || !mb) continue;

@@ -101,7 +101,7 @@ export class Extras {
     const wall = new THREE.Mesh(new THREE.BoxGeometry(2.5, .65, .35), new THREE.MeshLambertMaterial({ color: '#a49b88' })); wall.position.set(-28, .325, -17.3); this.root.add(wall);
     this.cat.position.set(-28, .65, -17.3); this.root.add(this.cat);
   }
-  update(dt: number, simHour: number, rain: number, camTarget: THREE.Vector3, camPos?: THREE.Vector3) {
+  update(dt: number, simHour: number, rain: number, camTarget: THREE.Vector3, camPos?: THREE.Vector3, camera?: THREE.Camera) {
     if (!Number.isFinite(simHour)) return;
     const realDt = Math.max(0, Number.isFinite(dt) ? dt : 0); this.time += realDt;
     const h = ((simHour % 24) + 24) % 24, t = this.time, wet = clamp(rain);
@@ -128,7 +128,7 @@ export class Extras {
         else { p.avatar.setLod(Math.sqrt(camD2));
           if (p.elapsed >= (far ? .25 : 1 / 15)) {
             p.avatar.heading = p.avatar.targetHeading = heading; p.avatar.anim = waiting ? 'talk' : p.kid ? 'run' : 'walk';
-            p.avatar.phase = (waiting ? t : p.walkPhase) + p.phase; p.avatar.update(0, .7); p.elapsed = 0;
+            p.avatar.phase = (waiting ? t : p.walkPhase) + p.phase; if (camera) p.avatar.updateVisible(0, .7, camera); else p.avatar.update(0, .7); p.elapsed = 0;
           }
         }
       } else p.root.rotation.y = heading;

@@ -178,7 +178,7 @@ function syncAvatar(v: Villager, dt: number) {
   av.setCarry(busyHands ? '' : sim.carryFor(v));
   const al = v.alliance ? sim.alliances.find(a => a.id === v.alliance) : null; av.setBanner(al ? al.color : '');
   av.setExpression(forced.get(v.id)?.expr ?? exprFor(v));
-  av.update(dt, v.anim === 'run' ? 1 : .8);
+  av.updateVisible(dt, v.anim === 'run' ? 1 : .8, camera);
 }
 const forced = new Map<string, { expr: string; until: number }>();
 
@@ -554,20 +554,33 @@ const SIM_H = 1 / 30; let simAcc = 0;
 function stepSim(dtWorld: number) { simAcc += dtWorld; let n = Math.floor(simAcc / SIM_H + 1e-9); simAcc -= n * SIM_H; if (n > 240) n = 240; for (let i = 0; i < n; i++) { sim.step(SIM_H); tickTraveller(sim); tickFestival(sim); } }
 // fastForward(min, true): the old coarse stepping (big steps; quick but thins out the social life)
 function stepSimCoarse(dtWorld: number) { const n = Math.min(400, Math.ceil(dtWorld / SIM_H)); const h = dtWorld / n; for (let i = 0; i < n; i++) { sim.step(h); } tickTraveller(sim); tickFestival(sim); }
+const phases = { sim: 0, avatars: 0, world: 0, ui: 0, culling: 0, render: 0 }; let phaseFrames = 0;
+const phaseRolling = { ...phases }, phasePrevious = { ...phases };
+const phaseKeys = Object.keys(phases) as (keyof typeof phases)[];
+const phaseWindow = { ...phases }; let phaseWindowFrames = 0;
+function perfStats(reset = false) {
+  const n = phaseFrames - phaseWindowFrames;
+  const ms = Object.fromEntries(Object.entries(phases).map(([k, v]) => [k, n ? +( (v - phaseWindow[k as keyof typeof phases]) / n).toFixed(3) : 0]));
+  if (reset) { Object.assign(phaseWindow, phases); phaseWindowFrames = phaseFrames; }
+  return { frames: n, ms: { ...phaseRolling }, intervalMs: ms, /* CPU submission timings; GPU/compositor work is reflected in fps. */ fps: perf.fps };
+}
 let cpuMsAvg = 0; // JS cost of a frame (sim + UI + draw submission) — what bounds fps on a real GPU
 function frame(now: number) {
   requestAnimationFrame(frame);
-  const cpu0 = performance.now(); let dt = Math.min(.1, (now - last) / 1000); last = now; perf.tick(now);
+  const cpu0 = performance.now(); let phaseStart = cpu0; let dt = Math.min(.1, (now - last) / 1000); last = now; perf.tick(now);
   const slow = montage ? .25 : beat && beat.t < 3.2 ? beat.slow : 1;
   const t0 = performance.now(); if (speed > 0) stepSim(dt * speed * slow); simMsAvg = simMsAvg * .9 + (performance.now() - t0) * .1;
+  phases.sim += performance.now() - phaseStart; phaseStart = performance.now();
+  camera.updateMatrixWorld();
   const adt = speed === 0 ? dt * .25 : dt * Math.min(speed, 2.5) * slow;
   for (const v of sim.villagers) syncAvatar(v, montage ? dt : speed === 0 ? 0 : adt); // flashback ghosts play/fade at wall-clock rate
 
   if (nell) { const on = sim.visitorUntil > sim.clock; nell.targetAlpha = on ? 1 : 0; if (on || nell.alpha > .05) { nellT += adt; nell.root.position.set(NELL[0], 0, NELL[1]); nell.targetHeading = Math.sin(nellT * .4) * .5; const k = Math.floor(nellT / 2.5) % 4; nell.anim = (['talk', 'wave', 'talk', 'cheer'] as any)[k]; nell.setExpression(k === 3 ? 'grin' : 'happy'); nell.update(speed === 0 ? 0 : adt, .8); } }
+  phases.avatars += performance.now() - phaseStart; phaseStart = performance.now();
   animateGifts(sim, dt);
   world.update(adt, dt * speed * MIN_PER_SEC, sim.clock, sky.night, sim.day, sim.rain);
   if ((world as any).dog?.obj && (sim as any).pet) (world as any).dog.obj.visible = (sim as any).pet.state !== 'missing';
-  extras?.update(adt, sim.hour, sim.rain, controls.target, camera.position);
+  const extraStart = performance.now(); extras?.update(adt, sim.hour, sim.rain, controls.target, camera.position, camera); const extraMs = performance.now() - extraStart; phases.avatars += extraMs;
   // camera
   if (beat || montage) { controls.autoRotate = false; }
   else if (mode === 'director' && !selected) { dirT -= dt; if (dirT <= 0) { dirT = 1; const pick = director.pick(sim.clock, follow); if (pick && pick.id !== follow) { follow = pick.id; } } controls.autoRotate = true; controls.autoRotateSpeed = .35; }
@@ -584,15 +597,20 @@ function frame(now: number) {
   ambient?.update(dt, dt * speed * slow * MIN_PER_SEC, sim.hour, sim.rain, sky.night, controls.target, camera.position);
   sound.ambient(sky.night, sim.rain, dt);
   document.body.classList.toggle('cinematic', cine.classList.contains('on') || !!intro || !!montage);
+  phases.world += performance.now() - phaseStart - extraMs; phaseStart = performance.now();
   ui.frame(dt);
   pBudget = 2; for (const id of [...pQueue].sort((a, b) => (b === selected ? 1 : 0) - (a === selected ? 1 : 0)).slice(0, 2)) portrait(id); pBudget = 2;
+  phases.ui += performance.now() - phaseStart; phaseStart = performance.now();
   perf.beforeRender();
-  renderer.render(scene, camera); cpuMsAvg += ((performance.now() - cpu0) - cpuMsAvg) * .1;
+  phases.culling += performance.now() - phaseStart; phaseStart = performance.now();
+  renderer.render(scene, camera); phases.render += performance.now() - phaseStart; phaseFrames++;
+  for (const k of phaseKeys) { const sample = phases[k] - phasePrevious[k]; phasePrevious[k] = phases[k]; phaseRolling[k] += (sample - phaseRolling[k]) * (phaseFrames === 1 ? 1 : .1); }
+  cpuMsAvg += ((performance.now() - cpu0) - cpuMsAvg) * .1;
 }
 
 // ---- hooks for headless verification & power users -------------------------------------------------
 (window as any).terrarium = {
-  sim, director, world, camera, controls, renderer, scene, get fps() { return perf.fps; }, get pixelRatio() { return perf.pr; }, quality: { soft: SOFT, aa: AA }, get simMs() { return simMsAvg; }, get cpuMs() { return cpuMsAvg; },
+  sim, director, world, camera, controls, renderer, scene, perfStats, get fps() { return perf.fps; }, get pixelRatio() { return perf.pr; }, quality: { soft: SOFT, aa: AA }, get simMs() { return simMsAvg; }, get cpuMs() { return cpuMsAvg; },
   setSpeed: (s: number) => (speed = s), select: (id: string | null) => api.select(id), setMode: (m: any) => api.setMode(m), god: (k: string) => api.god(k), ui: () => ui,
   fastForward(minutes: number, coarse = false) { if (!Number.isFinite(minutes) || minutes <= 0) return; const quiet = ui.quiet, wasFfing = ffing; ffing = true; ui.quiet = true; try { if (coarse) stepSimCoarse(minutes / MIN_PER_SEC); else { const n = Math.max(1, Math.ceil(minutes / MIN_PER_SEC / SIM_H - 1e-6)); for (let i = 0; i < n; i++) { sim.step(SIM_H); tickTraveller(sim); tickFestival(sim); } } } finally { ffing = wasFfing; ui.quiet = quiet; } for (const v of sim.villagers) syncAvatar(v, .016); },
   cineState() { camera.updateMatrixWorld(); const f = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)); return { beat: !!beat, montage: !!montage, target: { x: controls.target.x, y: controls.target.y, z: controls.target.z }, visible: sim.villagers.filter(v => !v.inside && visibleObject(v.avatar.root) && f.containsPoint(new THREE.Vector3(v.x, 1.1, v.z))).map(v => v.id) }; },
