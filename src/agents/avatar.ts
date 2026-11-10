@@ -22,6 +22,8 @@ export class Avatar {
   seated = false;
   tool: THREE.Object3D | null = null; toolKind = ''; carry: THREE.Object3D | null = null; carryKind = ''; banner: THREE.Object3D | null = null; bannerColor = '';
   hitPhase = 0; onHit: (() => void) | null = null; height: number; mats: THREE.Material[] = []; hips: THREE.Bone; hipsY: number; hipM = 1; sitH = .5; outfit: any; bob = 0;
+  // Far LOD (presentation only): small overlay meshes to drop when the avatar is tiny on screen.
+  lodFar = false; private lodMeshes: THREE.Mesh[] = [];
   constructor(public def: VillagerDef, seed: number) {
     this.outfit = generateOutfit(def, seed);
     this.handle = createDressedCharacter({ styleId: 'hero', paletteId: def.palette, colors: { skin: def.skin, hair: def.hair } as any, proportions: { targetHeight: def.height } as any }, this.outfit);
@@ -30,6 +32,21 @@ export class Avatar {
     this.hips = this.bones.Hips; this.hipsY = this.hips.position.y; this.root.updateMatrixWorld(true); this.hipM = new THREE.Vector3().setFromMatrixPosition(this.hips.matrixWorld).y || this.height * .5;
     this.body.traverse((m: any) => { if (m.isMesh) { m.castShadow = true; m.frustumCulled = false; const arr = Array.isArray(m.material) ? m.material : [m.material]; for (const mt of arr) if (!this.mats.includes(mt)) this.mats.push(mt); } });
     this.handle.face?.setAutoBlink?.(true);
+    // Far LOD: catalogue small, non-structural overlays (trims, bags, loose accessories) that neither
+    // define the silhouette nor sit in the head region, so dropping them past ~34 m cuts draws/triangles
+    // while the main body mesh, hair/hats and the face (hence portraits) always stay drawn.
+    { let maxTri = 0; const cand: [THREE.Mesh, number, boolean][] = []; const bx = new THREE.Box3();
+      this.body.traverse((o: any) => { if (!o.isMesh || o.name === 'CharacterOutline' || o.name === 'face') return;
+        const g = o.geometry as THREE.BufferGeometry, tri = (g.index ? g.index.count : g.attributes.position.count) / 3;
+        bx.setFromObject(o); cand.push([o, tri, bx.min.y < this.height * .68]); if (tri > maxTri) maxTri = tri; });
+      for (const [m, tri, low] of cand) if (low && tri < maxTri * .22) this.lodMeshes.push(m); }
+  }
+  // Per render-frame LOD hook, fed the camera distance. Presentation only: no sim state, no RNG,
+  // keeps the body/head/face so picking (screen-space) and portraits (head close-up) are unaffected.
+  setLod(dist: number) {
+    const far = dist > (this.lodFar ? 30 : 34); if (far === this.lodFar) return; this.lodFar = far;
+    for (const m of this.lodMeshes) m.visible = !far;
+    if (this.tool) this.tool.visible = !far; if (this.carry) this.carry.visible = !far; if (this.banner) this.banner.visible = !far;
   }
   setExpression(e: string) { e = EXPR_MAP[e] ?? 'neutral'; if (e !== this.expr) { this.expr = e; this.handle.setExpression(e); } }
   setTool(kind: string) {
@@ -42,15 +59,18 @@ export class Avatar {
     const striking = kind === 'hammer' || kind === 'axe' || kind === 'pickaxe';
     // Move the grip forward so the raised handle stays ahead of the face.
     this.tool.position.set(.06, 0, striking ? -.10 * scale : 0); this.tool.scale.setScalar(scale);
+    if (this.lodFar) this.tool.visible = false;
   }
   setCarry(kind: string) {
     if (kind === this.carryKind) return; if (this.carry) this.carry.parent?.remove(this.carry); this.carry = null; this.carryKind = kind; if (!kind) return;
     this.carry = makeCarry(kind); const sp = this.bones.Spine2; sp.add(this.carry); const s = 1 / this.worldScaleOf(sp); this.carry.scale.setScalar(s);
     this.carry.position.set(0, .12 * s, -.24 * s); // on the back
+    if (this.lodFar) this.carry.visible = false;
   }
   setBanner(color: string) {
     if (color === this.bannerColor) return; this.bannerColor = color; if (this.banner) this.banner.parent?.remove(this.banner); this.banner = null; if (!color) return;
     this.banner = makeBanner(color); const sp = this.bones.Spine2; sp.add(this.banner); const s = 1 / this.worldScaleOf(sp); this.banner.scale.setScalar(s * .9); this.banner.position.set(-.12 * s, 0, -.18 * s);
+    if (this.lodFar) this.banner.visible = false;
   }
   worldScaleOf(o: THREE.Object3D) { const v = new THREE.Vector3(); o.updateWorldMatrix(true, false); o.getWorldScale(v); const r = new THREE.Vector3(); this.root.getWorldScale(r); return v.x / r.x; }
   headPos(out = new THREE.Vector3()) { return out.set(this.root.position.x, this.root.position.y + this.height + .35, this.root.position.z); }
