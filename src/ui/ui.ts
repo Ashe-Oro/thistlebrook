@@ -92,24 +92,44 @@ export class UI {
     // an identical line already near the top (the same chore again, a repeated accusation) is bumped with a ×N count, not re-printed
     if (day === this.feedDay) { for (let i = 0, c = this.feed.firstElementChild as HTMLElement | null; c && i < 40; i++, c = c.nextElementSibling as HTMLElement | null) {
       if (c.classList.contains('daysep')) break;
-      if (c.dataset.txt === e.text) { const n = (+(c.dataset.n ?? 1)) + 1; c.dataset.n = String(n); c.querySelector('.t')!.textContent = fmtTime(e.t); let rep = c.querySelector('.rep'); if (!rep) { rep = h('span', 'rep'); c.querySelector('.tx')!.appendChild(rep); } rep.textContent = ` ×${n}`; if (!minor) { delete c.dataset.minor; this.applyFilter(c); } this.feed.prepend(c); return; }
+      if (c.dataset.txt === e.text) { const ids: number[] = JSON.parse(c.dataset.ids ?? `[${c.dataset.id}]`); ids.push(e.id); c.dataset.ids = JSON.stringify(ids); c.dataset.n = String(ids.length); this.refreshFeedRow(c, e); this.feed.prepend(c); this.promoteCaption(e, c); return; }
     } } if (this.feedDay && day !== this.feedDay) { const sep = h('div', 'daysep', `— Day ${day} —`); this.feed.prepend(sep); } this.feedDay = day;
-    const el = h('div', `ev imp${Math.min(9, e.imp)} k-${e.kind} c-${cat}`); el.dataset.id = String(e.id); el.dataset.cat = cat; el.dataset.txt = e.text; if (minor) el.dataset.minor = '1';
+    const el = h('div', `ev imp${Math.min(9, e.imp)} k-${e.kind} c-${cat}`); el.dataset.id = String(e.id); el.dataset.ids = JSON.stringify([e.id]); el.dataset.cat = cat; el.dataset.txt = e.text; if (minor) el.dataset.minor = '1';
     const txt = lie ? cleanLie(e.text) : e.text;
     el.innerHTML = `<span class="t">${fmtTime(e.t)}</span><span class="ic">${e.icon}</span><span class="tx">${this.linkify(txt)}${lie ? ' <span class="badge false" title="A fabricated rumour — not actually true">false rumour</span>' : ''}</span>`;
     this.arcChip(el, e.id);
     this.applyFilter(el);
     this.feed.prepend(el); while (this.feed.children.length > 100) this.feed.lastChild!.remove();
     if (minor) { const m = this.feed.querySelectorAll('[data-minor]'); for (let i = 30; i < m.length; i++) m[i].remove(); }
-    // only promote to the big caption when the event isn't already the visible top of the chronicle
-    const visibleInFeed = this.feedFilter === 'all' || this.feedFilter === cat;
-    if (e.imp >= 7 && !visibleInFeed) { this.captionText(`${e.icon} ${this.linkify(txt)}`); }
+    this.promoteCaption(e, el);
   }
-  updateFeed(e: SimEvent) { const el = this.feed.querySelector<HTMLElement>(`[data-id="${e.id}"] .tx`); if (el) { const lie = this.isLie(e); const txt = lie ? cleanLie(e.text) : e.text; el.innerHTML = `${this.linkify(txt)}${lie ? ' <span class="badge false" title="A fabricated rumour — not actually true">false rumour</span>' : ''}`; (el.parentElement as HTMLElement).dataset.txt = e.text; } }
+  promoteCaption(e: SimEvent, el: HTMLElement) {
+    let visibleInFeed = el.style.display !== 'none' && !this.feed.parentElement!.classList.contains('collapsed') && this.feed.getClientRects().length > 0;
+    for (let panel: HTMLElement | null = this.feed; visibleInFeed && panel; panel = panel.parentElement) {
+      const style = getComputedStyle(panel);
+      if (style.display === 'none' || style.visibility !== 'visible' || style.opacity === '0') visibleInFeed = false;
+    }
+    if (e.imp >= 7 && !visibleInFeed) this.captionText(`${e.icon} ${this.linkify(this.isLie(e) ? cleanLie(e.text) : e.text)}`);
+  }
+  refreshFeedRow(el: HTMLElement, e: SimEvent) {
+    const cat = this.cat(e), n = +(el.dataset.n ?? 1);
+    el.className = `ev imp${Math.min(9, e.imp)} k-${e.kind} c-${cat}`;
+    el.dataset.cat = cat; el.dataset.txt = e.text;
+    if (e.imp <= 1) el.dataset.minor = '1'; else delete el.dataset.minor;
+    el.querySelector('.t')!.textContent = fmtTime(e.t);
+    el.querySelector('.ic')!.textContent = e.icon;
+    el.querySelector('.tx')!.innerHTML = this.rich(e.text) + (n > 1 ? `<span class="rep"> ×${n}</span>` : '');
+    this.arcChip(el, e.id); this.applyFilter(el);
+  }
+  updateFeed(e: SimEvent) {
+    const el = [...this.feed.querySelectorAll<HTMLElement>('.ev')].find(row => (JSON.parse(row.dataset.ids ?? `[${row.dataset.id}]`) as number[]).includes(e.id));
+    if (el) { this.refreshFeedRow(el, e); this.promoteCaption(e, el); }
+  }
   applyFilter(el: HTMLElement) { const f = this.feedFilter; el.style.display = (f === 'all' ? !el.dataset.minor : el.dataset.cat === f) ? '' : 'none'; }
   refilter() { this.feed.querySelectorAll<HTMLElement>('.ev').forEach(el => this.applyFilter(el)); }
   // small arc chip under a feed row once its story has shape (>= 2 beats): "📖 The Missing Geode · beat 3"
   arcChip(el: HTMLElement, eventId: number) {
+    el.querySelector('.arcchip')?.remove();
     const hit = arcs(this.app.sim).arcForEvent(eventId); if (!hit || hit.arc.beats.length < 2) return;
     const chip = h('a', 'arcchip', `📖 ${esc(hit.arc.title)} · beat ${hit.beatNo}`); chip.title = 'Open this story'; chip.dataset.arc = hit.arc.id;
     el.appendChild(chip);
@@ -125,11 +145,17 @@ export class UI {
   }
   captionTO: any; captionText(html: string) { this.caption.innerHTML = html; this.caption.classList.add('show'); clearTimeout(this.captionTO); this.captionTO = setTimeout(() => this.caption.classList.remove('show'), 6000); }
   toastQ: [string, string][] = []; quiet = false;
+  private toastTimers = new WeakMap<Element, ReturnType<typeof setTimeout>[]>();
+  refreshToast(t: Element) {
+    for (const timer of this.toastTimers.get(t) ?? []) clearTimeout(timer);
+    t.classList.remove('out');
+    this.toastTimers.set(t, [setTimeout(() => t.classList.add('out'), 4200), setTimeout(() => { t.remove(); this.toastTimers.delete(t); const n = this.toastQ.shift(); if (n) this.toast(n[0], n[1]); }, 5000)]);
+  }
   toast(title: string, desc: string) { if (this.quiet) return;
     // the same achievement again (a story reaching more people) refreshes the toast already showing or queued, never stacks a twin
-    const same = [...this.toasts.children].find(t => t.querySelector('b')?.textContent === title && !t.classList.contains('out')); if (same) { same.querySelector('span')!.innerHTML = this.linkify(desc); return; }
+    const same = [...this.toasts.children].find(t => t.querySelector('b')?.textContent === title); if (same) { same.querySelector('span')!.innerHTML = this.linkify(desc); this.refreshToast(same); return; }
     const q = this.toastQ.find(t => t[0] === title); if (q) { q[1] = desc; return; }
-    if (this.toasts.children.length >= 2) { if (this.toastQ.length < 6) this.toastQ.push([title, desc]); return; } const t = h('div', 'toast', `<b>${title}</b><span>${this.linkify(desc)}</span>`); this.toasts.appendChild(t); this.app.sound.play('toast'); setTimeout(() => t.classList.add('out'), 4200); setTimeout(() => { t.remove(); const n = this.toastQ.shift(); if (n) this.toast(n[0], n[1]); }, 5000); }
+    if (this.toasts.children.length >= 2) { if (this.toastQ.length < 6) this.toastQ.push([title, desc]); return; } const t = h('div', 'toast', `<b>${title}</b><span>${this.linkify(desc)}</span>`); this.toasts.appendChild(t); this.app.sound.play('toast'); this.refreshToast(t); }
   bubble(id: string, text: string, emoji: string, dur: number) {
     let b = this.bubbles.get(id); if (!b) { const el = h('div', 'bubble'); this.overlay.appendChild(el); b = { el, until: 0, t0: 0 }; this.bubbles.set(id, b); }
     b.el.innerHTML = `${emoji ? `<span class="em">${emoji}</span>` : ''}${esc(text)}`; b.el.classList.remove('pop'); void b.el.offsetWidth; b.el.classList.add('pop'); b.t0 = performance.now(); b.until = performance.now() + dur * 1000 / Math.max(1, Math.sqrt(this.app.speed || 1));
@@ -221,9 +247,12 @@ export class UI {
     const dg = this.card.querySelector('.doing'); if (dg) setHTML(dg, `▶ ${esc(v.doing)}${v.inside ? ` <span class="muted">(inside ${s.place(v.inside).name})</span>` : ''}`);
     const bars = this.card.querySelectorAll<HTMLElement>('.need i'); if (bars.length >= 3) { bars[0].style.width = `${v.needs.food}%`; bars[1].style.width = `${v.needs.energy}%`; bars[2].style.width = `${v.needs.social}%`; }
   }
+  private cardBodyAt = 0;
   renderCard() {
     const id = this.app.selected; if (!id) { this.card.classList.add('hidden'); this.card.dataset.rid = ''; return; } const s = this.app.sim, v = s.byId.get(id)!; this.card.classList.remove('hidden');
-    if (this.card.dataset.rid === id && this.card.dataset.rtab === this.tab) { this.updateCardLive(v, s); return; }
+    const refresh = this.card.dataset.rid === id && this.card.dataset.rtab === this.tab;
+    if (refresh) { this.updateCardLive(v, s); if (performance.now() - this.cardBodyAt < 2000) return; }
+    this.cardBodyAt = performance.now();
     this.card.dataset.rid = id; this.card.dataset.rtab = this.tab;
     const al = v.alliance ? s.alliances.find(a => a.id === v.alliance) : null; const bar = (l: string, x: number, c: string) => `<div class="need"><span>${l}</span><b><i style="width:${x}%;background:${c}"></i></b></div>`;
     const traits = Object.entries(v.traits).map(([k, x]) => `<span class="tr" title="${k} ${x}">${k}<i style="width:${x * 100}%"></i></span>`).join('');
@@ -235,6 +264,11 @@ export class UI {
     if (this.tab === 'plan') body = v.plan.filter(b => b.to > s.clock - 60).reduce((acc: PlanBlock[], b) => { const p = acc[acc.length - 1]; if (p && p.act === b.act && p.note === b.note && Math.abs(p.to - b.from) < 1) acc[acc.length - 1] = { ...p, to: b.to }; else acc.push(b); return acc; }, []).map(b => `<div class="pl ${s.clock >= b.from && s.clock < b.to ? 'now' : ''} ${b.act === 'event' ? 'evt' : ''}"><span class="t">${fmtTime(b.from)}–${fmtTime(b.to)}</span>${esc(b.note)}${dayOf(b.from) > s.day ? ' <i class="muted">(tomorrow)</i>' : ''}</div>`).join('') + (v.intent ? `<div class="intent">🎯 ${esc(v.intent)}</div>` : '');
     if (this.tab === 'mem') body = `${v.mem.beliefs.length ? `<div class="sub">Beliefs (from reflection)</div>${v.mem.beliefs.map(b => `<div class="mem refl">💭 ${esc(b.text)}</div>`).join('')}` : ''}<div class="sub">Most salient memories</div>` + v.mem.retrieve(s.clock, [], 10).map(m => `<div class="mem k-${m.kind}"><span class="t">${fmtTime(m.t)}</span><span class="imp" title="importance">${'●'.repeat(Math.ceil(m.imp / 2))}</span> ${esc(m.text)}</div>`).join('') + `<div class="sub">Knows ${v.mem.known.size} pieces of news · ${v.mem.items.length} memories</div>`;
     if (this.tab === 'story') body = v.story.slice().reverse().slice(0, 30).map(x => `<div class="st"><span class="t">${fmtTime(x.t)}</span>${this.rich(x.text)}</div>`).join('') || '<div class="muted">Nothing yet.</div>';
+    if (refresh) {
+      const tb = this.card.querySelector<HTMLElement>('.tb')!, top = tb.scrollTop, left = tb.scrollLeft, cardTop = this.card.scrollTop;
+      setHTML(tb, body); setHTML(this.card.querySelector('.inv')!, inv);
+      tb.scrollTop = top; tb.scrollLeft = left; this.card.scrollTop = cardTop;
+    } else {
     this.card.innerHTML = `<button class="x">✕</button><div class="hd"><div class="pt"></div><div><div class="nmb" style="color:${VCOLOR[v.id]}">${v.name} <span class="md">${this.mood(v)}</span></div><div class="jb">${JOB_INFO[v.job].label} · ${v.def.age}</div><div class="gl">🎯 ${GOAL_LABEL[v.goal]}</div>${al ? `<div class="al" style="--c:${al.color}">🚩 ${al.name}</div>` : ''}</div></div>
       <div class="thought">💭 ${esc(v.thought)}</div><div class="doing">▶ ${esc(v.doing)}${v.inside ? ` <span class="muted">(inside ${s.place(v.inside).name})</span>` : ''}</div>
       ${bar('🍞 Fed', v.needs.food, '#e0a64a')}${bar('⚡ Energy', v.needs.energy, '#6cc36c')}${bar('💬 Social', v.needs.social, '#6aa6e8')}
@@ -243,6 +277,7 @@ export class UI {
     const pt = this.card.querySelector('.pt')!; pt.appendChild(this.app.portrait(v.id));
     (this.card.querySelector('.x') as HTMLElement).onclick = () => this.app.select(null);
     this.card.querySelectorAll<HTMLElement>('[data-t]').forEach(b => b.onclick = () => { this.tab = b.dataset.t!; this.renderCard(); });
+    }
     this.card.querySelectorAll<HTMLElement>('.rel').forEach(b => b.onclick = () => this.app.select(b.dataset.id!));
     this.card.querySelectorAll<HTMLElement>('.nm').forEach(a => a.onclick = () => this.app.select(a.dataset.id!));
   }

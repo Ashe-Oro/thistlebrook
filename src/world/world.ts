@@ -27,6 +27,8 @@ interface Animal { obj: THREE.Object3D; x: number; z: number; tx: number; tz: nu
 export class World {
   scene: THREE.Scene; nav: NavGrid; fx: FX; places = new Map<string, Place>(); seats: Seat[] = []; trees: Tree[] = []; rocks: Rock[] = []; plots: Plot[] = []; apples: AppleTree[] = [];
   animals: Animal[] = []; lamps: THREE.Sprite[] = []; lights: THREE.PointLight[] = []; campfireLight!: THREE.PointLight; forgeLight?: THREE.PointLight; private fireTime = 0; sail?: THREE.Object3D; bunting: THREE.Object3D[] = []; rng = new RNG(42);
+  // Render-driven cosmetics must never advance the world/simulation stream.
+  private cosmeticRng = new RNG(43);
   private scenery: THREE.Object3D[] = [];
   private moving = new Set<THREE.Object3D>();
   private cropM = new THREE.Matrix4(); private borderScenery: THREE.Object3D[] = []; private lotScenery: THREE.Object3D[] = [];
@@ -215,8 +217,8 @@ export class World {
     const pen: [number, number, number, number] = [32, 4, 45, 14];
     const spec: [string, number, number][] = [['farm/chicken', 6, 1.2], ['farm/cow', 1, .5], ['farm/sheep', 2, .45], ['farm/pig', 1, .5]];
     for (const [a, n, sp] of spec) for (let i = 0; i < n; i++) {
-      const o = await loadAsset(a); const x = this.rng.range(pen[0] + 1, pen[2] - 1), z = this.rng.range(pen[1] + 1, pen[3] - 1);
-      o.position.set(x, 0, z); this.scene.add(o); this.scenery.push(o); this.moving.add(o); this.shadows(o, a !== 'farm/chicken'); this.animals.push({ obj: o, x, z, tx: x, tz: z, speed: sp, pen, t: this.rng.range(0, 5), kind: a.split('/')[1], hop: 0 });
+      const o = await loadAsset(a); const x = this.cosmeticRng.range(pen[0] + 1, pen[2] - 1), z = this.cosmeticRng.range(pen[1] + 1, pen[3] - 1);
+      o.position.set(x, 0, z); this.scene.add(o); this.scenery.push(o); this.moving.add(o); this.shadows(o, a !== 'farm/chicken'); this.animals.push({ obj: o, x, z, tx: x, tz: z, speed: sp, pen, t: this.cosmeticRng.range(0, 5), kind: a.split('/')[1], hop: 0 });
     }
     this.nav.rect(38.5, 9, 7, 5.2, 0, 1); // paddock interior blocked for villagers except feeder spot
     this.nav.circle(35, 10, 1.2, 0); this.nav.rect(33.5, 6.5, 1.5, 3.6, 0, 0);
@@ -252,7 +254,7 @@ export class World {
       d.traverse(o => { if (o instanceof THREE.Mesh) o.castShadow = false; });
       const a = i / nD * 6.28, x = pcx + Math.cos(a) * pr * .6, z = pcz + Math.sin(a) * pr * .6;
       d.position.set(x, .22, z); this.scene.add(d);
-      this.ducks.push({ obj: d, x, z, tx: x, tz: z, t: this.rng.range(0, 4), cx: pcx, cz: pcz, r: pr });
+      this.ducks.push({ obj: d, x, z, tx: x, tz: z, t: this.cosmeticRng.range(0, 4), cx: pcx, cz: pcz, r: pr });
     }
     }
   }
@@ -296,11 +298,11 @@ export class World {
       this.forgeLight.intensity = (2 + clamp(night) * 12 + (smithy && smithy.smokeUntil > clock ? 10 : 0)) * flicker;
     }
     // campfire flames always (bigger at night)
-    if (Math.random() < dt * (12 + night * 30)) this.fx.flame(-25, .35, 10, .8 + night * .5); if (Math.random() < dt * 3 * night) this.fx.ember(-25, .8, 10);
-    for (const p of this.places.values()) if (p.chimney && (p.smokeUntil > clock || p.inside.size > 0 && (night > .2 || p.kind === 'bakery')) && Math.random() < dt * 3) this.fx.smoke(p.chimney.x, p.chimney.y, p.chimney.z);
-    if (night > .5 && Math.random() < dt * 4) this.fx.firefly(-36 + (Math.random() - .5) * 10, .4 + Math.random() * 1.2, 13 + (Math.random() - .5) * 8);
-    if (night > .5 && Math.random() < dt * 2) this.fx.firefly(3 + (Math.random() - .5) * 10, .5 + Math.random(), 17 + (Math.random() - .5) * 6);
-    if (Math.random() < dt * 1.2) { const tr = this.rng.pick(this.trees); if (tr.state === 'standing') this.fx.leaf(tr.x + (Math.random() - .5) * 2, 3 + Math.random() * 2, tr.z, tr.autumn); }
+    if (this.cosmeticRng.next() < dt * (12 + night * 30)) this.fx.flame(-25, .35, 10, .8 + night * .5); if (this.cosmeticRng.next() < dt * 3 * night) this.fx.ember(-25, .8, 10);
+    for (const p of this.places.values()) if (p.chimney && (p.smokeUntil > clock || p.inside.size > 0 && (night > .2 || p.kind === 'bakery')) && this.cosmeticRng.next() < dt * 3) this.fx.smoke(p.chimney.x, p.chimney.y, p.chimney.z);
+    if (night > .5 && this.cosmeticRng.next() < dt * 4) this.fx.firefly(-36 + (this.cosmeticRng.next() - .5) * 10, .4 + this.cosmeticRng.next() * 1.2, 13 + (this.cosmeticRng.next() - .5) * 8);
+    if (night > .5 && this.cosmeticRng.next() < dt * 2) this.fx.firefly(3 + (this.cosmeticRng.next() - .5) * 10, .5 + this.cosmeticRng.next(), 17 + (this.cosmeticRng.next() - .5) * 6);
+    if (this.cosmeticRng.next() < dt * 1.2) { const tr = this.cosmeticRng.pick(this.trees); if (tr.state === 'standing') this.fx.leaf(tr.x + (this.cosmeticRng.next() - .5) * 2, 3 + this.cosmeticRng.next() * 2, tr.z, tr.autumn); }
     // Trees
     for (const tr of this.trees) {
       if (tr.state === 'standing' && tr.shake > 0) { tr.shake = Math.max(0, tr.shake - dt * 3); tr.obj.rotation.z = Math.sin(tr.shake * 40) * tr.shake * .05; }
@@ -320,7 +322,7 @@ export class World {
     for (const a of this.apples) a.meshes.forEach((m, i) => m.visible = i < a.apples);
     for (const an of this.animals) {
       an.t -= dt; const dx = an.tx - an.x, dz = an.tz - an.z, d = Math.hypot(dx, dz);
-      if (an.t <= 0 || d < .1) { if (an.t <= 0) { const feed = an.kind === 'chicken' && an.hop > 0; an.tx = feed ? 35 + (Math.random() - .5) * 2 : this.rng.range(an.pen[0] + 1.2, an.pen[2] - 1.2); an.tz = feed ? 10 + (Math.random() - .5) * 2 : this.rng.range(an.pen[1] + 1.2, an.pen[3] - 1.2); an.t = this.rng.range(3, 9); } }
+      if (an.t <= 0 || d < .1) { if (an.t <= 0) { const feed = an.kind === 'chicken' && an.hop > 0; an.tx = feed ? 35 + (this.cosmeticRng.next() - .5) * 2 : this.cosmeticRng.range(an.pen[0] + 1.2, an.pen[2] - 1.2); an.tz = feed ? 10 + (this.cosmeticRng.next() - .5) * 2 : this.cosmeticRng.range(an.pen[1] + 1.2, an.pen[3] - 1.2); an.t = this.cosmeticRng.range(3, 9); } }
       if (d > .1) { const sp = an.speed * (an.hop > 0 ? 2.2 : 1) * Math.min(1, d); an.x += dx / d * sp * dt; an.z += dz / d * sp * dt; const ty = Math.atan2(dx, dz); an.obj.rotation.y += Math.atan2(Math.sin(ty - an.obj.rotation.y), Math.cos(ty - an.obj.rotation.y)) * Math.min(1, dt * 4); an.obj.position.y = an.kind === 'chicken' ? Math.abs(Math.sin(t * 14 + an.x)) * .05 : 0; }
       else if (an.kind === 'chicken') an.obj.rotation.x = Math.max(0, Math.sin(t * 6 + an.z)) * .4;
       an.hop = Math.max(0, an.hop - dt); an.obj.position.x = an.x; an.obj.position.z = an.z;
@@ -330,7 +332,7 @@ export class World {
       const dg = this.dog; dg.t -= dt; let best: { x: number; z: number } | null = null, bd = 16;
       for (const c of this.crowd) { if (c.inside) continue; const d = Math.hypot(c.x - dg.x, c.z - dg.z); if (d < bd) { bd = d; best = c; } }
       if (best) { dg.trot = true; const d = Math.max(.001, bd); dg.tx = best.x - (best.x - dg.x) / d * 1.7; dg.tz = best.z - (best.z - dg.z) / d * 1.7; }
-      else { dg.trot = false; if (dg.t <= 0) { dg.tx = clamp(-9 + (Math.random() - .5) * 22, -20, 4); dg.tz = clamp(5 + (Math.random() - .5) * 16, -2, 15); dg.t = this.rng.range(2, 5); } }
+      else { dg.trot = false; if (dg.t <= 0) { dg.tx = clamp(-9 + (this.cosmeticRng.next() - .5) * 22, -20, 4); dg.tz = clamp(5 + (this.cosmeticRng.next() - .5) * 16, -2, 15); dg.t = this.cosmeticRng.range(2, 5); } }
       const dx = dg.tx - dg.x, dz = dg.tz - dg.z, dd = Math.hypot(dx, dz), moving = dd > .3;
       if (moving) { const sp = dg.trot ? 2.7 : 1.4; dg.x += dx / dd * sp * dt; dg.z += dz / dd * sp * dt; const ty = Math.atan2(dx, dz); dg.obj.rotation.y += Math.atan2(Math.sin(ty - dg.obj.rotation.y), Math.cos(ty - dg.obj.rotation.y)) * Math.min(1, dt * 6); dg.ph += dt * (dg.trot ? 16 : 9); }
       dg.obj.position.set(dg.x, moving ? Math.abs(Math.sin(dg.ph)) * .03 : 0, dg.z);
@@ -339,7 +341,7 @@ export class World {
     }
     // ducks: drift lazily about the mill pond
     for (const dk of this.ducks) {
-      dk.t -= dt; if (dk.t <= 0) { const a = Math.random() * 6.28, rr = Math.random() * dk.r; dk.tx = dk.cx + Math.cos(a) * rr; dk.tz = dk.cz + Math.sin(a) * rr; dk.t = this.rng.range(3, 7); }
+      dk.t -= dt; if (dk.t <= 0) { const a = this.cosmeticRng.next() * 6.28, rr = this.cosmeticRng.next() * dk.r; dk.tx = dk.cx + Math.cos(a) * rr; dk.tz = dk.cz + Math.sin(a) * rr; dk.t = this.cosmeticRng.range(3, 7); }
       const dx = dk.tx - dk.x, dz = dk.tz - dk.z, d = Math.hypot(dx, dz);
       if (d > .05) { dk.x += dx / d * .35 * dt; dk.z += dz / d * .35 * dt; const ty = Math.atan2(dx, dz); dk.obj.rotation.y += Math.atan2(Math.sin(ty - dk.obj.rotation.y), Math.cos(ty - dk.obj.rotation.y)) * Math.min(1, dt * 3); }
       dk.obj.position.set(dk.x, .2 + Math.sin(t * 2 + dk.x) * .02, dk.z);

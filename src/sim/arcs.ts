@@ -28,7 +28,7 @@ interface Hint { family: Arc['family']; key: string; beat: string; title: string
 export class ArcTracker {
   arcs: Arc[] = [];
   byKey = new Map<string, Arc>();
-  byEvent = new Map<number, { arc: Arc; idx: number }>();
+  byEvent = new Map<number, { arc: Arc; beat: Beat }>();
   seen = new Set<number>();
   n = 1;
   constructor(public sim: Sim) {
@@ -114,7 +114,7 @@ export class ArcTracker {
     return best;
   }
   ingest(e: SimEvent, update = false) {
-    if (update) { const ex = this.byEvent.get(e.id); if (ex) { const b = ex.arc.beats[ex.idx]; if (b) { b.text = e.text; b.imp = Math.max(b.imp, e.imp); ex.arc.last = Math.max(ex.arc.last, e.t); this.recompute(ex.arc); } return; } }
+    if (update) { const ex = this.byEvent.get(e.id); if (ex) { const b = ex.beat; if (b.eventId === e.id) { b.text = e.text; b.imp = Math.max(b.imp, e.imp); ex.arc.last = Math.max(ex.arc.last, e.t); this.recompute(ex.arc); } return; } }
     if (this.seen.has(e.id)) return;
     if (e.imp < 3) return;                 // small talk stays out of arcs
     const h = this.classify(e); if (!h) return;
@@ -125,12 +125,12 @@ export class ArcTracker {
       const absorb = (h.beat === 'Fight' || h.beat === 'Aftermath' || h.beat === 'Reconciled' || h.beat === 'Rebuffed');
       if (absorb) { const found = this.findPairArc(e.actors[0], e.actors[1], ['theft', 'feud', 'romance']); if (found) arc = found; }
     }
-    if (!arc) { arc = { id: `arc${this.n++}`, key: h.key, family: h.family, title: h.title, status: 'brewing', beats: [], actors: new Set(), last: e.t }; this.arcs.push(arc); this.byKey.set(h.key, arc); if (this.arcs.length > 80) { const dead = this.arcs.shift()!; if (this.byKey.get(dead.key) === dead) this.byKey.delete(dead.key); } }
+    if (!arc) { arc = { id: `arc${this.n++}`, key: h.key, family: h.family, title: h.title, status: 'brewing', beats: [], actors: new Set(), last: e.t }; this.arcs.push(arc); this.byKey.set(h.key, arc); if (this.arcs.length > 80) { const dead = this.arcs.shift()!; if (this.byKey.get(dead.key) === dead) this.byKey.delete(dead.key); for (const [id, entry] of this.byEvent) if (entry.arc === dead) this.byEvent.delete(id); } }
     for (const a of e.actors) arc.actors.add(a);
-    // collapse a run of identical beats (gossip re-tells, repeated flirting) into one
+    // Collapse same-day repeats only, preserving yesterday's beat for the dawn paper.
     const lastB = arc.beats[arc.beats.length - 1];
-    if (lastB && lastB.beat === h.beat) { lastB.text = e.text; lastB.imp = Math.max(lastB.imp, e.imp); lastB.t = e.t; lastB.eventId = e.id; this.byEvent.set(e.id, { arc, idx: arc.beats.length - 1 }); }
-    else { arc.beats.push({ t: e.t, text: e.text, eventId: e.id, beat: h.beat, imp: e.imp, icon: e.icon }); if (arc.beats.length > 14) arc.beats.shift(); this.byEvent.set(e.id, { arc, idx: arc.beats.length - 1 }); }
+    if (lastB && lastB.beat === h.beat && Math.floor(lastB.t / MIN) === Math.floor(e.t / MIN)) { lastB.text = e.text; lastB.imp = Math.max(lastB.imp, e.imp); lastB.t = e.t; lastB.eventId = e.id; this.byEvent.set(e.id, { arc, beat: lastB }); }
+    else { const beat = { t: e.t, text: e.text, eventId: e.id, beat: h.beat, imp: e.imp, icon: e.icon }; arc.beats.push(beat); if (arc.beats.length > 14) { const dead = arc.beats.shift()!; for (const [id, entry] of this.byEvent) if (entry.beat === dead) this.byEvent.delete(id); } this.byEvent.set(e.id, { arc, beat }); }
     arc.last = Math.max(arc.last, e.t);
     this.recompute(arc);
   }
@@ -152,7 +152,7 @@ export class ArcTracker {
     return h;
   }
   arcForEvent(id: number): { arc: Arc; beatNo: number } | null {
-    const e = this.byEvent.get(id); if (!e) return null; return { arc: e.arc, beatNo: e.idx + 1 };
+    const e = this.byEvent.get(id); if (!e) return null; const idx = e.arc.beats.indexOf(e.beat); return idx < 0 ? null : { arc: e.arc, beatNo: idx + 1 };
   }
   // top story threads by heat; by default only ones with real shape (>= 2 beats)
   top(n = 4, minBeats = 2, now = this.sim.clock): Arc[] {

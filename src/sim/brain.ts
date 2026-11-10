@@ -132,7 +132,9 @@ export class UtilityBrain implements Brain {
     if (p) opts.push({ x: p.cx, z: p.cz, where: `by ${p.name}`, doing: `skipping stones on ${p.name}`, anim: 'wave', icon: '🪨', line: `${v.first} skipped stones across ${p.name}.`, thought: 'Four skips. Not bad.', ripple: true });
     p = at('laundry'); if (p) opts.push({ x: p.x, z: p.z, where: 'at the laundry line', doing: 'hanging out the washing', anim: 'pickup', icon: '🧺', line: `${v.first} pegged out the washing.`, thought: 'Good drying weather, this.' });
     p = at('market'); if (p) opts.push({ x: p.x, z: p.z, where: 'at the market stall', doing: 'browsing the market stall', anim: 'talk', icon: '🧺', line: `${v.first} browsed the market stall.`, thought: 'Just looking, thank you.' });
-    if (W.dog) opts.push({ x: W.dog.x, z: W.dog.z, where: 'with the village dog', doing: 'petting the village dog', anim: 'feed', icon: '🐕', line: `${v.first} crouched to ruffle the village dog’s ears.`, thought: 'Good dog. Who’s a good dog?' });
+    // The dog wanders per render frame; visits use its fixed plaza meeting spot.
+    p = at('plaza');
+    if (W.dog && p) opts.push({ x: p.x, z: p.z, where: 'with the village dog', doing: 'petting the village dog', anim: 'feed', icon: '🐕', line: `${v.first} crouched to ruffle the village dog’s ears.`, thought: 'Good dog. Who’s a good dog?' });
     if (!opts.length) return false;
     const pick = opts.map(o => ({ o, s: 1 / (1 + Math.hypot(o.x - v.x, o.z - v.z) / 18) + R.range(0, .5) })).sort((a, b) => b.s - a.s)[0].o;
     (v as any)._ambient = sim.clock; v.thought = pick.thought;
@@ -170,17 +172,17 @@ export class UtilityBrain implements Brain {
     const spotNear = (tx: number, tz: number, r: number) => { const a = Math.atan2(v.x - tx, v.z - tz); for (let k = 0; k < 8; k++) { const aa = a + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * .6, x = tx + Math.sin(aa) * r, z = tz + Math.cos(aa) * r; if (W.nav.isFree(x, z)) return { x, z }; } const [x, z] = W.nav.nearestFree(tx + r, tz); return { x, z }; };
     switch (v.job) {
       case 'woodcutter': {
-        const t = W.trees.filter(t => t.state === 'standing' && !t.claimed).sort((a, b) => d(a) - d(b) + R.range(-6, 6))[0]; if (!t) { q.push(A('idle', 'resting', { dur: 20, anim: 'sit' })); return; }
+        const t = W.trees.filter(t => t.state === 'standing' && !t.claimed).map((candidate, index) => ({ candidate, index, score: d(candidate) + R.range(-6, 6) })).sort((a, b) => a.score - b.score || a.index - b.index)[0]?.candidate; if (!t) { q.push(A('idle', 'resting', { dur: 20, anim: 'sit' })); return; }
         t.claimed = v.id; const s = spotNear(t.x, t.z, 1.15); v.thought = R.pick(['That one looks sturdy.', 'One day they\u2019ll call me the best axe in the valley.', 'Watch this!']);
         q.push(A('work', 'swinging an axe in the woods', { kind: 'chop', target: t, ...s, fx: t.x, fz: t.z, dur: R.range(35, 60) })); return;
       }
       case 'miner': {
-        const r = W.rocks.filter(r => !r.claimed).sort((a, b) => d(a) - d(b) + R.range(-4, 4))[0]; if (!r) { q.push(A('idle', 'sizing up the stone', { dur: 20 })); return; }
+        const r = W.rocks.filter(r => !r.claimed).map((candidate, index) => ({ candidate, index, score: d(candidate) + R.range(-4, 4) })).sort((a, b) => a.score - b.score || a.index - b.index)[0]?.candidate; if (!r) { q.push(A('idle', 'sizing up the stone', { dur: 20 })); return; }
         r.claimed = v.id; const s = spotNear(r.x, r.z, 1.4 * r.baseScale); v.thought = R.pick(['Stone doesn\u2019t lie.', 'Swing, swing, swing.', 'Good, honest work.']);
         q.push(A('work', 'carving stone at the quarry', { kind: 'mine', target: r, ...s, fx: r.x, fz: r.z, dur: R.range(40, 60) })); return;
       }
       case 'farmer': {
-        const p = W.plots.filter(p => !p.claimed).sort((a, b) => d(a) - d(b) + R.range(-8, 8))[0]; if (!p) { q.push(A('go', 'checking the fields', { ...this.near(sim, 'fields', 3) })); q.push(A('idle', 'admiring the crops', { dur: 15 })); return; }
+        const p = W.plots.filter(p => !p.claimed).map((candidate, index) => ({ candidate, index, score: d(candidate) + R.range(-8, 8) })).sort((a, b) => a.score - b.score || a.index - b.index)[0]?.candidate; if (!p) { q.push(A('go', 'checking the fields', { ...this.near(sim, 'fields', 3) })); q.push(A('idle', 'admiring the crops', { dur: 15 })); return; }
         p.claimed = v.id; const kind = R.chance(.35) ? 'water' : 'tend'; v.thought = R.pick(['Good soil this year.', 'Rain is coming, I can feel it.', 'Pip should be helping...']);
         q.push(A('work', kind === 'water' ? 'watering the rows' : 'hoeing the rows', { kind, target: p, x: p.x, z: p.z + 2.3, fx: p.x, fz: p.z })); return;
       }
