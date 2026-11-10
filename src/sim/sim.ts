@@ -181,21 +181,28 @@ export class Sim {
   // ---- action executor ------------------------------------------------------------------------
   run(v: Villager, a: Action, dt: number, gdt: number): boolean {
     a.t += gdt; const sp = (a.run ? 3.7 : v.speed * (v.needs.energy < 15 ? .7 : 1));
-    const walk = (x: number, z: number, r = .25) => { if (!a._p) { this.goTo(v, x, z); a._p = 1; } if (this.near(v, x, z, r) || this.stepMove(v, dt, sp)) { v.path = null; return true; } v.anim = a.run ? 'run' : 'walk'; return false; };
+    // walk returns true once movement settles. If the route was unreachable (no path, or a waypoint went
+    // blocked mid-route) the villager stops short of the goal: set a._fail so arrival side effects abort + replan.
+    const walk = (x: number, z: number, r = .25) => {
+      if (!a._p) { this.goTo(v, x, z); a._p = 1; }
+      if (this.near(v, x, z, r)) { v.path = null; return true; }
+      if (this.stepMove(v, dt, sp)) { v.path = null; if (!this.near(v, x, z, r)) { a._fail = true; v.replan = true; v.anim = 'idle'; } return true; }
+      v.anim = a.run ? 'run' : 'walk'; return false;
+    };
     switch (a.type) {
       case 'go': { if (a.t > 240) return true; if (walk(a.x, a.z, a.r ?? .3)) { v.anim = 'idle'; return true; } return false; }
       case 'idle': { v.anim = a.anim ?? 'idle'; if (a.face !== undefined) v.heading = a.face; if (a.t >= a.dur) { a.after?.(this); return true; } return false; }
       case 'eat': { v.anim = a.anim ?? 'drink'; if (!a._e) { a._e = 1; v.needs.food = clamp(v.needs.food + (a.food ?? 40), 0, 100); v.emotions.joy += .1; if (a.say) this.say(v, this.rng.pick(['Mmm!', 'Delicious.', 'Just what I needed.']), a.icon ?? '🍞', 2); } return a.t >= (a.dur ?? 12); }
       case 'enter': {
         const p = this.place(a.place);
-        if (!a._in) { if (!walk(p.x, p.z, .4)) return false; a._in = 1; a.t0 = this.clock; v.inside = p.id; p.inside.add(v.id); v.avatar.targetAlpha = 0; v.anim = 'idle'; v.heading = Math.PI; a.onEnter?.(v, this); }
+        if (!a._in) { if (!walk(p.x, p.z, .4)) return false; if (a._fail) return true; a._in = 1; a.t0 = this.clock; v.inside = p.id; p.inside.add(v.id); v.avatar.targetAlpha = 0; v.anim = 'idle'; v.heading = Math.PI; a.onEnter?.(v, this); }
         const until = a.until ?? (a.t0 + a.dur);
         if (a.smoke) p.smokeUntil = Math.max(p.smokeUntil, this.clock + 5);
         if (this.clock >= until || a.interrupt) { v.inside = null; p.inside.delete(v.id); v.avatar.targetAlpha = 1; v.z = p.z + .4; a.onExit?.(v, this); return true; }
         return false;
       }
       case 'sit': {
-        if (!a._s) { const s = a.seat as Seat; if (!walk(s.x + Math.sin(s.rot) * .55, s.z + Math.cos(s.rot) * .55, .3)) return false; a._s = 1; v.x = s.x; v.z = s.z; v.heading = s.rot; }
+        if (!a._s) { const s = a.seat as Seat; if (!walk(s.x + Math.sin(s.rot) * .55, s.z + Math.cos(s.rot) * .55, .3)) return false; if (a._fail) { this.leaveSeat(v); return true; } a._s = 1; v.x = s.x; v.z = s.z; v.heading = s.rot; }
         v.anim = a.anim2 && Math.sin(a.t * .2) > .3 ? a.anim2 : 'sit'; if (a.t >= a.dur || a.interrupt) { this.leaveSeat(v); const s = a.seat as Seat; v.x = s.x + Math.sin(s.rot) * .6; v.z = s.z + Math.cos(s.rot) * .6; v.anim = 'idle'; return true; } return false;
       }
       case 'work': return this.work(v, a, dt, walk);
@@ -215,7 +222,7 @@ export class Sim {
       case 'attend': return this.attend(v, a, dt, walk);
       case 'claim': {
         const g = this.gifts.find(x => x === a.gift); if (!g || g.claimedBy) { if (g?.claimedBy && g.claimedBy !== v.id) { v.emotions.sadness += .2; v.emotions.anger += .2; this.say(v, 'Aww, too slow!', '😤', 2); } return true; }
-        a.run = true; if (!walk(g.x, g.z, .9)) return false;
+        a.run = true; if (!walk(g.x, g.z, .9)) return false; if (a._fail) return true;
         g.claimedBy = v.id; g.obj.visible = false; v.emotions.joy = 1; v.emotions.surprise = .8; this.world.fx.sparkle(g.x, .5, g.z, [1, .8, .4], 20);
         const [ic, nm] = this.rng.pick([['🎶', 'a tinkling music box'], ['🔮', 'a glowing marble'], ['🪶', 'a golden feather'], ['⭐', 'a fallen star in a jar'], ['🧭', 'a compass that points home']]); const kid = `gift${this.eid}`;
         this.keepsakes.set(kid, { id: kid, name: nm, icon: ic, owner: v.id, holder: v.id });
@@ -232,7 +239,7 @@ export class Sim {
     const gdtW = dt * MIN_PER_SEC;
     const W = this.world, fx = W.fx, av = v.avatar;
     if (!a._snap) { a._snap = 1; const nv = this.world.nav; if (!nv.isFree(a.x, a.z)) { const [fx, fz] = nv.nearestFree(a.x, a.z); a.x = fx; a.z = fz; } } // never work standing inside a stall or wall
-    if (!a._at) { if (!walk(a.x, a.z, .35)) return false; a._at = 1; v.heading = Math.atan2(a.fx - v.x, a.fz - v.z); av.onHit = null; }
+    if (!a._at) { if (!walk(a.x, a.z, .35)) return false; if (a._fail) { if (a.target?.claimed === v.id) a.target.claimed = null; return true; } a._at = 1; v.heading = Math.atan2(a.fx - v.x, a.fz - v.z); av.onHit = null; }
     v.heading = Math.atan2(a.fx - v.x, a.fz - v.z);
     if (!a._quip && a.t > 8) { a._quip = 1; const Q: Record<string, string[]> = { chop: ['Timber! ...just kidding.', 'Swing, and swing again.', 'Good honest oak, this.'], mine: ['Clink. Clink. Clink.', 'Something sparkly in here...', 'Solid rock, solid work.'], forge: ['Hot iron waits for no one!', 'Mind the sparks!', 'Clang! Lovely.'], forge0: ['Bellows, do your thing.'], tend: ['Grow, my beauties.', 'Who planted weeds here?!'], water: ['Drink up, little sprouts.'], feed: ['Here, chook chook chook!', 'One at a time, ladies!'], serve: ['Who\u2019s thirsty?', 'Another round?'], sort: ['Letters for half the village today!', 'Who writes to a goat?', 'This one smells of perfume...'], bake: ['Mind the oven, it\u2019s hot!', 'Smell that? Fresh loaves!'], haul: ['No flour, no bread.', 'These sacks don\u2019t lift themselves.', 'The stones are hungry today.'], fish: ['Come on, bite...', 'Easy... easy...', 'Just me and the water.'], herb: ['Chamomile, mint, a little sage.', 'Mind the nettles.', 'This one\u2019s good for a cough.'], teach: ['Posture, please!', 'Now, your letters.', 'Attention at the back!'] };
       const q = Q[a.kind]; if (q && this.rng.chance(.45)) this.say(v, this.rng.pick(q), '', 2.6); }
@@ -350,7 +357,7 @@ export class Sim {
       if (this.festivalUntil > this.clock && p.place === 'plaza' && a.ring === undefined && !a.seat) { a.ring = this.ringN = (this.ringN + 1) % 16; a.spot = [pl.cx + Math.cos(a.ring * .79) * 3.1, pl.cz + Math.sin(a.ring * .79) * 3.1]; }
       if (!a.seat && !a.spot) { a.seat = p.place === 'campfire' ? this.takeSeat(v, 'campfire') : (p.place === 'plaza' ? this.takeSeat(v, 'bench') : null); if (!a.seat) { const ang = this.rng.range(0, 6.28), r = p.place === 'campfire' ? 3.4 : 2.2 + this.rng.range(0, 1.5); a.spot = [pl.cx + Math.sin(ang) * r, pl.cz + 2.5 + Math.cos(ang) * r]; if (p.place === 'tavern') a.spot = [pl.x + this.rng.range(-3.5, 3.5), pl.z + this.rng.range(.5, 3)]; a.spot = this.world.nav.nearestFree(a.spot[0], a.spot[1]); } }
       const [x, z] = a.seat ? [a.seat.x + Math.sin(a.seat.rot) * .55, a.seat.z + Math.cos(a.seat.rot) * .55] : a.spot;
-      if (!walk(x, z, .35)) return false; a._at = 1; p.attendees.add(v.id); if (a.seat) { v.x = a.seat.x; v.z = a.seat.z; v.heading = a.seat.rot; }
+      if (!walk(x, z, .35)) return false; if (a._fail) { this.leaveSeat(v); return true; } a._at = 1; p.attendees.add(v.id); if (a.seat) { v.x = a.seat.x; v.z = a.seat.z; v.heading = a.seat.rot; }
       if (v.id !== p.host) { const host = this.byId.get(p.host)!; this.say(v, this.rng.pick([`Thanks for having me, ${host.first}!`, 'What a night!', 'Save me a seat!', 'I brought my appetite.']), this.rng.pick(['🎉', '🍻', '😄'])); }
       else this.say(v, this.rng.pick(['Welcome, welcome!', 'Everyone grab a seat!', 'Let the fun begin!']), '🎉');
     }
