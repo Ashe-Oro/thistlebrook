@@ -323,8 +323,9 @@ export class World {
   setFinale(on: boolean) {
     if (on && !this.finaleLanterns) {
       const pl = this.places.get('plaza')!;
-      const mesh = new THREE.InstancedMesh(new THREE.SphereGeometry(.25, 8, 6), new THREE.MeshBasicMaterial({ color: '#ffd68c' }), 16), dummy = new THREE.Object3D();
-      for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2, r = i < 8 ? 5.8 : 1.1; dummy.position.set(pl.cx + Math.cos(a) * r, i < 8 ? 3.5 : 1.8 + (i % 3) * .45, pl.cz + Math.sin(a) * r); dummy.scale.set(1, 1.4, 1); dummy.updateMatrix(); mesh.setMatrixAt(i, dummy.matrix); }
+      /* paper lanterns strung high over the plaza edge, never in the crowd's faces */
+      const n = 26, mesh = new THREE.InstancedMesh(new THREE.SphereGeometry(.12, 8, 6), new THREE.MeshBasicMaterial({ color: '#ffffff' }), n), dummy = new THREE.Object3D(), tints = ['#ffb35c', '#ff7a6b', '#ffd98a', '#f59fd0'].map(c => new THREE.Color(c));
+      for (let i = 0; i < n; i++) { const outer = i >= 12, k = outer ? i - 12 : i, a = k / (outer ? 14 : 12) * Math.PI * 2 + (outer ? .2 : 0), r = outer ? 9 : 6.2; dummy.position.set(pl.cx + Math.cos(a) * r, (outer ? 4.6 : 4.2) + Math.sin(k * 1.7) * .2, pl.cz + Math.sin(a) * r); dummy.scale.set(1, 1.35, 1); dummy.updateMatrix(); mesh.setMatrixAt(i, dummy.matrix); mesh.setColorAt(i, tints[i % 4]); }
       mesh.instanceMatrix.needsUpdate = true; this.scene.add(mesh); this.finaleLanterns = mesh;
     }
     if (this.finaleLanterns) this.finaleLanterns.visible = on;

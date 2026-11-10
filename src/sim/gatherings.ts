@@ -94,7 +94,7 @@ function seasonRecap(sim: Sim, day: number, season: Season): string {
   const bits: string[] = [];
   if (weddings) bits.push(`${weddings} wedding${weddings > 1 ? 's' : ''}`);
   if (newLove) bits.push(`${newLove} new sweetheart${newLove > 1 ? 's' : ''}`);
-  if (settled) bits.push(`${settled} feud${settled > 1 ? 's' : ''} settled`);
+  if (settled) bits.push(`${settled} quarrel${settled > 1 ? 's' : ''} mended`);
   if (fights) bits.push(`${fights} scuffle${fights > 1 ? 's' : ''} best forgotten`);
   if (!bits.length) return `This ${season.toLowerCase()}: quiet days and friendships warmed.`;
   return `This ${season.toLowerCase()}: ${listJoin(bits)}.`;
@@ -109,7 +109,7 @@ function tickFinale(sim: Sim, g: Gathering) {
     if (wed) { g.at = Math.max(g.at, wed.until + 5); return; } // a wedding party still dancing? let it finish and flow in
     g.phase = 'on'; g.until = (g.day - 1) * 1440 + H(23);
     const theme = sim.festivalTheme, title = theme ? `${base} — ${theme}` : base;
-    sim.finaleTitle = `Season Finale: ${title.replace(/^the /, '')}`;
+    sim.finaleTitle = `Season Finale: ${base.replace(/^the /, '')}`; void title;
     if (sim.rainUntil > sim.clock) { sim.rainUntil = sim.clock; sim.log('The clouds parted for the finale, as if the sky knew.', 3, [], 'weather', '🌤️', pl.cx, pl.cz); }
     const host = [...sim.villagers].sort((a, b) => sim.popularity(b) - sim.popularity(a))[0];
     g.host = host.id; g.actors = [host.id];
@@ -165,7 +165,7 @@ function tickFinale(sim: Sim, g: Gathering) {
         b.act = { type: 'idle', anim, dur: 13, t: 0, label: `${what} with ${a.first}`, locked: true, face: b.heading };
         p.focus = [cx, cz]; p.cheerUntil = sim.clock + 4;
         sim.say(a, 'Winner leads the next dance!', '😄', 3); sim.say(b, 'You’re on!', '😆', 3);
-        sim.log(`A friendly ${what} at ${base}: ${a.first} against ${b.first}, the whole village egging them on!`, 6, [a.id, b.id, ...crowd.slice(0, 3)], 'festival', icon, cx, cz);
+        sim.log(`${what.replace(/^an? /, m => m === 'an ' ? 'An ' : 'A ')} for the crown of ${base}: ${a.first} against ${b.first}, the whole village egging them on!`, 6, [a.id, b.id, ...crowd.slice(0, 3)], 'festival', icon, cx, cz);
         d.cA = a.id; d.cB = b.id; d.cWhat = what;
       }
     }
@@ -178,7 +178,7 @@ function tickFinale(sim: Sim, g: Gathering) {
     w.emotions.joy = 1; sim.icon(w, '🏆'); a.act = null; b.act = null; // back into the dance
     for (const id of crowd) { const u = sim.byId.get(id)!; nudge(u, w, 3); }
     w.queue.push({ type: 'idle', anim: 'cheer', dur: 7, t: 0, label: 'soaking up the cheers' });
-    sim.log(`${w.first} won the ${what} at ${base}! ${l.first} took the loss with a grin and a bow.`, 7, [w.id, l.id, ...crowd.slice(0, 3)], 'festival', '🏆', w.x, w.z);
+    sim.log(`${w.first} won the ${what.replace(/^an? /, '')} at ${base}! ${l.first} took the loss with a grin and a bow.`, 7, [w.id, l.id, ...crowd.slice(0, 3)], 'festival', '🏆', w.x, w.z);
     for (const v of [a, b]) v.queue.push({ type: 'attend', party: p.id, t: 0, label: `at ${p.title}` });
     p.cheerUntil = sim.clock + 6; p.focus = undefined;
     return;
@@ -232,7 +232,7 @@ function tickFinale(sim: Sim, g: Gathering) {
   // 5. the grand dance — the ring joins hands round the bonfire
   if (!d.danced && sim.clock >= d.danceAt) {
     d.danced = 1; p.dance = true; p.quietUntil = 0; p.cheerUntil = sim.clock + 7; p.focus = undefined;
-    sim.log(`Fiddles struck up and the whole village joined hands for the grand ${base} dance around the lanterns.`, 6, [host.id, ...crowd.slice(0, 5)], 'festival', '💃', pl.cx, pl.cz);
+    sim.log(`Fiddles struck up and the whole village joined hands for the grand dance of ${base}, round and round the lanterns.`, 6, [host.id, ...crowd.slice(0, 5)], 'festival', '💃', pl.cx, pl.cz);
     return;
   }
   // 6. the closing toast, the season's tally, and fireworks to send it out

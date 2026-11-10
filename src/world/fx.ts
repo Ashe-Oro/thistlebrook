@@ -53,13 +53,13 @@ export class FX {
     this.fireworksOn = on; this.fireworksLight = Math.max(0, this.fireworksLight - dt * 1.6);
     if (!on) return;
     this.fireworksAge += dt;
-    if (this.fireworksAge > 20 || this.fireworksAge < this.nextBurst) return;
-    this.nextBurst = this.fireworksAge + 2.8;
-    const rand = () => this.fireRandom(), bx = x + (rand() - .5) * 15, by = 13 + rand() * 7, bz = z + (rand() - .5) * 10;
+    if (this.fireworksAge > 40 || this.fireworksAge < this.nextBurst) return;
+    this.nextBurst = this.fireworksAge + 1.6;
+    const rand = () => this.fireRandom(), bx = x + (rand() - .5) * 15, by = 9 + rand() * 5, bz = z + (rand() - .5) * 10;
     const color = new THREE.Color().setHSL(rand(), .85, .65);
     for (let i = 0; i < 140; i++) {
       const a = rand() * Math.PI * 2, u = rand() * 2 - 1, r = Math.sqrt(1 - u * u), speed = 2 + rand() * 4;
-      this.fireworks.emit({ x: bx, y: by, z: bz, vx: Math.cos(a) * r * speed, vy: u * speed, vz: Math.sin(a) * r * speed, max: 2.2 + rand(), size: .24, r: color.r, g: color.g, b: color.b, grav: 1.1, drag: .3 });
+      this.fireworks.emit({ x: bx, y: by, z: bz, vx: Math.cos(a) * r * speed, vy: u * speed, vz: Math.sin(a) * r * speed, max: 2.2 + rand(), size: .55, r: color.r, g: color.g, b: color.b, grav: 1.1, drag: .3 });
     }
     this.fireworksLight = .6;
   }

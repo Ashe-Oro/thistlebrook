@@ -19,7 +19,7 @@ export function keepsakeNeedle(name: string): string {
 // punchy display noun: drop a leading flavour adjective and title-case ("lucky geode" → "Geode", "little black book" → "Black Book")
 function keepsakeTitle(needle: string): string {
   const core = needle.replace(/^(lucky|silver|carved|little|old|golden|wooden|his|her)\s+/i, '');
-  return core.replace(/\b\w/g, c => c.toUpperCase());
+  return core.replace(/(^|[\s-])(\w)/g, (_m, sp, c) => sp + c.toUpperCase()); /* not after an apostrophe: "Sailor’s" */
 }
 const pairKey = (a: string, b: string) => [a, b].sort().join('~');
 
