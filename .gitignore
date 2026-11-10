@@ -1,0 +1,21 @@
+# Licensed ThreeJS Assets content: never commit, never upload
+licensed/
+dist/
+node_modules/
+shots/
+
+*.glb
+*.gltf
+*.fbx
+*.mp4
+*.webm
+licensed
+node_modules
+dist
+CLAUDE_*.txt
+tools/_*.mjs
+
+# Vercel staging output (licensed GLBs + release bundle)
+deploy-out/
+.vercel/
+*.map
