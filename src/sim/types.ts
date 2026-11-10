@@ -31,3 +31,5 @@ export interface Gathering {
 // The village pet lives sim-side (the render dog is cosmetic and must never feed back into the sim).
 export interface Pet { name: string; x: number; z: number; state: 'home' | 'missing'; since: number; spot: string | null; }
 export interface Decree { day: number; topic: string; question: string; choice: string; votes: Record<string, string>; }
+// One recorded exchange: the full lines as written (bubbles on screen show a shortened variant).
+export interface Transcript { id: number; t: number; who: string[]; place: string | null; lines: { who: string; text: string; emoji: string; t: number }[]; }

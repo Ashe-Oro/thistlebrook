@@ -245,3 +245,91 @@ body.cinematic .storyguide, body:has(.cine.on) .storyguide { opacity:0; pointer-
 .sndpop.hidden { display: none; }
 .sndpop label { display: flex; align-items: center; gap: 6px; cursor: pointer; } .sndpop label.vol { flex-direction: column; align-items: stretch; gap: 2px; font-size: 11.5px; opacity: .85; }
 .sndpop input[type=range] { width: 100%; accent-color: #b5653a; } .sndpop button { text-align: left; }
+
+/* ==== Round 8: cozy, decluttered default — the village is the star ==================================== */
+/* top bar: no big slab, just a few soft floating pills */
+.topbar { background: none; border: 0; box-shadow: none; padding: 0; gap: 8px; pointer-events: none; }
+.topbar > * { pointer-events: auto; }
+.topbar .brand, .topbar .speeds, .topbar .toggles, .topbar .clock { background: rgba(251, 244, 228, .82); border: 1px solid rgba(215, 195, 154, .7); border-radius: 18px; box-shadow: 0 3px 12px rgba(40, 25, 10, .14); backdrop-filter: blur(6px); }
+.topbar .brand { padding: 3px 12px 3px 8px; } .brand .logo { font-size: 18px; } .brand b { font-size: 15px; }
+.topbar .clock { font-size: 13.5px; padding: 6px 12px; }
+.topbar .speeds, .topbar .toggles { padding: 3px; gap: 2px; }
+.topbar .speeds button, .topbar .toggles button { border: 0; background: transparent; border-radius: 14px; padding: 3px 9px; }
+.topbar .speeds button.on { background: var(--accent); color: #fff; }
+.topbar .speeds button:hover, .topbar .toggles button:hover { background: rgba(255, 255, 255, .8); transform: none; }
+
+/* panels: closed by default, opened from the dock */
+.feedwrap:not(.open), .lb:not(.open), .storyguide:not(.open) { display: none !important; }
+.feedwrap.open, .lb.open, .storyguide.open { animation: panelin .28s ease-out; }
+@keyframes panelin { from { opacity: 0; transform: translateY(8px); } }
+.storyguide.open { transform: translateX(-50%); }
+.feedwrap { width: 330px; } .feedwrap .ph b, .lb .ph b { font-size: 14px; }
+.feedtog { border: 0; background: transparent; }
+@media (max-width: 1100px) { .storyguide.open { display: block; } }
+
+/* dock: one slim row of icons, labels in tooltips */
+.dock { gap: 4px; padding: 4px 6px; border-radius: 22px; background: rgba(251, 244, 228, .84); backdrop-filter: blur(6px); box-shadow: 0 4px 16px rgba(40, 25, 10, .16); }
+.dock .grp { gap: 2px; } .dock .grp + .grp { border-left: 1px solid rgba(160, 130, 80, .25); padding-left: 4px; }
+.dock .lbl, .dock button i, .dock button b.s { display: none !important; }
+.dock button { position: relative; min-width: 0; padding: 5px 7px; font-size: 18px; border: 0; background: transparent; border-radius: 14px; line-height: 1; }
+.dock button:hover { background: rgba(255, 255, 255, .85); transform: translateY(-1px); }
+.dock button.on { background: #f1d9b5; color: inherit; box-shadow: inset 0 0 0 1px #d9b583; }
+.dock button.badge-on::before { content: attr(data-badge); position: absolute; top: 0; right: 0; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px; background: #d98b5f; color: #fff; font: 700 9px/14px system-ui, sans-serif; text-align: center; }
+/* the hover label: a small cozy tooltip above the icon */
+@media (hover: hover) { .dock button:hover i { display: block !important; position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); white-space: nowrap; font: 600 11px system-ui, sans-serif; font-style: normal; color: #fff4dd; background: rgba(50, 36, 22, .88); padding: 3px 8px; border-radius: 8px; pointer-events: none; } }
+.dock button.cool::after { left: 20%; width: 60%; border-radius: 2px; }
+
+/* name tags: small, soft, only on hover / focus */
+.tag { background: rgba(60, 44, 28, .55); font-size: 10.5px; padding: 0 6px 0 4px; border-radius: 9px; }
+
+/* speech bubbles: small, rounded, warm; gentle fade + float in */
+.bubble { max-width: 176px; padding: 4px 10px; font-size: 12.5px; line-height: 1.3; font-weight: 500; border-radius: 14px; background: #fffaf0; color: #4a3826; border: 1px solid rgba(215, 190, 150, .55); box-shadow: 0 2px 8px rgba(60, 40, 20, .18); transform-origin: 50% 100%; transition: opacity .32s ease; opacity: 1; will-change: transform, opacity; }
+.bubble.below { transform-origin: 50% 0; }
+.bubble .em { margin-right: 3px; font-size: 13px; vertical-align: -1px; }
+.bubble::after { bottom: -6px; margin-left: -6px; border-width: 6px 6px 0; border-top-color: var(--bub, #fffaf0); }
+.bubble.below::after { top: -6px; border-width: 0 6px 6px; border-bottom-color: var(--bub, #fffaf0); }
+.bubble.out { opacity: 0 !important; }
+.bubble.pop { animation: bubin .34s ease-out; } @keyframes bubin { from { opacity: 0; translate: 0 6px; } }
+.bubble.m-love { --bub: #ffeef3; background: #ffeef3; border-color: #f3c2d2; color: #7d3551; }
+.bubble.m-angry { --bub: #fff0e6; background: #fff0e6; border-color: #eec0a2; color: #7a3d22; }
+.bubble.m-sad { --bub: #eef3fb; background: #eef3fb; border-color: #c6d3e8; color: #3e4f6c; }
+.bubble.m-secret { --bub: #f4effa; background: #f4effa; border-color: #d5c8e6; color: #56407a; font-style: italic; }
+.bubble.m-cheer { --bub: #fff6dc; background: #fff6dc; border-color: #ecd394; }
+.bubble.m-happy { --bub: #fbfbec; background: #fbfbec; border-color: #dcdcae; }
+
+/* captions, toasts, letters: one short line each */
+.caption { font-size: 13px; padding: 5px 14px; border-radius: 16px; max-width: min(520px, 86vw); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: rgba(48, 34, 20, .62); backdrop-filter: blur(4px); }
+.toasts { top: calc(env(safe-area-inset-top, 0px) + var(--top-h) + 22px); gap: 6px; }
+.toast { flex-direction: row; gap: 8px; padding: 5px 14px; border-width: 1px; border-color: #e6c27a; border-radius: 16px; font-size: 12px; max-width: min(440px, 88vw); background: rgba(255, 245, 214, .94); box-shadow: 0 4px 14px rgba(60, 40, 20, .18); }
+.toast b { font-size: 13px; white-space: nowrap; } .toast span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #6d5a3c; }
+.letter-toast { pointer-events: auto; display: flex; align-items: center; gap: 8px; padding: 5px 12px 5px 8px; border-radius: 16px; background: #fbf1dc; border: 1px solid #dcc59a; box-shadow: 0 4px 14px rgba(60, 40, 20, .18); max-width: min(300px, 86vw); text-align: left; animation: toastin .45s ease-out; transition: opacity .7s; }
+.letter-toast.out { opacity: 0; } .letter-toast .lt-ic { font-size: 18px; }
+.letter-toast .lt-tx { display: flex; flex-direction: column; min-width: 0; } .letter-toast b { font: 700 12px var(--serif); } .letter-toast small { font: italic 11.5px var(--serif); color: #7a6446; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hint { font-size: 12px; padding: 5px 12px; background: rgba(48, 34, 20, .66); }
+.landmark { font-size: 10px; padding: 1px 7px 1px 4px; background: rgba(251, 244, 228, .72); }
+
+/* cinematic beats: thin, soft letterbox and a one-line title */
+.cine .bar { height: 6.5vh; background: rgba(14, 11, 8, .82); }
+.cine .ct { bottom: .9vh; }
+.cine .ct em { font-size: 1.9vh; } .cine .ct b { font-size: 2.3vh; letter-spacing: .1em; }
+.cine .ct span { display: inline; margin: 0 0 0 .8em; font-size: 1.7vh; white-space: nowrap; max-height: none; }
+.cine .ct span:not(:empty)::before { content: '· '; opacity: .6; }
+
+@media (max-width: 700px), (pointer: coarse) {
+  .topbar .brand { display: none; }
+  .topbar .clock { font-size: 11.5px; padding: 5px 9px; }
+  .dock { left: 50%; right: auto; transform: translateX(-50%); width: auto; max-width: calc(100% - 12px); flex-wrap: nowrap; padding: 3px 4px; gap: 2px; }
+  .dock .grp { flex: none; gap: 0; } .dock .grp + .grp { padding-left: 2px; }
+  .dock button { flex: none; min-height: 40px; min-width: 34px; padding: 4px 5px; font-size: 17px; }
+  .feedwrap.open { max-height: 40vh; }
+  .bubble { max-width: 140px; font-size: 11.5px; padding: 3px 8px; }
+  .cine .ct span { display: block; margin: .3vh 0 0; } .cine .ct span::before { content: none !important; }
+  .cine .bar { height: 8vh; }
+}
+@media (max-width: 380px) { .dock button { min-width: 30px; padding: 4px 3px; font-size: 16px; } }
+@media (max-width: 700px), (pointer: coarse) {
+  .topbar { gap: 4px; justify-content: flex-start; }
+  .topbar .clock { flex: 0 1 auto; }
+  .topbar .toggles { margin-left: auto; }
+  .topbar .speeds button, .topbar .toggles button { min-height: 32px; min-width: 32px; padding: 0 7px; }
+}

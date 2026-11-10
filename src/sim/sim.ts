@@ -3,7 +3,7 @@ import { KEEPSAKES, type VillagerDef } from '../data/villagers';
 import { World, type Place, type Seat } from '../world/world';
 import { MemoryStream, type Fact } from '../agents/memory';
 import { RNG, clamp, hourOf, dayOf, fmtTime } from '../core/util';
-import type { Villager, Action, SimEvent, Alliance, Keepsake, Gathering, Pet, Decree } from './types';
+import type { Villager, Action, SimEvent, Alliance, Keepsake, Gathering, Pet, Decree, Transcript } from './types';
 import type { Brain } from './brain';
 import { resolveSocial, maybeOverhear, grievance, addGrievance } from './social';
 import { tickGatherings } from './gatherings';
@@ -44,9 +44,21 @@ export class Sim {
   festivalTheme: string | null = null; festivalShown = false;
   // season finale (gatherings.ts): the lit-plaza window (bonfire/lanterns), the fireworks-climax window, and the themed card title
   finaleUntil = 0; fireworksUntil = 0; finaleTitle = '';
+  // Full, unshortened dialogue for every exchange and one-off line (speech bubbles show only a short variant).
+  // Presentation data only: never read by the sim, so it cannot affect determinism. Kept for a future
+  // "read their conversation" view once villagers are real AI agents.
+  transcripts: Transcript[] = []; transcriptN = 0;
   constructor(public world: World) {}
   on(k: string, f: (...a: any[]) => void) { (this.listeners[k] ??= []).push(f); }
-  emit(k: string, ...a: any[]) { for (const f of this.listeners[k] ?? []) f(...a); }
+  emit(k: string, ...a: any[]) { if (k === 'convo') this.record(a[0]); for (const f of this.listeners[k] ?? []) f(...a); }
+  private record(lines: { who: string; text: string; emoji: string; at: number }[]) {
+    if (!lines?.length) return;
+    const who = [...new Set(lines.map(l => l.who))];
+    this.transcripts.push({ id: this.transcriptN++, t: this.clock, who, place: this.byId.get(who[0])?.inside ?? null, lines: lines.map(l => ({ who: l.who, text: l.text, emoji: l.emoji, t: l.at })) });
+    if (this.transcripts.length > 400) this.transcripts.shift();
+  }
+  /** Full transcripts that include a villager (newest last). */
+  transcriptsOf(id: string) { return this.transcripts.filter(t => t.who.includes(id)); }
   get day() { return dayOf(this.clock); } get hour() { return hourOf(this.clock); }
   place(id: string) { return this.world.places.get(id)!; }
 
@@ -91,7 +103,7 @@ export class Sim {
     this.story(actors, text); this.emit('event', ev); return ev;
   }
   story(actors: string[], text: string) { for (const id of actors) { const v = this.byId.get(id); if (v) { v.story.push({ t: this.clock, text }); if (v.story.length > 80) v.story.shift(); } } }
-  say(v: Villager, text: string, emoji = '', dur = 3.2) { this.emit('bubble', v, text, emoji, dur); }
+  say(v: Villager, text: string, emoji = '', dur = 3.2) { this.record([{ who: v.id, text, emoji, at: this.clock }]); this.emit('bubble', v, text, emoji, dur); }
   icon(v: Villager, emoji: string) { this.emit('icon', v, emoji); }
   fact(kind: Fact['kind'], text: string, actor: string, about: string, valence: number, imp: number, target?: string): Fact { return { id: `f${this.factN++}`, kind, text, actor, about, target, valence, imp, t: this.clock, origin: actor }; }
   // Everyone nearby (and the participants) remembers what happened.
