@@ -273,6 +273,7 @@ export class UI {
   // Speech bubble: a short line (the full text stays in sim.transcripts / the chronicle), tinted by mood.
   // In a two-way exchange the listener's bubble steps aside so the pair alternates.
   bubble(id: string, text: string, emoji: string, dur: number, listener?: string) {
+    if (this.quiet) return; // fast-forwarding: the transcript keeps the line, the screen doesn't
     let b = this.bubbles.get(id); if (!b) { const el = h('div', 'bubble'); this.overlay.appendChild(el); b = { el, until: 0, t0: 0, full: '', occ: false, occT: 0 }; this.bubbles.set(id, b); }
     const now = performance.now(), short = shortLine(text), mood = moodOf(emoji);
     const paint = (t: string) => setHTML(b!.el, `${emoji ? `<span class="em">${emoji}</span>` : ''}<span class="bt">${esc(t)}</span>`);
@@ -317,7 +318,7 @@ export class UI {
     const s = this.app.sim, now = performance.now();
     const status = llm.status(), chip = this.root.querySelector<HTMLElement>('#llm-status')!;
     chip.hidden = !status.enabled; const label = status.ok ? '🧠 LLM · ok' : '🧠 LLM · offline'; if (chip.textContent !== label) chip.textContent = label;
-    while (this.convo.length && this.convo[0].at <= s.clock) { const c = this.convo.shift()!; const v = s.byId.get(c.who); if (v && !v.inside) this.bubble(c.who, c.text, c.emoji, 3, c.listener); }
+    while (this.convo.length && this.convo[0].at <= s.clock) { const c = this.convo.shift()!; if (c.at < s.clock - 8) continue; const v = s.byId.get(c.who); if (v && !v.inside) this.bubble(c.who, c.text, c.emoji, 3, c.listener); }
     if (this.convo.length > 60) this.convo.splice(0, this.convo.length - 60);
     const W = window.innerWidth, HT = this.safeTop;
     { const far = this.app.camDist() > 42; this.markT += dt; for (const m of this.marks) { if (!far) { this.setDisp(m.el, false); continue; } const p = this.app.project(m.x, 5, m.z); const on = p.on && p.y > HT + 10; this.setDisp(m.el, on); if (on) m.el.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, -100%)`; } }
