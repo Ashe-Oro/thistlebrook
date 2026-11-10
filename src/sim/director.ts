@@ -92,6 +92,10 @@ function headlineOf(e: SimEvent, s: Sim, day: number) {
   const pick = (arr: string[]) => editorial(`headline:${day}:${e.id}`).pick(arr);
   // punchy small-town tabloid headlines — several per event kind, chosen deterministically from the issue and event IDs
   const H: Record<string, string[]> = {
+    wedding: [`WEDDING BELLS! ${a} and ${b} Tie the Knot`, `${a} WEDS ${b}: Village Celebrates`],
+    showdown: [`SHOWDOWN AT THE FESTIVAL: ${a} vs ${b}`, `${a} TRIUMPHS as Feud Boils Over`],
+    search: [`THE HUNT FOR BISCUIT`, `DOG DAY DRAMA: Village Turns Out for Lost Hound`],
+    meeting: [`THE VILLAGE HAS SPOKEN`, `VOTES CAST at Town Meeting`],
     fight: [`FISTICUFFS! ${a} and ${b} Brawl in Broad Daylight`, `PUNCH-UP IN THE PLAZA: ${a} vs ${b}`, `${a} and ${b} Come to Blows!`, `BLACK EYES ALL ROUND as ${a} Clashes With ${b}`],
     theft: [`THIEF STRIKES THISTLEBROOK — ${a} Implicated`, `LIGHT FINGERS! ${a} Under Suspicion`, `SOMETHING’S GONE MISSING — All Eyes on ${a}`, `WHO’S THE SNEAK? ${a} in the Frame`],
     ally: [`NEW POWER BLOC: ${a} & ${b} Join Forces`, `${a} and ${b} Shake on It`, `ALLIANCE! ${a} and ${b} Throw In Together`, `BANNERS RAISED as ${a} & ${b} Unite`],

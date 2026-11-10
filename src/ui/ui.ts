@@ -89,8 +89,8 @@ export class UI {
     if (e.kind === 'life') return 'life';
     if (e.kind === 'weather') return 'weather'; // routine weather stays out of Drama; only in All
     if (this.isLie(e)) return 'drama'; // fabricated rumours are the heart of the drama
-    return ['theft', 'burglary', 'fight', 'argue', 'accuse', 'god', 'traveller', 'festival', 'reconcile', 'ally', 'romance', 'rumour', 'snoop', 'sneaky', 'heartbreak'].includes(e.kind) ? 'drama'
-      : ['talk', 'gift', 'gossip', 'invite', 'party', 'bond', 'reflect', 'generous', 'lunch', 'breakfast', 'evening', 'social'].includes(e.kind) ? 'social' : 'work';
+    return ['theft', 'burglary', 'fight', 'argue', 'accuse', 'god', 'traveller', 'festival', 'reconcile', 'ally', 'romance', 'rumour', 'snoop', 'sneaky', 'heartbreak', 'wedding', 'showdown', 'search'].includes(e.kind) ? 'drama'
+      : ['talk', 'gift', 'gossip', 'invite', 'party', 'bond', 'reflect', 'generous', 'lunch', 'breakfast', 'evening', 'social', 'meeting', 'market', 'calendar'].includes(e.kind) ? 'social' : 'work';
   }
   addFeed(e: SimEvent) {
     if (e.kind === 'life') { this.addLife(e); return; }

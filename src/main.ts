@@ -283,6 +283,8 @@ function pickShots(day: number): MontageShot[] {
 // kind → how each restaged actor plays the memory (index 0 is the event's protagonist)
 function flashbackPose(kind: string, icon: string, i: number): { anim: Anim; expr: string } {
   if (kind === 'fight') return { anim: 'fight', expr: 'angry' };
+  if (kind === 'wedding') return icon === '💢' ? { anim: 'point', expr: 'angry' } : { anim: i < 2 ? 'talk' : 'cheer', expr: 'love' };
+  if (kind === 'showdown') return { anim: i === 0 ? 'cheer' : 'sad', expr: i === 0 ? 'happy' : 'sad' };
   if (kind === 'theft') return i === 0 ? { anim: 'pickup', expr: 'smirk' } : { anim: 'point', expr: 'surprised' };
   if (kind === 'romance') return icon === '💔' ? { anim: 'sad', expr: 'sad' } : { anim: i === 0 ? 'talk' : 'cheer', expr: 'love' };
   if (kind === 'party' || kind === 'festival') return { anim: 'dance', expr: 'grin' };
@@ -365,6 +367,12 @@ function beatTitle(e: SimEvent): string | null {
   if (e.kind === 'reconcile' && e.actors.length >= 2) return 'Making Up';
   if (e.kind === 'ally' && e.imp >= 6) return 'An Alliance';
   if (e.kind === 'traveller' && (e.icon === '🧳' || (e.icon === '📜' && e.imp >= 8))) return e.icon === '🧳' ? 'The Storyteller' : 'The Ballad';
+  if (e.kind === 'romance' && e.icon === '💍') return 'The Proposal';
+  if (e.kind === 'wedding' && e.imp >= 8) return e.icon === '💢' ? 'An Objection!' : 'The Wedding';
+  if (e.kind === 'showdown') return e.icon === '🏆' ? 'The Showdown Settled' : 'Showdown!';
+  if (e.kind === 'search' && e.icon === '🐕') return 'Found!';
+  if (e.kind === 'search' && e.icon === '🐾' && e.imp >= 6) return 'The Search Party';
+  if (e.kind === 'meeting' && e.icon === '🗳️') return 'The Vote';
   return null;
 }
 function startBeat(e: SimEvent, force = false) {
@@ -557,6 +565,7 @@ function frame(now: number) {
   if (nell) { const on = sim.visitorUntil > sim.clock; nell.targetAlpha = on ? 1 : 0; if (on || nell.alpha > .05) { nellT += adt; nell.root.position.set(NELL[0], 0, NELL[1]); nell.targetHeading = Math.sin(nellT * .4) * .5; const k = Math.floor(nellT / 2.5) % 4; nell.anim = (['talk', 'wave', 'talk', 'cheer'] as any)[k]; nell.setExpression(k === 3 ? 'grin' : 'happy'); nell.update(speed === 0 ? 0 : adt, .8); } }
   animateGifts(sim, dt);
   world.update(adt, dt * speed * MIN_PER_SEC, sim.clock, sky.night, sim.day, sim.rain);
+  if ((world as any).dog?.obj && (sim as any).pet) (world as any).dog.obj.visible = (sim as any).pet.state !== 'missing';
   extras?.update(adt, sim.hour, sim.rain, controls.target, camera.position);
   // camera
   if (beat || montage) { controls.autoRotate = false; }
