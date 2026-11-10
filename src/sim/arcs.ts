@@ -13,7 +13,7 @@ export interface Arc {
 
 const MIN = 1440;
 // strip a leading possessive ("his", "grandma's") so "his father's medal" → "medal", "her silver locket" → "silver locket"
-function keepsakeNeedle(name: string): string {
+export function keepsakeNeedle(name: string): string {
   return name.replace(/^(his|her|a|an|the)\s+/i, '').replace(/^[\w']+['’]s\s+/i, '').trim().toLowerCase();
 }
 // punchy display noun: drop a leading flavour adjective and title-case ("lucky geode" → "Geode", "little black book" → "Black Book")

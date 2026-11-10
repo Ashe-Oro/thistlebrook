@@ -8,6 +8,7 @@ import { Sim, MIN_PER_SEC } from './sim/sim';
 import { UtilityBrain } from './sim/brain';
 import { LLMBrain, type LLMConfig } from './sim/llm';
 import { Director } from './sim/director';
+import { storylines, findStory, storySubject } from './ui/storylines';
 import { UI, type AppApi } from './ui/ui';
 import { Sound } from './ui/sound';
 import { dropGift, animateGifts, summonRain, spawnTraveller, tickTraveller, startFestival, tickFestival, NELL } from './sim/god';
@@ -90,6 +91,7 @@ async function boot() {
 }
 
 let ffing = false; let petWasMissing = false;
+let pinnedStory: string | null = null;
 let ambient: Ambient | null = null; let lastSpeed = 1; let speed = 1, mode: 'director' | 'free' = params.get('cam') === 'free' ? 'free' : 'director', selected: string | null = null; let acc = 0; let follow: string | null = null; let dirT = 0;
 const director = new Director(sim);
 const pcam = new THREE.PerspectiveCamera(15, 1, .3, 40); const portraits = new Map<string, HTMLCanvasElement>(); const pTime = new Map<string, number>();
@@ -119,8 +121,9 @@ function portrait(id: string) {
 const tmpV = new THREE.Vector3();
 const api: AppApi = {
   sim, director, get speed() { return speed; }, setSpeed(s) { if (s === 0 && speed > 0) lastSpeed = speed; speed = s; }, togglePause() { api.setSpeed(speed ? 0 : lastSpeed || 1); }, get selected() { return selected; },
-  select(id) { selected = id; follow = id; if (id && ui?.hint) { ui.hint.classList.add('gone'); try { localStorage.setItem('thistlebrook.hinted', '1'); } catch {} } if (id) { const v = sim.byId.get(id)!; if (v && camera.position.distanceTo(controls.target) > 24) { const dir = camera.position.clone().sub(controls.target).normalize(); controls.target.set(v.x, 1, v.z); camera.position.copy(controls.target).addScaledVector(dir, 15); } sound.play('pop'); if (mode === 'director') mode = 'free'; if (v) controls.autoRotate = false; } },
-  portrait, get mode() { return mode; }, setMode(m) { mode = m; if (m === 'director') { selected = null; follow = null; } controls.autoRotate = false; },
+  pinStory, get pinnedStory() { return pinnedStory; },
+  select(id) { if (pinnedStory) pinStory(null); selected = id; follow = id; if (id && ui?.hint) { ui.hint.classList.add('gone'); try { localStorage.setItem('thistlebrook.hinted', '1'); } catch {} } if (id) { const v = sim.byId.get(id)!; if (v && camera.position.distanceTo(controls.target) > 24) { const dir = camera.position.clone().sub(controls.target).normalize(); controls.target.set(v.x, 1, v.z); camera.position.copy(controls.target).addScaledVector(dir, 15); } sound.play('pop'); if (mode === 'director') mode = 'free'; if (v) controls.autoRotate = false; } },
+  portrait, get mode() { return mode; }, setMode(m) { if (pinnedStory) pinStory(null); mode = m; if (m === 'director') { selected = null; follow = null; } controls.autoRotate = false; },
   god(kind) {
     if (speed === 0) { ui.toast('⏸ Time is paused', 'Unpause to use god powers.'); return false; }
     if (kind === 'rain' && (sim.rain > .25 || sim.rainUntil > sim.clock)) { ui.toast('🌧️ Already raining', 'Wait for this storm to blow over.'); return false; }
@@ -141,10 +144,23 @@ function tryResume(): boolean {
 }
 let ui: UI;
 let focusTarget: THREE.Vector3 | null = null, focusDist = 0;
+function pinStory(id: string | null): boolean {
+  const s = id ? findStory(sim, id) : null; if (id && (!s || s.resolved)) return false;
+  if (intro) endIntro(); if (montage) endMontage(); if (beat) endBeat();
+  pinnedStory = id; selected = null; mode = 'director'; focusTarget = null;
+  follow = s ? storySubject(sim, s, null) ?? s.actors[0] ?? null : null; dirT = 0; careT = 0;
+  ui?.renderStorylines(); return true;
+}
+function storyEvent(e: SimEvent): boolean {
+  if (!pinnedStory) return true; const s = findStory(sim, pinnedStory); if (!s) return false;
+  const hit = arcs(sim).arcForEvent(e.id); if (s.arcId) return hit?.arc.id === s.arcId;
+  const kinds: Record<string, string[]> = { wedding: ['wedding', 'romance'], search: ['search'], meeting: ['meeting'], showdown: ['showdown', 'contest'], crush: ['romance'], couple: ['romance'], alliance: ['ally'] };
+  return (kinds[s.kind] ?? []).includes(e.kind) && e.actors.some(id => s.actors.includes(id));
+}
 function focusPoint(x: number, z: number, dist = 22) { focusTarget = new THREE.Vector3(x, 0, z); focusDist = dist; follow = null; }
 
 // click to select a villager (screen-space pick)
-renderer.domElement.addEventListener('pointerdown', e => { if (intro) { endIntro(); return; } if (montage) { endMontage(); return; } (renderer.domElement as any)._down = [e.clientX, e.clientY]; if (mode === 'director') { mode = 'free'; } focusTarget = null; });
+renderer.domElement.addEventListener('pointerdown', e => { if (intro) { endIntro(); return; } if (montage) { endMontage(); return; } (renderer.domElement as any)._down = [e.clientX, e.clientY]; if (pinnedStory) pinStory(null); if (mode === 'director') { mode = 'free'; } focusTarget = null; });
 renderer.domElement.addEventListener('pointerup', e => {
   const d = (renderer.domElement as any)._down; if (!d || Math.hypot(e.clientX - d[0], e.clientY - d[1]) > 6) return;
   let best: Villager | null = null, bd = 46; for (const v of sim.villagers) { if (v.inside) continue; for (const yy of [.5, 1.1, 1.7]) { const p = api.project(v.x, yy, v.z); const dd = Math.hypot(p.x - e.clientX, p.y - e.clientY); if (p.on && dd < bd) { bd = dd; best = v; } } }
@@ -238,6 +254,7 @@ function directorCare(dt: number) {
   if (yawFix) { const step = Math.sign(yawFix) * Math.min(Math.abs(yawFix), dt * 1.6); yawFix -= step; const off = camera.position.clone().sub(controls.target); off.applyAxisAngle(THREE.Object3D.DEFAULT_UP, step); camera.position.copy(controls.target).add(off); if (Math.abs(yawFix) < 1e-3) yawFix = 0; }
   careT -= dt; if (careT > 0) return; careT = .5;
   const fv = follow ? sim.byId.get(follow) : null;
+  if (pinnedStory && (!fv || fv.inside)) return;
   if (fv && fv.inside) { // pick someone outdoors; nobody? frame the plaza lamps / campfire
     const out = sim.villagers.filter(v => !v.inside); if (out.length) { const c = out.sort((a, b) => Math.hypot(a.x - fv.x, a.z - fv.z) - Math.hypot(b.x - fv.x, b.z - fv.z))[0]; follow = c.id; director.focus = { id: c.id, until: sim.clock + 25, reason: c.doing }; }
     else { const spot = world.places.get(sky.night > .5 ? 'campfire' : 'plaza') ?? world.places.get('plaza'); if (spot) focusPoint(spot.x, spot.z, 26); }
@@ -248,7 +265,8 @@ function directorCare(dt: number) {
   careT0.set(fv.x, 1.2, fv.z); if (careT0.distanceTo(controls.target) > 3) return; // still travelling to the subject
   const off = camera.position.clone().sub(controls.target); const dist = Math.hypot(off.x, off.z), yaw = Math.atan2(off.x, off.z);
   careHead.set(fv.x, fv.avatar.height + .3, fv.z); const h0 = Math.max(2.4, camera.position.y);
-  const f = frameShot(careT0, [careHead], yaw, dist, dist * 1.25, [h0, h0 + 1.4], new Set([fv.id]));
+  const cast = pinnedStory ? findStory(sim, pinnedStory)?.actors.map(id => sim.byId.get(id)!).filter(v => v && !v.inside && Math.hypot(v.x - fv.x, v.z - fv.z) < 15) ?? [fv] : [fv];
+  const f = frameShot(careT0, cast.map(v => new THREE.Vector3(v.x, v.avatar.height + .3, v.z)), yaw, dist, dist * 1.4, [h0, h0 + 1.4], new Set(cast.map(v => v.id)));
   const nd = dist + (f.dist - dist) * .35, nh = camera.position.y + (f.h - camera.position.y) * .35; // ease, never snap
   camera.position.set(careT0.x + Math.sin(yaw) * nd, nh, careT0.z + Math.cos(yaw) * nd);
   const dy = Math.atan2(Math.sin(f.yaw - yaw), Math.cos(f.yaw - yaw));
@@ -341,6 +359,7 @@ function stageShot(sh: MontageShot, prefYaw: number) {
   sh.target = new THREE.Vector3(cx, 1.1, cz); sh.frame = f;
 }
 function startMontage(day: number, then: (() => void) | null = null): boolean {
+  if (pinnedStory) return false;
   if (ffing) return false;
   const shots = pickShots(day); if (shots.length < 2) return false;
   if (beat) endBeat();
@@ -389,6 +408,7 @@ function beatTitle(e: SimEvent): string | null {
 }
 function startBeat(e: SimEvent, force = false) {
   if (ffing) return false;
+  if (!storyEvent(e)) return false;
   const title = beatTitle(e); if (!title && !force) return false;
   const nowR = performance.now(); if (!force && (beat || montage || nowR < beatCool)) return false;
   const ids = e.actors.filter(id => { const v = sim.byId.get(id); return v && !v.inside && Math.hypot(v.x - e.x, v.z - e.z) < 10; }).slice(0, 2);
@@ -559,7 +579,7 @@ function start() {
   setInterval(autosave, 20000); addEventListener('pagehide', autosave); document.addEventListener('visibilitychange', () => { if (document.hidden) autosave(); });
   sim.on('dawn', () => setTimeout(autosave, 50));
   sim.on('sound', (k: string, x: number, z: number) => sound.play(k, Math.max(0, 1 - Math.hypot(x - controls.target.x, z - controls.target.z) / 40)));
-  sim.on('dawn', (day: number) => { if (ffing) return; const p = director.papers[director.papers.length - 1]; if (p && ui.autoPaper && !params.has('nopaper')) { const show = () => { ui.showPaper(p); setTimeout(() => { if (ui.modal.querySelector('.paper')) ui.closeModal(); }, 20000); }; if (!(mode === 'director' && !selected && !intro && !params.has('nomontage') && speed > 0 && speed <= 4 && startMontage(day, show))) show(); } });
+  sim.on('dawn', (day: number) => { if (ffing || pinnedStory) return; const p = director.papers[director.papers.length - 1]; if (p && ui.autoPaper && !params.has('nopaper')) { const show = () => { ui.showPaper(p); setTimeout(() => { if (ui.modal.querySelector('.paper')) ui.closeModal(); }, 20000); }; if (!(mode === 'director' && !selected && !intro && !params.has('nomontage') && speed > 0 && speed <= 4 && startMontage(day, show))) show(); } });
   sim.on('event', (e: SimEvent) => { if (mode === 'director' && !selected && !intro && !ui.quiet && !params.has('nobeats')) startBeat(e); });
   sim.on('hit', () => { if (beat) shake = 1; sound.play('scuffle', .5); });
   sky.onThunder = d => setTimeout(() => sound.play('thunder', .9), d * 1000);
@@ -603,7 +623,10 @@ function frame(now: number) {
   const extraStart = performance.now(); extras?.update(adt, sim.hour, sim.rain, controls.target, camera.position, camera); const extraMs = performance.now() - extraStart; phases.avatars += extraMs;
   // camera
   if (beat || montage) { controls.autoRotate = false; }
-  else if (mode === 'director' && !selected) { dirT -= dt; if (dirT <= 0) { dirT = 1; const pick = director.pick(sim.clock, follow); if (pick && pick.id !== follow) { follow = pick.id; } } controls.autoRotate = true; controls.autoRotateSpeed = .35; }
+  else if (mode === 'director' && !selected) { dirT -= dt; if (dirT <= 0) { dirT = 1; const story = pinnedStory ? findStory(sim, pinnedStory) : null;
+      if (pinnedStory && (!story || story.resolved)) { const title = story?.title ?? 'The chapter has closed'; pinStory(null); ui.toast('📺 Storyline resolved', title); }
+      const subject = story && !story.resolved ? storySubject(sim, story, follow) : null;
+      const pick = pinnedStory ? (subject ? { id: subject } : null) : director.pick(sim.clock, follow); if (pick && pick.id !== follow) { follow = pick.id; } } controls.autoRotate = true; controls.autoRotateSpeed = .35; }
   else controls.autoRotate = false;
   const want = beat || intro || montage ? null : follow ? sim.byId.get(follow)!.avatar.root.position : focusTarget;
   if (want) { const k = 1 - Math.pow(.04, dt), dx = (want.x - controls.target.x) * k, dz = (want.z - controls.target.z) * k, dy = ((follow ? 1 : 0) - controls.target.y) * k; controls.target.x += dx; controls.target.z += dz; controls.target.y += dy; camera.position.x += dx; camera.position.z += dz; camera.position.y += dy;
@@ -635,11 +658,12 @@ function frame(now: number) {
   season: () => ({ name: world.season.name, snow: world.season.snow, day: sim.day }),
   sim, director, world, camera, controls, renderer, scene, perfStats,
   characterTriangles: () => sim.villagers.map(v => ({ id: v.id, ...v.avatar.triangleCounts() })), get fps() { return perf.fps; }, get pixelRatio() { return perf.pr; }, quality: { soft: SOFT, aa: AA }, get simMs() { return simMsAvg; }, get cpuMs() { return cpuMsAvg; },
+  storylines: () => storylines(sim), pinStory,
   setSpeed: (s: number) => (speed = s), select: (id: string | null) => api.select(id), setMode: (m: any) => api.setMode(m), god: (k: string) => api.god(k), ui: () => ui,
   fastForward(minutes: number, coarse = false) { if (!Number.isFinite(minutes) || minutes <= 0) return; const quiet = ui.quiet, wasFfing = ffing; ffing = true; ui.quiet = true; try { if (coarse) stepSimCoarse(minutes / MIN_PER_SEC); else { const n = Math.max(1, Math.ceil(minutes / MIN_PER_SEC / SIM_H - 1e-6)); for (let i = 0; i < n; i++) { sim.step(SIM_H); tickTraveller(sim); tickFestival(sim); } } } finally { ffing = wasFfing; ui.quiet = quiet; } for (const v of sim.villagers) syncAvatar(v, .016); },
   cineState() { camera.updateMatrixWorld(); const f = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)); return { beat: !!beat, montage: !!montage, target: { x: controls.target.x, y: controls.target.y, z: controls.target.z }, visible: sim.villagers.filter(v => !v.inside && visibleObject(v.avatar.root) && f.containsPoint(new THREE.Vector3(v.x, 1.1, v.z))).map(v => v.id) }; },
-  look(x: number, z: number, dist = 30, yaw = .6, pitch = .9) { endIntro(); follow = null; focusTarget = null; mode = 'free'; controls.target.set(x, 0, z); camera.position.set(x + Math.sin(yaw) * Math.cos(pitch) * dist, Math.sin(pitch) * dist, z + Math.cos(yaw) * Math.cos(pitch) * dist); controls.update(); },
-  closeUp(id: string, dist = 3.2, side = .3) { const v = sim.byId.get(id)!; follow = null; focusTarget = null; mode = 'free'; const hd = v.avatar.heading; const hy = v.avatar.height * .8; controls.target.set(v.x, hy, v.z); camera.position.set(v.x + Math.sin(hd + side) * dist, hy + .5, v.z + Math.cos(hd + side) * dist); controls.update(); },
+  look(x: number, z: number, dist = 30, yaw = .6, pitch = .9) { if (pinnedStory) pinStory(null); endIntro(); follow = null; focusTarget = null; mode = 'free'; controls.target.set(x, 0, z); camera.position.set(x + Math.sin(yaw) * Math.cos(pitch) * dist, Math.sin(pitch) * dist, z + Math.cos(yaw) * Math.cos(pitch) * dist); controls.update(); },
+  closeUp(id: string, dist = 3.2, side = .3) { if (pinnedStory) pinStory(null); const v = sim.byId.get(id)!; follow = null; focusTarget = null; mode = 'free'; const hd = v.avatar.heading; const hy = v.avatar.height * .8; controls.target.set(v.x, hy, v.z); camera.position.set(v.x + Math.sin(hd + side) * dist, hy + .5, v.z + Math.cos(hd + side) * dist); controls.update(); },
   beat(id?: number) { const e = id === undefined ? [...sim.events].reverse().find(x => beatTitle(x)) : sim.events.find(x => x.id === id); mode = 'director'; selected = null; return e ? startBeat(e, true) : false; }, get beatOn() { return !!beat; }, montage: (day?: number) => startMontage(day ?? Math.max(1, sim.day - 1)), get montageOn() { return !!montage; }, endMontage: () => endMontage(), rainbow: () => { ambient?.force(controls.target, camera.position); afterRain(); }, ambient: () => ambient, strike: () => sky.strike(),
   forceExpr(id: string, expr: string) { forced.set(id, { expr, until: 0 }); }, clearExpr() { forced.clear(); },
   enableLLM(cfg: LLMConfig) { localStorage.setItem('terrarium.llm', JSON.stringify(cfg)); sim.brain = new LLMBrain(cfg); console.info('LLM brain enabled (plans + reflections).'); },

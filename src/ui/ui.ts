@@ -6,6 +6,7 @@ import { fmtTime, dayOf } from '../core/util';
 import { drawWeb } from './web';
 import { arcs } from '../sim/arcs';
 import type { Arc } from '../sim/arcs';
+import { storylines, findStory } from './storylines';
 import { calendarFor } from '../sim/calendar';
 
 export const VCOLOR: Record<string, string> = { mara: '#e8875b', tom: '#6c8fd1', jen: '#c96bd6', ollie: '#d8b23b', pip: '#6dbb5a', rosa: '#d4574a', wren: '#5fc0c4', edgar: '#a98a62', bram: '#b5763a', sol: '#4f7fa0', posy: '#e58fb1', agnes: '#8c7bc0' };
@@ -13,6 +14,7 @@ const setHTML = (el: Element, html: string) => { if ((el as any)._html !== html)
 const h = (tag: string, cls = '', html = '') => { const e = document.createElement(tag); if (cls) e.className = cls; if (html) e.innerHTML = html; return e; };
 const esc = (s: string) => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' } as any)[c]);
 export interface AppApi { sim: Sim; director: Director; setSpeed(s: number): void; togglePause(): void; speed: number; select(id: string | null): void; selected: string | null; portrait(id: string): HTMLCanvasElement; setMode(m: 'director' | 'free'): void; mode: string;
+  pinStory(id: string | null): boolean; pinnedStory: string | null;
   god(kind: string): boolean; newVillage(): void; sound: { setMuted(m: boolean): void; muted: boolean; play(k: string, v?: number): void }; project(x: number, y: number, z: number): { x: number; y: number; on: boolean }; camDist(): number; }
 
 function sim0(v: Villager, s: any) { const f = s.villagers.filter((u: Villager) => u.crush === v.id && u.partner !== v.id && u !== v); return f.length ? `<span class="it love" title="Only you can see this">💌 ${f.map((u: Villager) => u.first).join(' & ')} ${f.length > 1 ? 'are' : 'is'} sweet on them</span>` : ''; }
@@ -23,6 +25,7 @@ export class UI {
   tags = new Map<string, HTMLElement>(); bubbles = new Map<string, { el: HTMLElement; until: number; t0: number }>(); icons: { glyph: HTMLCanvasElement; id: string; t: number }[] = []; convo: { who: string; text: string; emoji: string; at: number }[] = [];
   tab = 'rel'; cardT = 0; lbKind: 'popularity' | 'power' | 'mischief' = 'popularity'; feedFilter = 'all'; autoPaper = true;
   feedDay = 0; safeTop = 70; hint: HTMLElement | null = null;
+  storyPanel!: HTMLElement; storyChip!: HTMLElement; storyT = 0; storyCards = new Map<string, HTMLElement>();
   calPop!: HTMLElement; calOpen = false;
   constructor(public app: AppApi, parent: HTMLElement) {
     this.root = h('div', 'ui'); parent.appendChild(this.root); this.build();
@@ -60,8 +63,15 @@ export class UI {
     this.card = h('div', 'card hidden'); r.appendChild(this.card);
     this.lb = h('div', 'lb'); r.appendChild(this.lb);
     const dock = h('div', 'dock'); dock.innerHTML = `<div class="grp"><span class="lbl">God powers</span><button data-g="gift">🎁<i>Drop gift</i><b class="s">Gift</b></button><button data-g="rain">🌧️<i>Rain</i><b class="s">Rain</b></button><button data-g="traveller">🧳<i>Traveller</i><b class="s">Visitor</b></button><button data-g="festival">🎪<i>Festival</i><b class="s">Fest</b></button></div>
-      <div class="grp"><span class="lbl">Views</span><button data-v="web">🕸️<i>Relationships</i><b class="s">Web</b></button><button data-v="paper">📰<i>Gazette</i><b class="s">Paper</b></button><button data-v="recap">📈<i>Recap</i><b class="s">Recap</b></button><button data-v="villagers">👥<i>Villagers</i><b class="s">People</b></button></div>`;
+      <div class="grp"><span class="lbl">Views</span><button data-v="storylines">📺<i>Storylines</i><b class="s">Stories</b></button><button data-v="web">🕸️<i>Relationships</i><b class="s">Web</b></button><button data-v="paper">📰<i>Gazette</i><b class="s">Paper</b></button><button data-v="recap">📈<i>Recap</i><b class="s">Recap</b></button><button data-v="villagers">👥<i>Villagers</i><b class="s">People</b></button></div>`;
     r.appendChild(dock);
+    this.storyPanel = h('section', 'storyguide panelish'); this.storyPanel.setAttribute('aria-label', 'Storylines');
+    this.storyPanel.innerHTML = '<header><b>📺 Storylines</b><small>Previously… and what happens next?</small><button aria-label="Collapse storylines">▾</button></header><div class="storycards"></div>';
+    r.appendChild(this.storyPanel);
+    this.storyPanel.querySelector('header button')!.addEventListener('click', () => { if (matchMedia('(max-width:1100px), (pointer:coarse)').matches) this.storyPanel.classList.remove('expanded'); else this.storyPanel.classList.toggle('folded'); });
+    this.storyPanel.addEventListener('click', e => { const el = e.target as HTMLElement, pin = el.closest<HTMLElement>('[data-pin]'), nm = el.closest<HTMLElement>('.nm'); if (pin) this.app.pinStory(this.app.pinnedStory === pin.dataset.pin ? null : pin.dataset.pin!); else if (nm) this.app.select(nm.dataset.id!); });
+    this.storyChip = h('button', 'storyfollow hidden'); this.storyChip.title = 'Stop following storyline'; this.storyChip.onclick = () => this.app.pinStory(null); r.appendChild(this.storyChip);
+
     // god powers cool down (a sweep fills the button) so spamming can't flood the chronicle
     const COOL: Record<string, number> = { gift: 8, rain: 25, traveller: 30, festival: 30 };
     dock.querySelectorAll<HTMLButtonElement>('[data-g]').forEach(b => b.onclick = () => { if (b.classList.contains('cool')) return; const k = b.dataset.g!; if (!this.app.god(k)) return; b.classList.add('flash'); setTimeout(() => b.classList.remove('flash'), 600);
@@ -78,7 +88,7 @@ export class UI {
     addEventListener('resize', measure); requestAnimationFrame(measure); setTimeout(measure, 500);
     // first-visit tip: goes away on the first villager click (or when tapped)
     if (!localStorage.getItem('thistlebrook.hinted')) { const hint = h('div', 'hint', '👆 Click a villager to read their mind'); hint.onclick = () => hint.classList.add('gone'); r.appendChild(hint); this.hint = hint; setTimeout(() => hint.classList.add('gone'), 45000); }
-    window.addEventListener('keydown', e => { if (e.key === 'Escape') { this.closeModal(); this.app.select(null); } if (e.key === ' ') { this.app.togglePause(); e.preventDefault(); } });
+    window.addEventListener('keydown', e => { if (e.key === 'Escape') { this.closeModal(); this.storyPanel.classList.remove('expanded'); this.app.select(null); } if (e.key === ' ') { this.app.togglePause(); e.preventDefault(); } });
   }
   name(id: string) { const v = this.app.sim.byId.get(id); return v ? `<a class="nm" data-id="${id}" style="--c:${VCOLOR[id]}">${v.first}</a>` : id; }
   linkify(text: string) { let t = esc(text); for (const v of this.app.sim.villagers) t = t.replace(new RegExp(`\\b${v.first}(?!\\w)`, 'g'), this.name(v.id)); return t; }
@@ -286,7 +296,7 @@ export class UI {
     this.cardT -= dt; if (this.cardT <= 0) { this.cardT = .35; const cal = calendarFor(s.day); setHTML(this.clock, `<b>${cal.weekday} · ${cal.dayOfSeason} ${cal.season} · Day ${s.day}</b> · ${fmtTime(s.clock)} ${s.rain > .4 ? '🌧️' : s.hour >= 20 || s.hour < 6 ? '🌙' : s.hour < 8 ? '🌅' : '☀️'}${s.festivalUntil > s.clock ? ' 🎪' : ''}${s.visitorUntil > s.clock ? ' 🧳' : ''}`); if (this.calOpen) this.renderCal();
       this.measureChrome();
       this.root.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach(b => b.classList.toggle('on', +b.dataset.speed! === this.app.speed)); { const m = this.root.querySelector('#mode') as HTMLElement, html = this.app.mode === 'director' ? '🎬<span> Director</span>' : '🕹️<span> Free cam</span>'; if (m.innerHTML !== html) m.innerHTML = html; }
-      this.renderCard(); this.renderLB();
+      this.renderCard(); this.renderLB(); this.storyT -= .35; if (this.storyT <= 0) { this.storyT = 1.05; this.renderStorylines(); }
       { const r = this.card.classList.contains('hidden') ? null : this.card.getBoundingClientRect(); this.cardRect = r && r.width ? { l: r.left, r: r.right, t: r.top, b: r.bottom } : null; } }
   }
   // measure real topbar/dock heights so overlays and panels never assume a fixed chrome size
@@ -372,7 +382,22 @@ export class UI {
     this.card.querySelectorAll<HTMLElement>('.nm').forEach(a => a.onclick = () => this.app.select(a.dataset.id!));
   }
   closeModal() { this.modal.classList.add('hidden'); this.modal.innerHTML = ''; }
+  renderStorylines() {
+    const list = storylines(this.app.sim), box = this.storyPanel.querySelector('.storycards')!;
+    for (const [id, el] of this.storyCards) if (!list.some(s => s.id === id)) { el.remove(); this.storyCards.delete(id); }
+    list.forEach((s, i) => {
+      let el = this.storyCards.get(s.id); if (!el) { el = h('article', 'guidecard'); this.storyCards.set(s.id, el); }
+      const age = s.last ? Math.max(0, this.app.sim.clock - s.last.t) : 0, ago = age < 60 ? `${Math.floor(age)}m ago` : `${Math.floor(age / 60)}h ago`;
+      const pinned = this.app.pinnedStory === s.id;
+      setHTML(el, `<div class="guideheading"><b>${s.emoji} ${s.resolved ? 'Resolved: ' : ''}${esc(s.title)}</b><button data-pin="${s.id}" aria-label="${pinned ? 'Unpin' : 'Follow'} storyline" aria-pressed="${pinned}" ${s.resolved ? 'disabled' : ''}>${pinned ? '📌' : '＋ Pin'}</button></div><small>${esc(s.status)}</small><p>${esc(s.teaser)}</p><div>${s.actors.map(id => this.name(id)).join(' · ')}</div><meter min="0" max="1" value="${s.heat}" aria-label="${s.kind === 'feud' ? 'Feud heat' : 'Story momentum'}"></meter><div class="guidelast">${s.last ? `Last: ${esc(s.last.text)} · ${ago}` : 'The first chapter is still being written…'}</div>`);
+      if (box.children[i] !== el) box.insertBefore(el, box.children[i] ?? null);
+    });
+    box.classList.toggle('empty', !list.length); box.setAttribute('data-empty', 'A quiet chapter… watch for new stories.');
+    const pin = this.app.pinnedStory, title = pin ? findStory(this.app.sim, pin)?.title : null;
+    this.storyChip.classList.toggle('hidden', !pin); if (pin) this.storyChip.textContent = `📌 Following: ${title ?? 'storyline'}  ✕`;
+  }
   view(kind: string) {
+    if (kind === 'storylines') { this.storyPanel.classList.toggle('expanded'); this.storyPanel.classList.remove('folded'); return; }
     const s = this.app.sim; this.modal.classList.remove('hidden');
     if (kind === 'paper') { const p = this.app.director.papers[this.app.director.papers.length - 1] ?? { ...this.app.director.paper(s.day), early: true }; this.showPaper(p); return; }
     if (kind === 'web') { this.modal.innerHTML = `<div class="sheet web"><button class="x">✕</button><h2>🕸️ Who likes whom</h2><p class="muted">Green = fondness, red = resentment, thickness = strength. Hover or tap a face to see who <b>they</b> like (→ outgoing) and who likes <b>them</b> (← incoming). 💞 sweethearts · 💗 crushes · 🚩 alliances.</p><canvas width="760" height="560"></canvas></div>`; drawWeb(this.modal.querySelector('canvas')!, s, VCOLOR, (id) => this.app.portrait(id)); }
