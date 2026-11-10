@@ -36,6 +36,7 @@ export class World {
   // Village pets. `crowd` is the live villager list (set each sim step) so the dog can trot after the nearest one.
   crowd: { x: number; z: number; inside: string | null }[] = [];
   dog?: { obj: THREE.Object3D; legs: THREE.Object3D; tail: THREE.Object3D; x: number; z: number; tx: number; tz: number; t: number; ph: number; wag: number; trot: boolean };
+  private duckMesh?: THREE.InstancedMesh; private duckTime = 0;
   ducks: { obj: THREE.Object3D; x: number; z: number; tx: number; tz: number; t: number; cx: number; cz: number; r: number }[] = [];
   constructor(scene: THREE.Scene) { this.scene = scene; this.nav = new NavGrid(TOWN.bounds, 0.5); this.fx = new FX(scene); }
 
@@ -242,21 +243,31 @@ export class World {
     g.traverse(o => { if (o instanceof THREE.Mesh) o.castShadow = false; }); g.position.set(-9, 0, 8); this.scene.add(g);
     this.dog = { obj: g, legs, tail, x: -9, z: 8, tx: -9, tz: 8, t: 0, ph: 0, wag: 0, trot: false };
     // --- ducks: bob about on the Riverside mill pond ---
-    const bodyM = M('#4f5a52'), headM = M('#1f6b3a'), beakM = M('#e0a53a');
+    // Bake the four coloured parts once; all seven ducks share one draw.
+    const parts: THREE.BufferGeometry[] = [];
+    const part = (g: THREE.BufferGeometry, color: string, x: number, y: number, z: number) => {
+      g.translate(x, y, z); const c = new THREE.Color(color), colors = new Float32Array(g.attributes.position.count * 3);
+      for (let i = 0; i < colors.length; i += 3) { colors[i] = c.r; colors[i + 1] = c.g; colors[i + 2] = c.b; }
+      g.setAttribute('color', new THREE.BufferAttribute(colors, 3)); parts.push(g);
+    };
+    part(new THREE.SphereGeometry(.17, 7, 5).scale(1, .7, 1.4), '#4f5a52', 0, .08, 0);
+    part(new THREE.SphereGeometry(.1, 6, 5), '#1f6b3a', 0, .2, .18);
+    part(new THREE.BoxGeometry(.05, .04, .1), '#e0a53a', 0, .18, .28);
+    part(new THREE.BoxGeometry(.08, .05, .12).rotateX(.5), '#4f5a52', 0, .12, -.2);
+    this.duckMesh = new THREE.InstancedMesh(mergeGeometries(parts)!, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), 7);
+    for (const g of parts) g.dispose();
+    this.duckMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.duckMesh.castShadow = false; this.scene.add(this.duckMesh);
     for (const [pid, nD, dx, dz] of [['rivpond', 4, 2, 27], ['pond', 3, -36, 13]] as [string, number, number, number][]) {
-    const pond = this.places.get(pid) as any; const pcx = pond?.cx ?? dx, pcz = pond?.cz ?? dz, pr = 1.7;
-    for (let i = 0; i < nD; i++) {
-      const d = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.SphereGeometry(.17, 7, 5), bodyM); body.scale.set(1, .7, 1.4); body.position.y = .08; d.add(body);
-      const h = new THREE.Mesh(new THREE.SphereGeometry(.1, 6, 5), headM); h.position.set(0, .2, .18); d.add(h);
-      d.add(box(.05, .04, .1, beakM, 0, .18, .28));
-      const tl = box(.08, .05, .12, bodyM, 0, .12, -.2); tl.rotation.x = .5; d.add(tl);
-      d.traverse(o => { if (o instanceof THREE.Mesh) o.castShadow = false; });
-      const a = i / nD * 6.28, x = pcx + Math.cos(a) * pr * .6, z = pcz + Math.sin(a) * pr * .6;
-      d.position.set(x, .22, z); this.scene.add(d);
-      this.ducks.push({ obj: d, x, z, tx: x, tz: z, t: this.cosmeticRng.range(0, 4), cx: pcx, cz: pcz, r: pr });
+      const pond = this.places.get(pid); const pcx = pond?.cx ?? dx, pcz = pond?.cz ?? dz, pr = 1.7;
+      for (let i = 0; i < nD; i++) {
+        const d = new THREE.Object3D(), a = i / nD * 6.28, x = pcx + Math.cos(a) * pr * .6, z = pcz + Math.sin(a) * pr * .6;
+        d.position.set(x, .22, z); d.updateMatrix(); this.duckMesh.setMatrixAt(this.ducks.length, d.matrix);
+        this.ducks.push({ obj: d, x, z, tx: x, tz: z, t: this.cosmeticRng.range(0, 4), cx: pcx, cz: pcz, r: pr });
+      }
     }
-    }
+    // Conservative world-space bounds include both ponds and all possible swimming positions.
+    this.duckMesh.boundingSphere = new THREE.Sphere(new THREE.Vector3(-17, .5, 20), 26);
+
   }
 
   glowTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d')!; const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,230,170,1)'); gr.addColorStop(.25, 'rgba(255,190,110,.55)'); gr.addColorStop(1, 'rgba(255,160,80,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
@@ -288,7 +299,7 @@ export class World {
   update(dt: number, gdt: number, clock: number, night: number) {
     this.night = night; const t = clock;
     if (this.sail) this.sail.rotation.z -= dt * .45;
-    for (const s of this.lamps) (s.material as THREE.SpriteMaterial).opacity = night * (0.85 + Math.sin(t * .37 + s.position.x) * .08);
+    for (const s of this.lamps) { s.visible = night > .01; if (s.visible) (s.material as THREE.SpriteMaterial).opacity = night * (0.85 + Math.sin(t * .37 + s.position.x) * .08); }
     this.lights[0].intensity = night * 10; this.lights[1].intensity = night * 8;
     this.fireTime += dt;
     const flicker = .9 + Math.sin(this.fireTime * 9.7) * .06 + Math.sin(this.fireTime * 17.3) * .04;
@@ -340,11 +351,16 @@ export class World {
       dg.wag += dt * (dg.trot || !moving ? 13 : 6); dg.tail.rotation.y = Math.sin(dg.wag) * .5;
     }
     // ducks: drift lazily about the mill pond
+    this.duckTime += dt;
+    if (this.duckTime >= 1 / 20) { const duckDt = this.duckTime; this.duckTime = 0;
     for (const dk of this.ducks) {
-      dk.t -= dt; if (dk.t <= 0) { const a = this.cosmeticRng.next() * 6.28, rr = this.cosmeticRng.next() * dk.r; dk.tx = dk.cx + Math.cos(a) * rr; dk.tz = dk.cz + Math.sin(a) * rr; dk.t = this.cosmeticRng.range(3, 7); }
+      dk.t -= duckDt; if (dk.t <= 0) { const a = this.cosmeticRng.next() * 6.28, rr = this.cosmeticRng.next() * dk.r; dk.tx = dk.cx + Math.cos(a) * rr; dk.tz = dk.cz + Math.sin(a) * rr; dk.t = this.cosmeticRng.range(3, 7); }
       const dx = dk.tx - dk.x, dz = dk.tz - dk.z, d = Math.hypot(dx, dz);
-      if (d > .05) { dk.x += dx / d * .35 * dt; dk.z += dz / d * .35 * dt; const ty = Math.atan2(dx, dz); dk.obj.rotation.y += Math.atan2(Math.sin(ty - dk.obj.rotation.y), Math.cos(ty - dk.obj.rotation.y)) * Math.min(1, dt * 3); }
+      if (d > .05) { dk.x += dx / d * .35 * duckDt; dk.z += dz / d * .35 * duckDt; const ty = Math.atan2(dx, dz); dk.obj.rotation.y += Math.atan2(Math.sin(ty - dk.obj.rotation.y), Math.cos(ty - dk.obj.rotation.y)) * Math.min(1, duckDt * 3); }
       dk.obj.position.set(dk.x, .2 + Math.sin(t * 2 + dk.x) * .02, dk.z);
+      dk.obj.updateMatrix(); this.duckMesh?.setMatrixAt(this.ducks.indexOf(dk), dk.obj.matrix);
+    }
+    if (this.duckMesh) this.duckMesh.instanceMatrix.needsUpdate = true;
     }
   }
   // time-based state (called from the sim step so it is correct at any speed, including headless fast-forward)
