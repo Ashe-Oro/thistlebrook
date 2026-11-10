@@ -168,7 +168,7 @@ export class UI {
     this.arcChip(el, e.id);
     this.applyFilter(el);
     this.feed.prepend(el); while (this.feed.children.length > 100) this.feed.lastChild!.remove();
-    if (!this.panels.feed && e.imp >= 6) { this.unread++; this.updateUnread(); }
+    if (!this.panels.feed && e.imp >= 6 && !this.quiet) { this.unread++; this.updateUnread(); }
     this.eventBubble(e);
     if (minor) { const m = this.feed.querySelectorAll('[data-minor]'); for (let i = 30; i < m.length; i++) m[i].remove(); }
     this.promoteCaption(e, el);
