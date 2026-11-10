@@ -1,11 +1,14 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Avatar } from '../agents/avatar';
 import { VILLAGERS } from '../data/villagers';
 import { RNG, clamp } from '../core/util';
 import type { World } from './world';
 
 type Point = [number, number];
-interface Extra { root: THREE.Group; avatar?: Avatar; path: Point[]; lengths: number[]; length: number; arrival: number; departure: number; phase: number; kid: boolean; festival: boolean; elapsed: number; }
+interface Extra { root: THREE.Group; avatar?: Avatar; proxy?: THREE.Mesh; path: Point[]; lengths: number[]; length: number; arrival: number; departure: number; phase: number; kid: boolean; festival: boolean; elapsed: number; }
+// Muted clothing tints for the far proxy; indistinguishable from the full avatar at > ~22 m.
+const CLOTH = ['#8c6b53', '#5f7a6b', '#7b6b86', '#9a6a5a', '#6b7f99', '#8a8560', '#7c9082', '#a0785f'];
 export interface ExtrasOptions { seed?: number; count?: number; }
 
 // Presentation only: no occupancy, claims, sim events or shared random streams.
@@ -13,6 +16,7 @@ export interface ExtrasOptions { seed?: number; count?: number; }
 export class Extras {
   private root = new THREE.Group(); private people: Extra[] = []; private rng: RNG; private ready = false;
   private cloth?: THREE.InstancedMesh; private clothPhases: number[] = []; private dummy = new THREE.Object3D();
+  private proxyMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
   private cat = new THREE.Group(); private tail = new THREE.Group();
   constructor(private world: World, scene: THREE.Scene, private opts: ExtrasOptions = {}) {
     this.rng = new RNG(opts.seed ?? 73191); this.root.name = 'Cosmetic extras'; scene.add(this.root);
@@ -28,17 +32,19 @@ export class Extras {
       const start = this.world.nav.nearestFree(...edge), goal = this.world.nav.nearestFree(...end);
       // Failed paths stay absent; never replace a failed A* route with an obstacle-crossing line.
       const path = this.world.nav.findPath(...start, ...goal); if (!path || path.length < 2) continue;
-      let avatar: Avatar | undefined, root: THREE.Group;
+      const def = VILLAGERS[[9, 7, 4, 10, 3, 11, 0, 8, 6, 1][i] % VILLAGERS.length];
+      let avatar: Avatar | undefined, proxy: THREE.Mesh | undefined, root: THREE.Group;
       try {
-        const def = VILLAGERS[[9, 7, 4, 10, 3, 11, 0, 8, 6, 1][i] % VILLAGERS.length];
         avatar = new Avatar({ ...def, id: `extra-${i}`, height: kid ? 1.25 : def.height, outfit: { fixed: { tops: kid ? 'tee' : 'sweater', bottoms: kid ? 'shorts' : 'trousers', shoes: 'boot', hair: kid ? 'messy' : 'short-crop' }, pools: {} } }, r.int(1, 999999));
         avatar.phase = r.range(0, 10); avatar.handle.face?.setAutoBlink?.(false); root = avatar.root;
       } catch { root = this.fallback(kid); }
       root.name = `Background passer-by ${i + 1}`; root.visible = false;
       root.traverse((o: any) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; o.frustumCulled = true; } });
+      // One-draw stand-in for distant passers-by: the full articulated avatar is only drawn up close.
+      if (avatar) { proxy = this.makeProxy(kid, def.skin, CLOTH[i % CLOTH.length], def.hair); proxy.visible = false; root.add(proxy); }
       this.root.add(root); const lengths = [0];
       for (let j = 1; j < path.length; j++) lengths.push(lengths[j - 1] + Math.hypot(path[j][0] - path[j - 1][0], path[j][1] - path[j - 1][1]));
-      this.people.push({ root, avatar, path, lengths, length: lengths[lengths.length - 1], arrival: 7 + i * .3, departure: 17 + i * .12, phase: r.range(0, 6.28), kid, festival, elapsed: 0 });
+      this.people.push({ root, avatar, proxy, path, lengths, length: lengths[lengths.length - 1], arrival: 7 + i * .3, departure: 17 + i * .12, phase: r.range(0, 6.28), kid, festival, elapsed: 0 });
     }
     this.decorations();
   }
@@ -46,6 +52,17 @@ export class Extras {
     const g = new THREE.Group(), mat = new THREE.MeshLambertMaterial({ color: kid ? '#bd7860' : '#7c9082' });
     const body = new THREE.Mesh(new THREE.CapsuleGeometry(.19, kid ? .5 : .9, 2, 5), mat); body.position.y = kid ? .55 : .8; g.add(body);
     const head = new THREE.Mesh(new THREE.SphereGeometry(.17, 6, 4), new THREE.MeshLambertMaterial({ color: '#d9a066' })); head.position.y = kid ? 1.1 : 1.55; g.add(head); return g;
+  }
+  // Single merged, vertex-coloured figure (body + head + hair) — one draw call, a few hundred triangles.
+  private makeProxy(kid: boolean, skin: string, cloth: string, hair: string) {
+    const parts: THREE.BufferGeometry[] = [];
+    const add = (g: THREE.BufferGeometry, hex: string) => { const c = new THREE.Color(hex), n = g.attributes.position.count, col = new Float32Array(n * 3); for (let k = 0; k < n; k++) col.set([c.r, c.g, c.b], k * 3); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); parts.push(g); };
+    const bh = kid ? .5 : .9, by = kid ? .55 : .82, hy = kid ? 1.12 : 1.56, hr = kid ? .15 : .17;
+    add(new THREE.CapsuleGeometry(kid ? .17 : .19, bh, 2, 6).translate(0, by, 0), cloth);
+    add(new THREE.SphereGeometry(hr, 7, 5).translate(0, hy, 0), skin);
+    add(new THREE.SphereGeometry(hr * .98, 6, 4).scale(1, .82, 1).translate(0, hy + hr * .36, -.02), hair);
+    const mesh = new THREE.Mesh(mergeGeometries(parts)!, this.proxyMat); parts.forEach(g => g.dispose());
+    mesh.castShadow = false; mesh.receiveShadow = false; return mesh;
   }
   private decorations() {
     // One instanced draw for washing; poles and rope are deliberately simple geometry.
@@ -67,7 +84,7 @@ export class Extras {
     const wall = new THREE.Mesh(new THREE.BoxGeometry(2.5, .65, .35), new THREE.MeshLambertMaterial({ color: '#a49b88' })); wall.position.set(-28, .325, -17.3); this.root.add(wall);
     this.cat.position.set(-28, .65, -17.3); this.root.add(this.cat);
   }
-  update(dt: number, simHour: number, rain: number, camTarget: THREE.Vector3) {
+  update(dt: number, simHour: number, rain: number, camTarget: THREE.Vector3, camPos?: THREE.Vector3) {
     if (!Number.isFinite(simHour)) return;
     const h = ((simHour % 24) + 24) % 24, t = h * 3600, wet = clamp(rain);
     for (const p of this.people) {
@@ -82,11 +99,20 @@ export class Extras {
       const returning = h >= p.departure || h >= p.arrival + .8 && Math.sin(stroll) > 0;
       const heading = Math.atan2(b[0] - a[0], b[1] - a[1]) + (returning ? Math.PI : 0), waiting = p.festival && h >= p.arrival + .8 && h < p.departure;
       p.elapsed += Math.max(0, Number.isFinite(dt) ? dt : 0);
-      const far = p.root.position.distanceToSquared(camTarget) > 28 * 28;
-      if (p.avatar && p.elapsed >= (far ? .25 : 1 / 15)) {
-        p.avatar.heading = p.avatar.targetHeading = heading; p.avatar.anim = waiting ? 'talk' : p.kid ? 'run' : 'walk';
-        p.avatar.phase = t * (p.kid ? .8 : .55) + p.phase; p.avatar.update(0, .7); p.elapsed = 0;
-      } else if (!p.avatar) p.root.rotation.y = heading;
+      // Distance to the camera (falls back to the look-at point until the camera is wired in): drives both
+      // the full→proxy swap and the animation-update throttle.
+      const camD2 = p.root.position.distanceToSquared(camPos ?? camTarget), far = camD2 > 28 * 28;
+      if (p.avatar) {
+        const proxyFar = !!p.proxy && far;
+        if (p.proxy) p.proxy.visible = proxyFar; p.avatar.body.visible = !proxyFar;
+        if (proxyFar) { p.root.rotation.y = heading; p.avatar.heading = p.avatar.targetHeading = heading; } // frozen: no skeleton work
+        else { p.avatar.setLod(Math.sqrt(camD2));
+          if (p.elapsed >= (far ? .25 : 1 / 15)) {
+            p.avatar.heading = p.avatar.targetHeading = heading; p.avatar.anim = waiting ? 'talk' : p.kid ? 'run' : 'walk';
+            p.avatar.phase = t * (p.kid ? .8 : .55) + p.phase; p.avatar.update(0, .7); p.elapsed = 0;
+          }
+        }
+      } else p.root.rotation.y = heading;
     }
     if (this.cloth) {
       for (let i = 0; i < 6; i++) { this.dummy.position.set((i - 2.5) * .57, 0, 0); this.dummy.rotation.set(Math.sin(t * .7 + this.clothPhases[i]) * (.12 + wet * .12), 0, Math.sin(t * .4 + i) * .04); this.dummy.updateMatrix(); this.cloth.setMatrixAt(i, this.dummy.matrix); }
