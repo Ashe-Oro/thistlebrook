@@ -319,6 +319,16 @@ export class World {
     for (let i = 0; i < 7; i++) this.addLamp(-11.4 + i * .64, 2.55 - Math.sin(i / 6 * Math.PI) * .45, -5.2, .9);
     const p = this.places.get('campfire'); if (p) { p.x = -25; p.z = 10; }
   }
+  private finaleLanterns?: THREE.InstancedMesh;
+  setFinale(on: boolean) {
+    if (on && !this.finaleLanterns) {
+      const pl = this.places.get('plaza')!;
+      const mesh = new THREE.InstancedMesh(new THREE.SphereGeometry(.25, 8, 6), new THREE.MeshBasicMaterial({ color: '#ffd68c' }), 16), dummy = new THREE.Object3D();
+      for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2, r = i < 8 ? 5.8 : 1.1; dummy.position.set(pl.cx + Math.cos(a) * r, i < 8 ? 3.5 : 1.8 + (i % 3) * .45, pl.cz + Math.sin(a) * r); dummy.scale.set(1, 1.4, 1); dummy.updateMatrix(); mesh.setMatrixAt(i, dummy.matrix); }
+      mesh.instanceMatrix.needsUpdate = true; this.scene.add(mesh); this.finaleLanterns = mesh;
+    }
+    if (this.finaleLanterns) this.finaleLanterns.visible = on;
+  }
   async setFestival(on: boolean) {
     this.festival = on;
     if (on && !this.bunting.length) for (const [x, z, r] of [[-15, 0, 0], [-3, 0, 0], [-17.5, 6, Math.PI / 2], [-.5, 6, Math.PI / 2]] as [number, number, number][]) { const o = await loadAsset('cozy/festival_bunting_01'); o.scale.setScalar(1.4); o.position.set(x, 0, z); o.rotation.y = r; this.shadows(o, false); this.scene.add(o); this.bunting.push(o); }

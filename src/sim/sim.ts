@@ -42,6 +42,8 @@ export class Sim {
   coolOff: Record<string, number> = {}; arguedAt: Record<string, number> = {}; foughtAt: Record<string, number> = {}; fightLull = 0; argueLull = 0;
   pet: Pet = { name: 'Biscuit', x: -9, z: 8, state: 'home', since: 0, spot: null };
   festivalTheme: string | null = null; festivalShown = false;
+  // season finale (gatherings.ts): the lit-plaza window (bonfire/lanterns), the fireworks-climax window, and the themed card title
+  finaleUntil = 0; fireworksUntil = 0; finaleTitle = '';
   constructor(public world: World) {}
   on(k: string, f: (...a: any[]) => void) { (this.listeners[k] ??= []).push(f); }
   emit(k: string, ...a: any[]) { for (const f of this.listeners[k] ?? []) f(...a); }
@@ -77,14 +79,14 @@ export class Sim {
   }
 
   // ---- narration -------------------------------------------------------------------------------
-  log(text: string, imp: number, actors: string[], kind = 'misc', icon = '•', x?: number, z?: number) {
+  log(text: string, imp: number, actors: string[], kind = 'misc', icon = '•', x?: number, z?: number, finale?: string) {
     const a0 = this.byId.get(actors[0]); text = text.charAt(0).toUpperCase() + text.slice(1);
     const last = this.events[this.events.length - 1];
-    if (last && a0 && text.startsWith(a0.first + ' ') && last.text.startsWith(a0.first + ' ') && last.actors[0] === actors[0] && last.kind === kind && kind !== 'gossip' && !/\)\s*$/.test(last.text) && this.clock - last.t < 25 && last.kind !== 'headline' && kind !== 'headline' && last.text.length < 140 && imp >= 3 && last.imp >= 3) {
+    if (!finale && last && a0 && text.startsWith(a0.first + ' ') && last.text.startsWith(a0.first + ' ') && last.actors[0] === actors[0] && last.kind === kind && kind !== 'gossip' && !/\)\s*$/.test(last.text) && this.clock - last.t < 25 && last.kind !== 'headline' && kind !== 'headline' && last.text.length < 140 && imp >= 3 && last.imp >= 3) {
       last.text = last.text.replace(/\.$/, '') + ', then ' + text.replace(new RegExp('^' + (a0?.first ?? '') + ' '), '');
       last.imp = Math.max(last.imp, imp); last.actors = [...new Set([...last.actors, ...actors])]; this.emit('eventUpdate', last); this.story(actors, text); return last;
     }
-    const ev: SimEvent = { id: this.eid++, t: this.clock, text, imp, actors, x: x ?? a0?.x ?? 0, z: z ?? a0?.z ?? 0, kind, icon };
+    const ev: SimEvent = { id: this.eid++, t: this.clock, text, imp, actors, x: x ?? a0?.x ?? 0, z: z ?? a0?.z ?? 0, kind, icon, ...(finale ? { finale } : {}) };
     this.events.push(ev); if (this.events.length > 600) this.events.shift(); (this.dayStats[this.day] ??= []).push(ev);
     this.story(actors, text); this.emit('event', ev); return ev;
   }

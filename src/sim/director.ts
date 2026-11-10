@@ -87,6 +87,7 @@ function leadOf(arc: Arc, top: SimEvent, names: Set<string>, day: number): strin
   return out;
 }
 function headlineOf(e: SimEvent, s: Sim, day: number) {
+  if (e.finale) return e.icon === '👑' ? `${e.actors.length ? s.byId.get(e.actors[0])?.first : 'Village'} CROWNED HEART OF THISTLEBROOK` : `${e.finale.toUpperCase()} LIGHTS UP THE SKY`;
   const k = e.kind, av = s.byId.get(e.actors[0]), a = av?.first ?? 'Someone', b = s.byId.get(e.actors[1])?.first ?? '';
   const A = a.toUpperCase(), B = b.toUpperCase(), POS = av ? pr(av).pos.toUpperCase() : 'THEIR';
   const pick = (arr: string[]) => editorial(`headline:${day}:${e.id}`).pick(arr);

@@ -12,6 +12,7 @@ const COLORS = KEYS.map(k => [new THREE.Color(k[1]), new THREE.Color(k[2]), new 
 export class Sky {
   sun: THREE.DirectionalLight; hemi: THREE.HemisphereLight; dome: THREE.Mesh; stars: THREE.Points; night = 0; rain = 0;
   // lighting beats: golden-hour grade (0..1), dawn mist (0..1), lightning flash (decays), with its own RNG so the sim never notices
+  festivalGlow = 0;
   golden = 0; mist = 0; flash = 0; private flashQ: number[] = []; private seed = 1234567; onThunder: ((delay: number) => void) | null = null;
   private rnd() { this.seed = (this.seed * 1664525 + 1013904223) >>> 0; return this.seed / 4294967296; }
   private gold = new THREE.Color('#ffa850'); private mistCol = new THREE.Color('#e9e4dc'); private flashCol = new THREE.Color('#dfe8ff');
@@ -61,11 +62,12 @@ export class Sky {
     // Sun by day, moon by night (both from the south-ish so the default camera sees lit fronts).
     const ang = day ? (hour - 6) / 13.5 * Math.PI : ((hour + 24 - 19.5) % 24) / 10.5 * Math.PI;
     this.sun.position.set(focus.x - Math.cos(ang) * 60, 15 + Math.sin(ang) * 55, focus.z + 40); this.sun.target.position.copy(focus).setY(0);
-    this.sun.color.copy(sunCol); this.sun.intensity = sunI; this.hemi.intensity = hemiI;
+    this.sun.color.copy(sunCol); this.sun.intensity = sunI; this.hemi.intensity = hemiI + this.festivalGlow * .5;
     this.hemi.color.set('#eaf4ff').lerp(this.nightSky, this.night * .8).lerp(this.flashCol, this.flash); this.hemi.groundColor.set('#56663f').lerp(this.nightGround, this.night);
     this.stars.visible = this.night > .01 && rain < .99;
     (this.stars.material as THREE.PointsMaterial).opacity = this.night * (1 - rain) * .8;
     if (this.flash > 0) { this.top.lerp(this.flashCol, this.flash * .55); this.bot.lerp(this.flashCol, this.flash * .45); }
+    this.top.lerp(this.flashCol, this.festivalGlow * .12); this.bot.lerp(this.gold, this.festivalGlow * .22);
     // Seasonal wash: a faint cool/warm tint over the lower sky (and so the fog, which copies it below).
     if (season) { this.top.lerp(season.sky, season.skyMix * .5); this.bot.lerp(season.sky, season.skyMix); }
     { const f = this.scene.fog as THREE.Fog; f.color.copy(this.bot).lerp(this.mistCol, this.mist * .5); f.near = lerp(lerp(90, 35, rain), 18, this.mist * .7); f.far = lerp(lerp(230, 150, rain), 110, this.mist * .6); } this.dome.position.copy(focus); this.stars.position.copy(focus);

@@ -394,6 +394,7 @@ interface Beat { e: SimEvent; title: string; icon: string; t: number; dur: numbe
 let beat: Beat | null = null, beatCool = 0, shake = 0, beatLast = 0;
 const cine = document.createElement('div'); cine.className = 'cine'; cine.innerHTML = '<i class="bar t"></i><i class="bar b"></i><div class="ct"><em></em><b></b><span></span></div>'; document.body.appendChild(cine);
 function beatTitle(e: SimEvent): string | null {
+  if (e.finale) return e.finale;
   if (e.kind === 'fight' && e.icon === '💥') return 'The Brawl';
   if (e.kind === 'romance' && e.icon === '💞') return 'Sweethearts';
   if (e.kind === 'romance' && e.icon === '💔' && e.imp >= 8) return 'Heartbreak';
@@ -419,9 +420,9 @@ function startBeat(e: SimEvent, force = false) {
   if (ffing) return false;
   if (!storyEvent(e)) return false;
   const title = beatTitle(e); if (!title && !force) return false;
-  const nowR = performance.now(); if (!force && (beat || montage || nowR < beatCool)) return false;
+  const nowR = performance.now(); if (e.finale && beat && !montage) endBeat(); if (!force && (beat || montage || (!e.finale && nowR < beatCool))) return false;
   const ids = e.actors.filter(id => { const v = sim.byId.get(id); return v && !v.inside; }).slice(0, 3);
-  const fixed: Beat['fixed'] = e.kind === 'rainbow' ? [e.x, e.z, 9, (e as any).yaw] : e.kind === 'traveller' ? [NELL[0], NELL[1] + 1.2, 1.1, .45] : undefined;
+  const fixed: Beat['fixed'] = e.finale ? [e.x, e.z, e.icon === '🎆' ? 10 : 2, -.6] : e.kind === 'rainbow' ? [e.x, e.z, 9, (e as any).yaw] : e.kind === 'traveller' ? [NELL[0], NELL[1] + 1.2, 1.1, .45] : undefined;
   if (!ids.length && !fixed) return false;
   /* Historical summaries whose cast has dispersed have no live scene to frame. */
   if (ids.some(id => { const v = sim.byId.get(id)!; const a = sim.byId.get(ids[0])!; return Math.hypot(v.x - a.x, v.z - a.z) > 18; })) return false;
@@ -573,8 +574,9 @@ function beatCamera(dt: number) {
     /* Guests and officiant belong in the wedding composition as well. */
     for (const v of sim.villagers) if (!v.inside && !b.ids.includes(v.id) && Math.hypot(v.x - b.aisle.x, v.z - b.aisle.z) < 5) boxes.push({ x: v.x, z: v.z, height: v.avatar.height + .2, radius: .4 });
   }
+  if (b.e.finale) { dist = 22; h = 13; } /* season finale: wide over the plaza */
   if (!b.clear || b.t >= (b.solveAt ?? 0)) {
-    b.clear = frameShot(bT, heads, yaw, dist, 14, [h, 5.5, 7.5], new Set(b.ids), boxes, b.aisle ? [0, .3, -.3, .61, -.61] : undefined);
+    b.clear = frameShot(bT, heads, yaw, dist, b.e.finale ? 26 : 14, b.e.finale ? [13, 16, 19] : [h, 5.5, 7.5], new Set(b.ids), boxes, b.aisle ? [0, .3, -.3, .61, -.61] : undefined);
     b.solveAt = b.t + .5;
     if (!b.fixed && b.title !== 'Found!' && !b.clear.visible) { endBeat(); return; } /* a dog found in the woods is worth a slightly leafy frame */
   }
@@ -670,6 +672,8 @@ function frame(now: number) {
   if (montage) { montageCamera(Math.min(.25, dt)); }
   else if (intro) { introCamera(Math.min(.25, (now - (beatLast || now)) / 1000)); beatLast = now; }
   else if (!beat) controls.update(); else beatCamera(Math.min(.25, (now - (beatLast || now)) / 1000)); beatLast = now;
+  world.setFinale(sim.finaleUntil > sim.clock);
+  const plaza = sim.place('plaza'); world.fx.setFireworks(sim.fireworksUntil > sim.clock, dt, plaza.cx, plaza.cz); sky.festivalGlow = world.fx.fireworksLight;
   sky.update(sim.hour, sim.rain, controls.target, dt * Math.max(speed, .0001), world.season); renderer.toneMappingExposure = 1.05 + sky.golden * .1 + sky.flash * .45; cinematicLight(dt); world.fx.setRain(sim.rain > .12 && world.season.snow < .5); world.fx.update(dt, controls.target);
   world.fx.winter.update(dt, controls.target, world.season.snow, sim.rain);
   for (const v of sim.villagers) world.fx.winter.breath(dt, v.avatar, !v.inside);

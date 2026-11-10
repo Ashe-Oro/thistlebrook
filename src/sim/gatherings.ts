@@ -8,8 +8,9 @@
 // invitations spread by word of mouth and guests gather, sit, chat and dance with the usual code.
 import type { Sim } from './sim';
 import type { Villager, Gathering } from './types';
-import { calendarFor } from './calendar';
+import { calendarFor, DAYS_PER_SEASON, type Season } from './calendar';
 import { say, pr } from './lines';
+import { addGrievance, resolveSocial } from './social';
 import { clamp, listJoin } from '../core/util';
 
 const H = (h: number) => h * 60;
@@ -32,6 +33,7 @@ export function tickGatherings(sim: Sim) {
     else if (g.kind === 'search') tickSearch(sim, g);
     else if (g.kind === 'meeting') tickMeeting(sim, g);
     else if (g.kind === 'showdown') tickShowdown(sim, g);
+    else if (g.kind === 'finale') tickFinale(sim, g);
   }
   if (sim.gatherings.length > 20) sim.gatherings = sim.gatherings.filter(g => !g.done || sim.day - g.day < 2);
 }
@@ -63,6 +65,188 @@ function scheduleDay(sim: Sim) {
     sim.log(`${cal.weekday}: festival eve. By sundown the plaza will be ringing.`, 3, [], 'festival', '🏮');
   }
   if (cal.tags.includes('rest')) sim.log(`${cal.weekday} in Thistlebrook: tools stay on their hooks and the village takes it slow.`, 3, [], 'calendar', '🕊️');
+  // the grand season finale closes out the last day of every season (day 7/14/21/28): one big evening on the plaza
+  if (cal.dayOfSeason === DAYS_PER_SEASON && sim.finaleUntil <= sim.clock && !sim.gatherings.some(g => g.kind === 'finale' && !g.done)) {
+    const at = day0 + H(18);
+    push(sim, { kind: 'finale', phase: 'planned', at, until: day0 + H(23), place: 'plaza', host: '', actors: [], day, data: {} });
+    sim.log(`The last day of ${cal.season}: come sundown the plaza hosts ${FINALE_NAMES[cal.season]}, the grand season finale.`, 5, [], 'festival', '🎆', -9, 5);
+  }
+}
+
+// ---- season-finale festival -----------------------------------------------------------------------
+// The dramatic, cozy close of each season: the whole village on the plaza from sundown, a run of staged
+// acts (opening speech, a contest, the crowning of the Heart of Thistlebrook and the Season's Scoundrel,
+// a reconciliation, the grand dance and a closing toast) and fireworks at the climax. It rides the normal
+// festival machinery — festivalUntil turns the plaza party into a ring-dance and raises the bunting — and
+// adds two render-only windows (finaleUntil for the bonfire/lanterns, fireworksUntil for the bursts).
+const FINALE_NAMES: Record<Season, string> = { Spring: 'the Blossom Fair', Summer: 'Midsummer Lantern Night', Autumn: 'the Harvest Moon Feast', Winter: 'the Frost Fire Gala' };
+// A short recap of the season just gone, counted from the day-by-day chronicle.
+function seasonRecap(sim: Sim, day: number, season: Season): string {
+  const start = day - (calendarFor(day).dayOfSeason - 1);
+  let weddings = 0, newLove = 0, settled = 0, fights = 0;
+  for (let d = start; d <= day; d++) for (const e of sim.dayStats[d] ?? []) {
+    if (e.kind === 'wedding' && /were married/.test(e.text)) weddings++;
+    else if (e.kind === 'romance' && (e.icon === '💞' || /sweethearts|said yes/i.test(e.text))) newLove++;
+    else if (e.kind === 'reconcile' && e.icon === '🕊️') settled++;
+    else if (e.kind === 'showdown' && e.icon === '🏆' && /settled/.test(e.text)) settled++;
+    else if (e.kind === 'fight' && e.icon === '💥') fights++;
+  }
+  const bits: string[] = [];
+  if (weddings) bits.push(`${weddings} wedding${weddings > 1 ? 's' : ''}`);
+  if (newLove) bits.push(`${newLove} new sweetheart${newLove > 1 ? 's' : ''}`);
+  if (settled) bits.push(`${settled} feud${settled > 1 ? 's' : ''} settled`);
+  if (fights) bits.push(`${fights} scuffle${fights > 1 ? 's' : ''} best forgotten`);
+  if (!bits.length) return `This ${season.toLowerCase()}: quiet days and friendships warmed.`;
+  return `This ${season.toLowerCase()}: ${listJoin(bits)}.`;
+}
+
+function tickFinale(sim: Sim, g: Gathering) {
+  if (sim.clock < g.at) return;
+  const d = g.data, pl = sim.place('plaza'), cal = calendarFor(g.day), base = FINALE_NAMES[cal.season];
+  // ---- kick-off: part the clouds, raise the festival, pull the whole village to the plaza ----
+  if (g.phase === 'planned') {
+    const wed = sim.parties.find(p => !p.done && p.kindTag === 'wedding' && sim.clock >= p.at - 25 && sim.clock < p.until);
+    if (wed) { g.at = Math.max(g.at, wed.until + 5); return; } // a wedding party still dancing? let it finish and flow in
+    g.phase = 'on'; g.until = (g.day - 1) * 1440 + H(23);
+    const theme = sim.festivalTheme, title = theme ? `${base} — ${theme}` : base;
+    sim.finaleTitle = `Season Finale: ${title.replace(/^the /, '')}`;
+    if (sim.rainUntil > sim.clock) { sim.rainUntil = sim.clock; sim.log('The clouds parted for the finale, as if the sky knew.', 3, [], 'weather', '🌤️', pl.cx, pl.cz); }
+    const host = [...sim.villagers].sort((a, b) => sim.popularity(b) - sim.popularity(a))[0];
+    g.host = host.id; g.actors = [host.id];
+    sim.festivalShown = false; sim.festivalUntil = g.until; sim.finaleUntil = g.until;
+    const p = sim.scheduleParty(host, title, 'plaza', sim.clock, g.until - sim.clock, { announce: false, tag: 'festival' });
+    g.partyId = p.id;
+    (p as any).decided = new Map(sim.villagers.map(v => [v.id, v === host || (v.opinion[host.id] ?? 0) >= -40]));
+    for (const v of sim.villagers) { sim.learnFact(v, p.fact); p.invited.add(v.id); if (v.doing !== 'sleeping') sim.icon(v, '🎆'); }
+    const pace = Math.min(1, (g.until - g.at) / 300);
+    d.speakAt = g.at + 12 * pace; d.contestAt = g.at + 44 * pace; d.crownAt = g.at + 100 * pace; d.reconcileAt = g.at + 130 * pace; d.danceAt = g.at + 160 * pace; d.toastAt = g.at + 260 * pace;
+    sim.log(`${base.charAt(0).toUpperCase() + base.slice(1)}! The ${cal.season} finale — bunting, a glowing lantern cluster over the plaza, and ${host.first} to lead the whole village into the evening${theme ? `. This season's theme: ${theme}` : ''}.`, 8, [host.id], 'festival', '🎪', pl.cx, pl.cz);
+    return;
+  }
+  const p = sim.parties.find(x => x.id === g.partyId);
+  if (!p || p.done) { g.done = true; if (sim.finaleUntil > sim.clock) sim.finaleUntil = sim.clock; return; }
+  const host = sim.byId.get(g.host)!;
+  const crowd = [...p.attendees].filter(id => id !== g.host);
+  const present = (v: Villager) => !v.inside && !v.act?.locked && p.attendees.has(v.id);
+  // stage a villager front-and-centre on the plaza, facing the gathered crowd
+  const takeStage = (v: Villager, anim: string, dur: number, label: string, fz = 2.6) => {
+    sim.clearPlan(v); sim.leaveSeat(v);
+    if (v.inside) { sim.place(v.inside).inside.delete(v.id); v.inside = null; v.avatar.targetAlpha = 1; }
+    [v.x, v.z] = sim.world.nav.nearestFree(pl.cx, pl.cz + fz);
+    v.heading = 0; v.avatar.targetHeading = 0;
+    v.act = { type: 'idle', anim, dur, t: 0, label, locked: true, face: 0 };
+    v.queue.push({ type: 'attend', party: p.id, t: 0, label: `at ${p.title}` });
+    p.focus = [pl.cx, pl.cz + fz];
+  };
+
+  // 1. opening speech by the best-loved villager
+  if (!d.spoke && sim.clock >= d.speakAt) {
+    d.spoke = 1; takeStage(host, 'talk', 16, `opening ${base}`); p.quietUntil = sim.clock + 12;
+    sim.say(host, sim.rng.pick(['Friends, welcome, one and all!', 'A toast — to the season gone by!', 'Gather round, Thistlebrook!']), '📣', 4);
+    sim.log(`${host.first} opened ${base} with a few warm words — a nod to the season behind them, and to friends old and new.`, 6, [host.id, ...crowd.slice(0, 4)], 'festival', '📣', pl.cx, pl.cz);
+    return;
+  }
+  // 2. a contest — a feud showdown if the festival drew one out, otherwise a friendly bout
+  if (!d.contest && sim.clock >= d.contestAt) {
+    d.contest = 1;
+    if (sim.gatherings.some(x => x.kind === 'showdown' && x.day === g.day) || sim.gatherDay['showdown'] === sim.day) d.cDone = 1; // the showdown is our contest
+    else {
+      const pool = sim.villagers.filter(v => present(v) && v.id !== g.host).sort((a, b) => (b.traits.sociability + b.traits.bravery) - (a.traits.sociability + a.traits.bravery));
+      const a = pool[0], b = pool[1];
+      if (!a || !b) d.cDone = 1;
+      else {
+        const [what, icon, anim] = sim.rng.pick(CONTESTS);
+        const [cx, cz] = sim.world.nav.nearestFree(pl.cx, pl.cz + 3.4);
+        for (const v of [a, b]) { sim.clearPlan(v); sim.leaveSeat(v); }
+        [a.x, a.z] = sim.world.nav.nearestFree(cx - .6, cz); [b.x, b.z] = sim.world.nav.nearestFree(cx + .6, cz);
+        a.heading = Math.atan2(b.x - a.x, b.z - a.z); b.heading = Math.atan2(a.x - b.x, a.z - b.z);
+        a.avatar.targetHeading = a.heading; b.avatar.targetHeading = b.heading;
+        a.act = { type: 'idle', anim, dur: 13, t: 0, label: `${what} with ${b.first}`, locked: true, face: a.heading };
+        b.act = { type: 'idle', anim, dur: 13, t: 0, label: `${what} with ${a.first}`, locked: true, face: b.heading };
+        p.focus = [cx, cz]; p.cheerUntil = sim.clock + 4;
+        sim.say(a, 'Winner leads the next dance!', '😄', 3); sim.say(b, 'You’re on!', '😆', 3);
+        sim.log(`A friendly ${what} at ${base}: ${a.first} against ${b.first}, the whole village egging them on!`, 6, [a.id, b.id, ...crowd.slice(0, 3)], 'festival', icon, cx, cz);
+        d.cA = a.id; d.cB = b.id; d.cWhat = what;
+      }
+    }
+    return;
+  }
+  if (d.contest && !d.cDone && d.cA && sim.clock >= d.contestAt + 13) {
+    d.cDone = 1; const a = sim.byId.get(d.cA)!, b = sim.byId.get(d.cB)!, what: string = d.cWhat, R = sim.rng;
+    const sc = (v: Villager) => (what.includes('arm') ? v.traits.bravery + v.def.height * .4 : what.includes('pie') ? v.traits.diligence * .5 + (100 - v.needs.food) / 150 : v.traits.sociability + v.emotions.joy * .3) + R.range(0, .5);
+    const [w, l] = sc(a) >= sc(b) ? [a, b] : [b, a];
+    w.emotions.joy = 1; sim.icon(w, '🏆'); a.act = null; b.act = null; // back into the dance
+    for (const id of crowd) { const u = sim.byId.get(id)!; nudge(u, w, 3); }
+    w.queue.push({ type: 'idle', anim: 'cheer', dur: 7, t: 0, label: 'soaking up the cheers' });
+    sim.log(`${w.first} won the ${what} at ${base}! ${l.first} took the loss with a grin and a bow.`, 7, [w.id, l.id, ...crowd.slice(0, 3)], 'festival', '🏆', w.x, w.z);
+    for (const v of [a, b]) v.queue.push({ type: 'attend', party: p.id, t: 0, label: `at ${p.title}` });
+    p.cheerUntil = sim.clock + 6; p.focus = undefined;
+    return;
+  }
+  // 3. the crowning: Heart of Thistlebrook (best-loved) and, tongue-in-cheek, the Season's Scoundrel (most mischief)
+  if (!d.crowned && sim.clock >= d.crownAt) {
+    d.crowned = 1;
+    const heart = [...sim.villagers].sort((a, b) => sim.popularity(b) - sim.popularity(a))[0];
+    takeStage(heart, 'cheer', 18, 'crowned Heart of Thistlebrook'); p.cheerUntil = sim.clock + 8; p.quietUntil = 0;
+    heart.emotions.joy = 1; sim.icon(heart, '👑');
+    for (const id of crowd) { const u = sim.byId.get(id)!; if (u !== heart) nudge(u, heart, 3); }
+    sim.log(`${base.charAt(0).toUpperCase() + base.slice(1)} crowns ${heart.first} the Heart of Thistlebrook — the best-loved soul in the village this ${cal.season}, to cheers and a ring of lantern-light.`, 9, [heart.id, ...crowd.slice(0, 5)], 'festival', '👑', pl.cx, pl.cz, sim.finaleTitle);
+    sim.achieve(heart, `heart-of-thistlebrook`, 'Heart of Thistlebrook', `${heart.first} was crowned best-loved`);
+    const scoundrel = [...sim.villagers].sort((a, b) => sim.mischief(b) - sim.mischief(a))[0];
+    if (scoundrel) {
+      sim.icon(scoundrel, '🎭'); scoundrel.emotions.joy = Math.min(1, scoundrel.emotions.joy + .3);
+      sim.log(`…and ${scoundrel.first} is handed the Season's Scoundrel sash, worn with a wink — the village boos, fondly.`, 7, [scoundrel.id], 'festival', '🎭', pl.cx, pl.cz);
+      sim.achieve(scoundrel, `seasons-scoundrel`, "Season's Scoundrel", `${scoundrel.first} was the cheekiest soul this season`);
+    }
+    return;
+  }
+  // 4. a reconciliation: the warmth of the night settles an old grudge if one is simmering
+  if (!d.reconciled && sim.clock >= d.reconcileAt) {
+    d.reconciled = 1;
+    const lovers = sim.villagers.find(a => { const b = a.partner ? sim.byId.get(a.partner) : null; return b && present(a) && present(b) && proposalReady(sim, a, b); });
+    if (lovers) { const beloved = sim.byId.get(lovers.partner!)!; takeStage(lovers, 'talk', 20, 'a proposal under the lanterns'); resolveSocial(sim, lovers, beloved, { type: 'social', kind: 'propose', t: 0, label: 'a proposal under the lanterns' }); return; }
+    let pair: [Villager, Villager] | null = null, worst = -12;
+    for (const a of sim.villagers) for (const b of sim.villagers) {
+      if (a.id >= b.id || !present(a) || !present(b)) continue;
+      const s = (a.opinion[b.id] ?? 0) + (b.opinion[a.id] ?? 0);
+      if ((a.opinion[b.id] ?? 0) < -12 && (b.opinion[a.id] ?? 0) < -12 && (a.opinion[b.id] ?? 0) >= -40 && (b.opinion[a.id] ?? 0) >= -40 && a.emotions.anger < .5 && b.emotions.anger < .5 && s < worst) { worst = s; pair = [a, b]; }
+    }
+    if (pair) {
+      const [a, b] = pair; takeStage(a, 'talk', 12, `making peace with ${b.first}`, 2.2);
+      sim.clearPlan(b); sim.leaveSeat(b); [b.x, b.z] = sim.world.nav.nearestFree(a.x + 1.0, a.z);
+      b.heading = Math.atan2(a.x - b.x, a.z - b.z); b.avatar.targetHeading = b.heading;
+      a.heading = Math.atan2(b.x - a.x, b.z - a.z); (a.act as any).face = a.heading;
+      b.act = { type: 'idle', anim: 'talk', dur: 12, t: 0, label: `making peace with ${a.first}`, locked: true, face: b.heading };
+      b.queue.push({ type: 'attend', party: p.id, t: 0, label: `at ${p.title}` });
+      p.quietUntil = sim.clock + 8;
+      a.opinion[b.id] = Math.max((a.opinion[b.id] ?? 0) + 30, 10); b.opinion[a.id] = Math.max((b.opinion[a.id] ?? 0) + 30, 10);
+      a.emotions.anger = b.emotions.anger = 0; a.emotions.joy = b.emotions.joy = Math.min(1, a.emotions.joy + .3);
+      addGrievance(sim, a, b.id, -100); addGrievance(sim, b, a.id, -100); sim.coolOff[sim.pairKey(a.id, b.id)] = 0;
+      a.stats.makeups++; b.stats.makeups++; sim.icon(a, '🕊️'); sim.icon(b, '🕊️');
+      sim.emit('convo', [{ who: a.id, text: say(sim, a, 'apology', { t: b.first }), emoji: '🤝', at: sim.clock + 1 }, { who: b.id, text: say(sim, b, 'reconcileAccept'), emoji: '🙂', at: sim.clock + 4 }]);
+      sim.log(`Under the lanterns ${a.first} and ${b.first} buried the hatchet at last — a handshake, and the grudge let go.`, 7, [a.id, b.id], 'reconcile', '🕊️', a.x, a.z);
+      sim.achieve(null, `finale-peace`, 'Made Up at the Finale', `${a.first} and ${b.first} reconciled`);
+    }
+    return;
+  }
+  // 5. the grand dance — the ring joins hands round the bonfire
+  if (!d.danced && sim.clock >= d.danceAt) {
+    d.danced = 1; p.dance = true; p.quietUntil = 0; p.cheerUntil = sim.clock + 7; p.focus = undefined;
+    sim.log(`Fiddles struck up and the whole village joined hands for the grand ${base} dance around the lanterns.`, 6, [host.id, ...crowd.slice(0, 5)], 'festival', '💃', pl.cx, pl.cz);
+    return;
+  }
+  // 6. the closing toast, the season's tally, and fireworks to send it out
+  if (!d.toasted && sim.clock >= d.toastAt) {
+    d.toasted = 1; takeStage(host, 'drink', 8, 'the closing toast'); p.quietUntil = sim.clock + 6;
+    sim.say(host, 'To Thistlebrook — and to the season to come!', '🥂', 4);
+    sim.log(`${host.first} raised the closing toast of ${base}. ${seasonRecap(sim, g.day, cal.season)}`, 8, [host.id, ...crowd.slice(0, 4)], 'festival', '🥂', pl.cx, pl.cz);
+    sim.fireworksUntil = Math.min(g.until, sim.clock + 40);
+    sim.log(`Fireworks burst over Thistlebrook in a dozen colours — ${base} goes out in a blaze of light.`, 9, [], 'festival', '🎆', pl.cx, pl.cz, sim.finaleTitle);
+    for (const id of p.attendees) { const u = sim.byId.get(id)!; u.emotions.joy = 1; if (!u.inside) sim.icon(u, '🎆'); }
+    sim.achieve(null, `finale-${cal.season}-${cal.year}`, 'Season Finale', base.replace(/^the /, ''));
+    return;
+  }
+  if (sim.clock >= g.until) { g.done = true; p.focus = undefined; }
 }
 
 // the sim-side festival: state changes are synchronous and deterministic; the render side (bunting,
@@ -221,6 +405,7 @@ function tickWedding(sim: Sim, g: Gathering) {
 const CONTESTS: [string, string, string][] = [['an arm-wrestle', '💪', 'fight'], ['a pie-eating contest', '🥧', 'drink'], ['a dance-off', '🕺', 'dance']];
 function maybeShowdown(sim: Sim) {
   if (sim.festivalUntil <= sim.clock) return;
+  if (sim.gatherings.some(g => g.kind === 'finale' && !g.done && g.data.contest)) return;
   if ((sim.gatherDay['showdown'] ?? -99) + 3 > sim.day) return;
   if (sim.gatherings.some(g => g.kind === 'showdown' && !g.done)) return;
   // wait until the crowd has actually gathered round the plaza

@@ -313,7 +313,7 @@ export class UI {
       }
       ctx.globalAlpha = 1; this.icons.length = alive;
     }
-    this.cardT -= dt; if (this.cardT <= 0) { this.cardT = .35; const cal = calendarFor(s.day); setHTML(this.clock, `<b><span class="wkd">${cal.weekday} · </span>${cal.dayOfSeason} ${cal.season}<span class="dno"> · Day ${s.day}</span></b> · ${fmtTime(s.clock)} ${s.rain > .4 ? '🌧️' : s.hour >= 20 || s.hour < 6 ? '🌙' : s.hour < 8 ? '🌅' : '☀️'}${s.festivalUntil > s.clock ? ' 🎪' : ''}${s.visitorUntil > s.clock ? ' 🧳' : ''}`); if (this.calOpen) this.renderCal();
+    this.cardT -= dt; if (this.cardT <= 0) { this.cardT = .35; const cal = calendarFor(s.day); setHTML(this.clock, `<b><span class="wkd">${cal.weekday} · </span>${cal.dayOfSeason} ${cal.season}<span class="dno"> · Day ${s.day}</span></b> · ${fmtTime(s.clock)} ${s.rain > .4 ? '🌧️' : s.hour >= 20 || s.hour < 6 ? '🌙' : s.hour < 8 ? '🌅' : '☀️'}${s.finaleUntil > s.clock ? ' 🎆' : s.festivalUntil > s.clock ? ' 🎪' : ''}${s.visitorUntil > s.clock ? ' 🧳' : ''}`); if (this.calOpen) this.renderCal();
       this.measureChrome();
       this.root.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach(b => b.classList.toggle('on', +b.dataset.speed! === this.app.speed)); { const m = this.root.querySelector('#mode') as HTMLElement, html = this.app.mode === 'director' ? '🎬<span> Director</span>' : '🕹️<span> Free cam</span>'; if (m.innerHTML !== html) m.innerHTML = html; }
       this.renderCard(); this.renderLB(); this.storyT -= .35; if (this.storyT <= 0) { this.storyT = 1.05; this.renderStorylines(); }
@@ -339,7 +339,7 @@ export class UI {
     const TAG: Record<string, [string, string]> = { market: ['🧺', 'Market day'], 'town-meeting': ['🏛️', 'Town meeting'], 'festival-eve': ['🎪', 'Festival eve'], rest: ['😌', 'Rest day'] };
     let rows = '';
     for (let i = 0; i < 7; i++) {
-      const d = start + i; if (d < 1) continue; const c = calendarFor(d), today = d === s.day, tg = c.tags[0] ? TAG[c.tags[0]] : null;
+      const d = start + i; if (d < 1) continue; const c = calendarFor(d), today = d === s.day, tg = c.dayOfSeason === 7 ? ['🎆', 'Season finale · 18–23h'] : c.tags[0] ? TAG[c.tags[0]] : null;
       rows += `<div style="display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:7px;${today ? 'background:rgba(255,255,255,.14);font-weight:600;' : ''}"><span style="width:76px;opacity:${today ? '1' : '.82'}">${c.weekday}</span><span style="width:20px;text-align:right;opacity:.55">${c.dayOfSeason}</span><em style="flex:1;font-style:normal">${tg ? `${tg[0]} ${tg[1]}` : '<span style="opacity:.35">—</span>'}</em></div>`;
     }
     setHTML(this.calPop, `<div style="font-weight:700;margin-bottom:6px;letter-spacing:.3px">🗓️ ${cal.season} · Week ${cal.week}</div>${rows}`);
