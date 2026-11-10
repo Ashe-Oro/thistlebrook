@@ -205,3 +205,16 @@ body.montage .cine::before { content: ''; position: absolute; inset: 0; backgrou
 /* Letterboxed presentation keeps the caption clear of village panels. */
 .topbar, .feedwrap, .lb, .card, .dock, .hint, .caption { transition: opacity .45s; }
 body.cinematic .topbar, body.cinematic .feedwrap, body.cinematic .lb, body.cinematic .card, body.cinematic .dock, body.cinematic .hint, body.cinematic .caption, body:has(.cine.on) .topbar, body:has(.cine.on) .feedwrap, body:has(.cine.on) .lb, body:has(.cine.on) .card, body:has(.cine.on) .dock { opacity: 0 !important; pointer-events: none; }
+
+/* round-2 QA: the calendar made the clock too wide for phones and pushed Director / mute / new-village off-screen */
+@media (max-width: 700px), (pointer: coarse) {
+  .clock { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .speeds button, .toggles button, .topbar button { min-width: 36px; padding: 0 4px; }
+  .feedwrap .ph { flex-wrap: wrap; row-gap: 4px; } .feedwrap .ff { flex-wrap: wrap; } .ff button { padding: 0 8px; }
+}
+@media (max-width: 460px) { .clock .wkd, .clock .dno { display: none; } }
+/* phone landscape: the villager card is a right-hand side panel so the villager stays visible on the left */
+@media (orientation: landscape) and (max-height: 500px) {
+  .card { left: auto; right: 8px; width: min(380px, 48vw); top: calc(env(safe-area-inset-top, 0px) + var(--top-h) + 8px); bottom: calc(env(safe-area-inset-bottom, 0px) + var(--dock-h) + 10px); max-height: none; }
+  body:has(.card:not(.hidden)) .feedwrap { display: none; }
+}
