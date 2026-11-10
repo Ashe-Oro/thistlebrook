@@ -19,11 +19,11 @@ export interface Villager {
   inside: string | null; busyUntil: number; seat: any; story: { t: number; text: string }[]; stats: Stats;
   lastSocial: Record<string, number>; intent: string | null; avatar: any; anim: string; replan: boolean; wanted: number; achievements: Set<string>;
 }
-export interface SimEvent { id: number; t: number; text: string; imp: number; actors: string[]; x: number; z: number; kind: string; icon: string; }
+export interface SimEvent { finale?: string; id: number; t: number; text: string; imp: number; actors: string[]; x: number; z: number; kind: string; icon: string; }
 export interface Alliance { id: string; name: string; color: string; members: string[]; founded: number; }
 // Villager-initiated multi-person events (see gatherings.ts). Plain data only — ids, numbers, strings —
 // so the generic save serialiser can round-trip one mid-flight.
-export type GatheringKind = 'wedding' | 'festival' | 'showdown' | 'search' | 'meeting';
+export type GatheringKind = 'wedding' | 'festival' | 'showdown' | 'search' | 'meeting' | 'finale';
 export interface Gathering {
   id: string; kind: GatheringKind; phase: string; at: number; until: number; place: string; host: string;
   partyId?: string; actors: string[]; day: number; done: boolean; data: Record<string, any>;

@@ -21,6 +21,7 @@ class Pool {
     const particle = Object.assign(recycled ?? {} as P, { vx: 0, vy: 0, vz: 0, life: 0, max: 1, size: .3, grow: 0, r: 1, g: 1, b: 1, a: 1, grav: 0, drag: 0, wobble: 0, fade: 1 }, p);
     if (this.ps.length < this.max) this.ps.push(particle);
   }
+  prewarm() { for (let i = 0; i < this.max; i++) { this.emit({ x: 0, y: 0, z: 0, max: 0 }); } this.update(0, 0); }
   update(dt: number, t: number) {
     if (!this.ps.length) return;
     let n = 0;
@@ -42,11 +43,32 @@ class Pool {
 
 export class FX {
   winter: WinterWeather;
+  private fireworks: Pool; private fireworksOn = false; private fireworksAge = 0; private nextBurst = 0;
+  fireworksLight = 0;
+  /* Render-only clock and random stream; never feeds village decisions. */
+  private fireSeed = 87123;
+  private fireRandom() { this.fireSeed = (Math.imul(this.fireSeed, 1664525) + 1013904223) >>> 0; return this.fireSeed / 4294967296; }
+  setFireworks(on: boolean, dt: number, x: number, z: number) {
+    if (on && !this.fireworksOn) { this.fireworksAge = 0; this.nextBurst = 0; }
+    this.fireworksOn = on; this.fireworksLight = Math.max(0, this.fireworksLight - dt * 1.6);
+    if (!on) return;
+    this.fireworksAge += dt;
+    if (this.fireworksAge > 20 || this.fireworksAge < this.nextBurst) return;
+    this.nextBurst = this.fireworksAge + 2.8;
+    const rand = () => this.fireRandom(), bx = x + (rand() - .5) * 15, by = 13 + rand() * 7, bz = z + (rand() - .5) * 10;
+    const color = new THREE.Color().setHSL(rand(), .85, .65);
+    for (let i = 0; i < 140; i++) {
+      const a = rand() * Math.PI * 2, u = rand() * 2 - 1, r = Math.sqrt(1 - u * u), speed = 2 + rand() * 4;
+      this.fireworks.emit({ x: bx, y: by, z: bz, vx: Math.cos(a) * r * speed, vy: u * speed, vz: Math.sin(a) * r * speed, max: 2.2 + rand(), size: .24, r: color.r, g: color.g, b: color.b, grav: 1.1, drag: .3 });
+    }
+    this.fireworksLight = .6;
+  }
   normal: Pool; glow: Pool; coins: THREE.InstancedMesh; coinState: { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; spin: number }[] = [];
   rain: THREE.Mesh; private splashes: THREE.Mesh;
   private weather = { time: { value: 0 }, strength: { value: 0 } }; rainOn = 0; rainTarget = 0; t = 0; dummy = new THREE.Object3D();
   constructor(public scene: THREE.Scene) {
     this.winter = new WinterWeather(scene);
+    this.fireworks = new Pool(scene, 560, true, 1); this.fireworks.prewarm();
     this.normal = new Pool(scene, 2500, false, 0.6); this.glow = new Pool(scene, 1500, true, 1);
     const cg = new THREE.CylinderGeometry(.09, .09, .025, 10); cg.rotateX(Math.PI / 2);
     this.coins = new THREE.InstancedMesh(cg, new THREE.MeshLambertMaterial({ color: '#f5c542', emissive: '#7a5300' }), 120); this.coins.count = 0; this.coins.frustumCulled = false; scene.add(this.coins);
@@ -100,7 +122,7 @@ export class FX {
   coinBurst(x: number, y: number, z: number, n = 6) { for (let i = 0; i < n; i++) { if (this.coinState.length >= 120) this.coinState.shift(); const a = Math.random() * 6.28; this.coinState.push({ x, y, z, vx: Math.cos(a) * 1.2, vy: 3.5 + Math.random() * 1.5, vz: Math.sin(a) * 1.2, life: 0, spin: Math.random() * 6 }); } }
   setRain(on: boolean) { this.rainTarget = on ? 1 : 0; }
   update(dt: number, camTarget: THREE.Vector3) {
-    this.t += dt; this.normal.update(dt, this.t); this.glow.update(dt, this.t);
+    this.t += dt; this.fireworks.update(dt, this.t); this.normal.update(dt, this.t); this.glow.update(dt, this.t);
     let n = 0;
     for (const c of this.coinState) { c.life += dt; if (c.life > 1.6) continue; c.vy -= 11 * dt; c.x += c.vx * dt; c.y += c.vy * dt; c.z += c.vz * dt; if (c.y < .05) { c.y = .05; c.vy *= -.4; } this.dummy.position.set(c.x, c.y, c.z); this.dummy.rotation.set(0, c.spin + c.life * 12, 0); const s = c.life > 1.3 ? (1.6 - c.life) / .3 : 1; this.dummy.scale.setScalar(s); this.dummy.updateMatrix(); this.coins.setMatrixAt(n++, this.dummy.matrix); }
     let alive = 0; for (const c of this.coinState) if (c.life <= 1.6) this.coinState[alive++] = c; this.coinState.length = alive; this.coins.count = n; if (n) this.coins.instanceMatrix.needsUpdate = true;

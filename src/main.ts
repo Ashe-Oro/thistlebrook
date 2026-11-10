@@ -366,6 +366,7 @@ interface Beat { e: SimEvent; title: string; icon: string; t: number; dur: numbe
 let beat: Beat | null = null, beatCool = 0, shake = 0, beatLast = 0;
 const cine = document.createElement('div'); cine.className = 'cine'; cine.innerHTML = '<i class="bar t"></i><i class="bar b"></i><div class="ct"><em></em><b></b><span></span></div>'; document.body.appendChild(cine);
 function beatTitle(e: SimEvent): string | null {
+  if (e.finale) return e.finale;
   if (e.kind === 'fight' && e.icon === '💥') return 'The Brawl';
   if (e.kind === 'romance' && e.icon === '💞') return 'Sweethearts';
   if (e.kind === 'romance' && e.icon === '💔' && e.imp >= 8) return 'Heartbreak';
@@ -390,9 +391,9 @@ function beatTitle(e: SimEvent): string | null {
 function startBeat(e: SimEvent, force = false) {
   if (ffing) return false;
   const title = beatTitle(e); if (!title && !force) return false;
-  const nowR = performance.now(); if (!force && (beat || montage || nowR < beatCool)) return false;
+  const nowR = performance.now(); if (e.finale && beat && !montage) endBeat(); if (!force && (beat || montage || (!e.finale && nowR < beatCool))) return false;
   const ids = e.actors.filter(id => { const v = sim.byId.get(id); return v && !v.inside && Math.hypot(v.x - e.x, v.z - e.z) < 10; }).slice(0, 2);
-  const fixed: Beat['fixed'] = e.kind === 'rainbow' ? [e.x, e.z, 9, (e as any).yaw] : e.kind === 'traveller' ? [NELL[0], NELL[1] + 1.2, 1.1, .45] : e.kind === 'festival' || (e.kind === 'party' && !ids.length) ? [e.x, e.z, 1.2, -.6] : undefined;
+  const fixed: Beat['fixed'] = e.finale ? [e.x, e.z, e.icon === '🎆' ? 10 : 2, -.6] : e.kind === 'rainbow' ? [e.x, e.z, 9, (e as any).yaw] : e.kind === 'traveller' ? [NELL[0], NELL[1] + 1.2, 1.1, .45] : e.kind === 'festival' || (e.kind === 'party' && !ids.length) ? [e.x, e.z, 1.2, -.6] : undefined;
   if (!ids.length && !fixed) return false;
   const off = camera.position.clone().sub(controls.target);
   beat = { e, title: title ?? e.kind, icon: e.icon, t: 0, dur: e.kind === 'fight' ? 7.5 : 5.5, ids, slow: e.kind === 'fight' ? .45 : .8, side: 0, fixed, from: { p: camera.position.clone(), t: controls.target.clone() } };
@@ -520,9 +521,10 @@ function beatCamera(dt: number) {
   else if (vs.length) { const a = vs[0]; bT.set(a.x, 1.2, a.z); yaw = a.avatar.heading + .55 + b.t * .04; dist = 7.5; h = 3.8; }
   else { bT.copy(shotTarget(b.e.x, b.e.z, [])); yaw = b.side; dist = 8; h = 4.2; }
   if (!b.fixed) bT.copy(shotTarget(b.e.x, b.e.z, b.ids));
+  if (b.e.finale) { dist = 22; h = 13; }
   if (!b.clear) { // framed once per beat: subjects' heads, action-line side as the preferred bearing
     const heads = vs.length ? vs.map(v => new THREE.Vector3(v.x, v.avatar.height + .25, v.z)) : [new THREE.Vector3(bT.x, bT.y + .5, bT.z)];
-    b.clear = frameShot(bT, heads, yaw, Math.max(4.5, dist * .8), Math.max(dist, 10), vs.length === 1 ? [5.5, 4.8] : [h, Math.min(5.5, h + 1.2)], new Set(b.ids));
+    b.clear = frameShot(bT, heads, yaw, Math.max(4.5, dist * .8), Math.max(dist, 10), b.e.finale ? [13, 16, 19] : vs.length === 1 ? [5.5, 4.8] : [h, Math.min(5.5, h + 1.2)], new Set(b.ids));
   }
   yaw = b.clear.yaw; dist = b.clear.dist; h = b.clear.h;
   if (b.e.kind === 'rainbow') dist += b.t * .5;
@@ -613,6 +615,8 @@ function frame(now: number) {
   if (montage) { montageCamera(Math.min(.25, dt)); }
   else if (intro) { introCamera(Math.min(.25, (now - (beatLast || now)) / 1000)); beatLast = now; }
   else if (!beat) controls.update(); else beatCamera(Math.min(.25, (now - (beatLast || now)) / 1000)); beatLast = now;
+  world.setFinale(sim.finaleUntil > sim.clock);
+  const plaza = sim.place('plaza'); world.fx.setFireworks(sim.fireworksUntil > sim.clock, dt, plaza.cx, plaza.cz); sky.festivalGlow = world.fx.fireworksLight;
   sky.update(sim.hour, sim.rain, controls.target, dt * Math.max(speed, .0001), world.season); renderer.toneMappingExposure = 1.05 + sky.golden * .1 + sky.flash * .45; cinematicLight(dt); world.fx.setRain(sim.rain > .12 && world.season.snow < .5); world.fx.update(dt, controls.target);
   world.fx.winter.update(dt, controls.target, world.season.snow, sim.rain);
   for (const v of sim.villagers) world.fx.winter.breath(dt, v.avatar, !v.inside);
