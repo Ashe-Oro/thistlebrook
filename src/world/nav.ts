@@ -27,9 +27,22 @@ export class NavGrid {
     for (let r = 1; r < radius; r++) for (let a = 0; a < 16; a++) { const t = a / 16 * Math.PI * 2, px = x + Math.cos(t) * r * this.cell, pz = z + Math.sin(t) * r * this.cell; if (this.isFree(px, pz)) return [px, pz]; }
     return [x, z];
   }
+  // Exact grid traversal (Amanatides-Woo): every cell the segment touches must be free, so a smoothed path
+  // segment that passes here can never contain a sub-step that fails (corner grazes included).
   lineFree(x0: number, z0: number, x1: number, z1: number) {
-    const d = Math.hypot(x1 - x0, z1 - z0), n = Math.ceil(d / (this.cell * 0.5));
-    for (let k = 0; k <= Math.max(1, n); k++) { const t = k / Math.max(1, n); if (!this.isFree(x0 + (x1 - x0) * t, z0 + (z1 - z0) * t)) return false; }
+    let i = this.ix(x0), j = this.iz(z0); const ie = this.ix(x1), je = this.iz(z1), c = this.cell;
+    const free = (a: number, b: number) => this.inside(a, b) && !this.blocked[b * this.w + a];
+    if (!free(i, j) || !free(ie, je)) return false;
+    const dx = x1 - x0, dz = z1 - z0, si = Math.sign(dx), sj = Math.sign(dz);
+    const tdx = si ? c / Math.abs(dx) : Infinity, tdz = sj ? c / Math.abs(dz) : Infinity;
+    let tx = si ? ((si > 0 ? this.minX + (i + 1) * c - x0 : x0 - (this.minX + i * c)) / Math.abs(dx)) : Infinity;
+    let tz = sj ? ((sj > 0 ? this.minZ + (j + 1) * c - z0 : z0 - (this.minZ + j * c)) / Math.abs(dz)) : Infinity;
+    for (let n = 0; n < 4096 && (i !== ie || j !== je); n++) {
+      if (Math.abs(tx - tz) < 1e-9) { if (!free(i + si, j) || !free(i, j + sj)) return false; i += si; j += sj; tx += tdx; tz += tdz; }
+      else if (tx < tz) { i += si; tx += tdx; } else { j += sj; tz += tdz; }
+      if (tx > 1 + 1e-9 && tz > 1 + 1e-9 && (i !== ie || j !== je)) { i = ie; j = je; }
+      if (!free(i, j)) return false;
+    }
     return true;
   }
   findPath(sx: number, sz: number, tx: number, tz: number, closest = false): [number, number][] | null {
