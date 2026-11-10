@@ -21,3 +21,13 @@ export interface Villager {
 }
 export interface SimEvent { id: number; t: number; text: string; imp: number; actors: string[]; x: number; z: number; kind: string; icon: string; }
 export interface Alliance { id: string; name: string; color: string; members: string[]; founded: number; }
+// Villager-initiated multi-person events (see gatherings.ts). Plain data only — ids, numbers, strings —
+// so the generic save serialiser can round-trip one mid-flight.
+export type GatheringKind = 'wedding' | 'festival' | 'showdown' | 'search' | 'meeting';
+export interface Gathering {
+  id: string; kind: GatheringKind; phase: string; at: number; until: number; place: string; host: string;
+  partyId?: string; actors: string[]; day: number; done: boolean; data: Record<string, any>;
+}
+// The village pet lives sim-side (the render dog is cosmetic and must never feed back into the sim).
+export interface Pet { name: string; x: number; z: number; state: 'home' | 'missing'; since: number; spot: string | null; }
+export interface Decree { day: number; topic: string; question: string; choice: string; votes: Record<string, string>; }
