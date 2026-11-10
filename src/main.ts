@@ -89,7 +89,7 @@ async function boot() {
   start();
 }
 
-let ffing = false;
+let ffing = false; let petWasMissing = false;
 let ambient: Ambient | null = null; let lastSpeed = 1; let speed = 1, mode: 'director' | 'free' = params.get('cam') === 'free' ? 'free' : 'director', selected: string | null = null; let acc = 0; let follow: string | null = null; let dirT = 0;
 const director = new Director(sim);
 const pcam = new THREE.PerspectiveCamera(15, 1, .3, 40); const portraits = new Map<string, HTMLCanvasElement>(); const pTime = new Map<string, number>();
@@ -362,7 +362,7 @@ function montageCamera(dt: number) {
 // When something big happens while the director has the camera, cut to a framed, letterboxed shot of it:
 // a low two-shot across the action line (or a three-quarter on one subject), a slow push-in, a title card,
 // a touch of slow motion for brawls and a punch of camera shake on every hit. Then hand back to the director.
-interface Beat { e: SimEvent; title: string; icon: string; t: number; dur: number; ids: string[]; slow: number; side: number; clear?: Framing; fixed?: [number, number, number, number]; from: { p: THREE.Vector3; t: THREE.Vector3 } }
+interface Beat { e: SimEvent; title: string; icon: string; t: number; dur: number; ids: string[]; slow: number; side: number; clear?: Framing; fixed?: [number, number, number, number]; aisle?: { x: number; z: number }; from: { p: THREE.Vector3; t: THREE.Vector3 } }
 let beat: Beat | null = null, beatCool = 0, shake = 0, beatLast = 0;
 const cine = document.createElement('div'); cine.className = 'cine'; cine.innerHTML = '<i class="bar t"></i><i class="bar b"></i><div class="ct"><em></em><b></b><span></span></div>'; document.body.appendChild(cine);
 function beatTitle(e: SimEvent): string | null {
@@ -382,7 +382,7 @@ function beatTitle(e: SimEvent): string | null {
   if (e.kind === 'romance' && e.icon === '💍') return 'The Proposal';
   if (e.kind === 'wedding' && e.imp >= 8) return e.icon === '💢' ? 'An Objection!' : 'The Wedding';
   if (e.kind === 'showdown') return e.icon === '🏆' ? 'The Showdown Settled' : 'Showdown!';
-  if (e.kind === 'search' && e.icon === '🐕') return 'Found!';
+  if (e.kind === 'search' && (e.icon === '🐕' || e.icon === '🐶')) return 'Found!';
   if (e.kind === 'search' && e.icon === '🐾' && e.imp >= 6) return 'The Search Party';
   if (e.kind === 'meeting' && e.icon === '🗳️') return 'The Vote';
   return null;
@@ -397,6 +397,8 @@ function startBeat(e: SimEvent, force = false) {
   const off = camera.position.clone().sub(controls.target);
   beat = { e, title: title ?? e.kind, icon: e.icon, t: 0, dur: e.kind === 'fight' ? 7.5 : 5.5, ids, slow: e.kind === 'fight' ? .45 : .8, side: 0, fixed, from: { p: camera.position.clone(), t: controls.target.clone() } };
   beat.side = Math.atan2(off.x, off.z);
+  // the wedding gets a straight-down-the-aisle shot, computed directly from the arch (e.x,e.z), held through the kiss
+  if (e.kind === 'wedding' && title === 'The Wedding') { beat.aisle = { x: e.x, z: e.z }; beat.dur = 7; }
   (cine.querySelector('em') as HTMLElement).textContent = e.icon; (cine.querySelector('b') as HTMLElement).textContent = beat.title;
   (cine.querySelector('span') as HTMLElement).textContent = e.text.replace(/\s*\(It isn't true\.\)/gi, '').replace(/\s+/g, ' ');
   cine.classList.add('on'); follow = null; focusTarget = null; controls.autoRotate = false;
@@ -505,6 +507,12 @@ function frameShot(target: THREE.Vector3, subjects: THREE.Vector3[], prefYaw: nu
 }
 function beatCamera(dt: number) {
   if (!beat) return; const b = beat; b.t += dt; if (b.t >= b.dur || mode !== 'director' || selected) { endBeat(); return; }
+  if (b.aisle) { // front-on wedding shot: on the aisle axis, due south of the arch, looking north toward the arch and chapel facade (bypasses frameShot)
+    bT.set(b.aisle.x, 1.35, b.aisle.z); const dist = 11.5 - b.t * .35, h = 3.7;
+    bP.set(b.aisle.x, h, b.aisle.z + dist); // sin(0)=0, cos(0)=1 → straight back along +z
+    const k = Math.min(1, b.t / .9), e = k * k * (3 - 2 * k);
+    controls.target.lerpVectors(b.from.t, bT, e); camera.position.lerpVectors(b.from.p, bP, e); camera.lookAt(controls.target); return;
+  }
   const vs = b.ids.map(id => sim.byId.get(id)!).filter(v => v && !v.inside && Math.hypot(v.x - b.e.x, v.z - b.e.z) < 10);
   let yaw: number, dist: number, h: number;
   if (b.fixed) { bT.set(b.fixed[0], b.fixed[2], b.fixed[1]); yaw = b.fixed[3] + Math.sin(b.t * .25) * .15; dist = 10 - b.t * .45; h = b.e.kind === 'rainbow' ? 7.6 : 3.2; if (b.e.kind === 'rainbow') { yaw = b.fixed[3] + b.t * .015; dist = 16 + b.t * .5; } }
@@ -590,7 +598,8 @@ function frame(now: number) {
   phases.avatars += performance.now() - phaseStart; phaseStart = performance.now();
   animateGifts(sim, dt);
   world.update(adt, dt * speed * MIN_PER_SEC, sim.clock, sky.night, sim.day, sim.rain);
-  if ((world as any).dog?.obj && (sim as any).pet) (world as any).dog.obj.visible = (sim as any).pet.state !== 'missing';
+  if ((world as any).dog?.obj && sim.pet) { const dg = (world as any).dog, missing = sim.pet.state === 'missing'; dg.obj.visible = !missing; if (petWasMissing && !missing) { dg.x = dg.tx = sim.pet.x; dg.z = dg.tz = sim.pet.z; } petWasMissing = missing; } // reappear right where the finder is
+  { const wp = sim.parties.find(p => p.wedding && !p.done && sim.clock >= p.at - 300); world.setWeddingArch(wp ? sim.place(wp.place) : null); } // arch up on the wedding-day morning, struck when the party ends
   const extraStart = performance.now(); extras?.update(adt, sim.hour, sim.rain, controls.target, camera.position, camera); const extraMs = performance.now() - extraStart; phases.avatars += extraMs;
   // camera
   if (beat || montage) { controls.autoRotate = false; }

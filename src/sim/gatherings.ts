@@ -100,7 +100,10 @@ export function planWedding(sim: Sim, a: Villager, b: Villager) {
   const p = sim.scheduleParty(a, `${a.first} & ${b.first}'s wedding`, venue, at, 130,
     { announce: `${a.first} and ${b.first} set the date: a wedding at ${sim.place(venue).name} on ${calendarFor(day).weekday} afternoon. Invitations are flying from lip to lip.`, kind: 'wedding', icon: '💌', tag: 'wedding' });
   p.wedding = [a.id, b.id];
-  (p as any).decided = new Map([[a.id, true], [b.id, true]]); // the couple would never skip their own wedding
+  // the whole village is invited; only those feuding with the bride or groom (opinion below -40 to either)
+  // stay away — everyone else drops their plans and walks to the chapel when the party machinery pulls them in
+  for (const v of sim.villagers) p.invited.add(v.id);
+  (p as any).decided = new Map(sim.villagers.map(v => [v.id, v === a || v === b || !((v.opinion[a.id] ?? 0) < -40 || (v.opinion[b.id] ?? 0) < -40)]));
   sim.learnFact(b, p.fact);
   for (const id of [...a.family, ...b.family]) { const f = sim.byId.get(id); if (f) sim.learnFact(f, p.fact); }
   push(sim, { kind: 'wedding', phase: 'planned', at, until: at + 130, place: venue, host: a.id, partyId: p.id, actors: [a.id, b.id], day, data: {} });
@@ -121,24 +124,35 @@ function tickWedding(sim: Sim, g: Gathering) {
     // being left off the list is itself a slight (rivals below -10 hear nothing)
     for (const v of sim.villagers) if (v !== a && v !== b && ((v.opinion[a.id] ?? 0) > -10 || (v.opinion[b.id] ?? 0) > -10)) sim.learnFact(v, p.fact);
     sim.log(`Wedding day in Thistlebrook! ${a.first} and ${b.first} marry at ${sim.place(g.place).name} this afternoon.`, 5, [a.id, b.id], 'wedding', '💒');
+    const away = sim.villagers.filter(v => v !== a && v !== b && ((v.opinion[a.id] ?? 0) < -40 || (v.opinion[b.id] ?? 0) < -40));
+    if (away.length) sim.log(`${listJoin(away.map(v => v.first))} made a point of staying away from the wedding.`, 3, away.map(v => v.id), 'wedding', '🚪');
     return;
   }
   if ((g.phase === 'planned' || g.phase === 'morning') && sim.clock >= g.at + 30) { // guests from the far districts need the walk
-    g.phase = 'vows'; g.data.cheerAt = sim.clock + 11;
-    const pl = sim.place(g.place), fx = pl.cx, fz = pl.cz + 2.5; // same front-of-venue convention attend() uses for guest spots
-    p.focus = [fx, fz]; p.quietUntil = sim.clock + 10; // the crowd falls silent and faces the couple
+    g.phase = 'vows';
+    const pl = sim.place(g.place), fx = pl.cx, fz = pl.cz + 6; // the ceremony ground under the arch, in front of the chapel door
+    g.data.fx = fx; g.data.fz = fz;
+    g.data.kissAt = sim.clock + 11; g.data.toastAt = sim.clock + 18; g.data.danceAt = sim.clock + 25;
+    p.focus = [fx, fz]; p.quietUntil = sim.clock + 11; // the crowd falls silent and faces the couple under the arch
     const [ax, az] = sim.world.nav.nearestFree(fx - .55, fz), [bx, bz] = sim.world.nav.nearestFree(fx + .55, fz);
     for (const [v, x, z] of [[a, ax, az], [b, bx, bz]] as [Villager, number, number][]) {
       sim.clearPlan(v); sim.leaveSeat(v);
       if (v.inside) { sim.place(v.inside).inside.delete(v.id); v.inside = null; v.avatar.targetAlpha = 1; }
       v.x = x; v.z = z;
-      v.act = { type: 'idle', anim: 'talk', dur: 11, t: 0, label: 'exchanging vows', locked: true };
+      v.act = { type: 'idle', anim: 'talk', dur: 15, t: 0, label: 'exchanging vows', locked: true };
       v.emotions.love = 1; v.emotions.joy = 1;
     }
     a.heading = Math.atan2(b.x - a.x, b.z - a.z); b.heading = Math.atan2(a.x - b.x, a.z - b.z);
     a.avatar.targetHeading = a.heading; b.avatar.targetHeading = b.heading;
     (a.act as any).face = a.heading; (b.act as any).face = b.heading;
     const officiant = [...p.attendees].map(id => sim.byId.get(id)!).filter(v => v !== a && v !== b).sort((x, y) => y.traits.kindness - x.traits.kindness)[0];
+    if (officiant) { // the kindest guest steps up to the arch, chapel-side, facing the couple and the gathered village
+      sim.clearPlan(officiant); sim.leaveSeat(officiant);
+      [officiant.x, officiant.z] = sim.world.nav.nearestFree(fx, fz - 1.2);
+      officiant.heading = 0; officiant.avatar.targetHeading = 0;
+      officiant.act = { type: 'idle', anim: 'talk', dur: 26, t: 0, label: 'conducting the ceremony', locked: true, face: 0 };
+      g.data.officiant = officiant.id;
+    }
     sim.emit('convo', [
       ...(officiant ? [{ who: officiant.id, text: 'Dearly beloved, we are gathered…', emoji: '📖', at: sim.clock + 1 }] : []),
       { who: a.id, text: say(sim, a, 'vows', { t: b.first }), emoji: '💍', at: sim.clock + 5 },
@@ -166,10 +180,40 @@ function tickWedding(sim: Sim, g: Gathering) {
     }
     return;
   }
-  if (g.phase === 'vows' && sim.clock >= g.data.cheerAt) {
-    g.phase = 'party'; g.done = true;
-    p.quietUntil = 0; p.cheerUntil = sim.clock + 7; p.dance = true;
-    sim.log(`Cheers rang over ${sim.place(g.place).name} and the wedding party began — dancing till the lanterns burn low.`, 5, [a.id, b.id], 'wedding', '🎉');
+  if (g.phase === 'vows') {
+    const d = g.data, pl = sim.place(g.place), fx = d.fx, fz = d.fz;
+    if (sim.clock >= d.kissAt && !d.kissed) { // the kiss — sealed with a burst of petals and a roar from the crowd
+      d.kissed = true; p.quietUntil = 0; p.cheerUntil = sim.clock + 6;
+      sim.world.fx.petals(fx, 3.4, fz, 70);
+      a.emotions.joy = b.emotions.joy = 1; a.emotions.love = b.emotions.love = 1;
+      for (const v of [a, b]) v.act = { type: 'idle', anim: 'cheer', dur: 15, t: 0, label: 'just married', locked: true, face: (v.act as any)?.face ?? v.heading };
+      sim.emit('convo', [{ who: a.id, text: 'I do.', emoji: '💞', at: sim.clock + 1 }, { who: b.id, text: 'I do.', emoji: '💞', at: sim.clock + 2.5 }]);
+      sim.log(`${a.first} and ${b.first} sealed it with a kiss as the whole village cheered and petals rained down.`, 7, [a.id, b.id], 'wedding', '💒', fx, fz);
+      return;
+    }
+    if (sim.clock >= d.toastAt && !d.toasted) { // a toast from whoever is closest to the couple
+      d.toasted = true;
+      const toaster = [...p.attendees].map(id => sim.byId.get(id)!).filter(v => v !== a && v !== b && v.id !== d.officiant)
+        .sort((x, y) => ((y.opinion[a.id] ?? 0) + (y.opinion[b.id] ?? 0)) - ((x.opinion[a.id] ?? 0) + (x.opinion[b.id] ?? 0)))[0];
+      if (toaster) {
+        sim.clearPlan(toaster); sim.leaveSeat(toaster);
+        [toaster.x, toaster.z] = sim.world.nav.nearestFree(fx + 1.4, fz + .6);
+        toaster.heading = Math.atan2(fx - toaster.x, fz - toaster.z); toaster.avatar.targetHeading = toaster.heading;
+        toaster.act = { type: 'idle', anim: 'drink', dur: 7, t: 0, label: `toasting ${a.first} & ${b.first}`, locked: true, face: toaster.heading };
+        toaster.emotions.joy = 1; p.quietUntil = sim.clock + 6;
+        sim.emit('convo', [{ who: toaster.id, text: `To ${a.first} and ${b.first} — may it last a lifetime!`, emoji: '🥂', at: sim.clock + 1 }]);
+        sim.log(`${toaster.first} raised a glass to ${a.first} and ${b.first} — to a long and happy life together.`, 6, [toaster.id, a.id, b.id], 'wedding', '🥂', fx, fz);
+      }
+      return;
+    }
+    if (sim.clock >= d.danceAt) { // the first dance, and the party proper begins
+      g.phase = 'party'; g.done = true;
+      p.quietUntil = 0; p.cheerUntil = sim.clock + 7; p.dance = true;
+      for (const v of [a, b]) v.act = { type: 'idle', anim: 'dance', dur: 75, t: 0, label: 'the first dance', locked: true, face: (v.act as any)?.face ?? v.heading };
+      const off = d.officiant ? sim.byId.get(d.officiant) : null; if (off && off.act?.locked) off.act = null;
+      sim.log(`Cheers rang over ${pl.name} and the wedding party began — the first dance, and dancing till the lanterns burn low.`, 5, [a.id, b.id], 'wedding', '🎉', fx, fz);
+    }
+    return;
   }
 }
 
@@ -271,6 +315,7 @@ function tickSearch(sim: Sim, g: Gathering) {
     team.forEach(v => assign[v.id] = []);
     spots.forEach((s, i) => assign[team[i % team.length].id].push(s)); // every spot is covered, including the right one
     g.data.assign = assign; g.actors = team.map(v => v.id);
+    g.data.find = sim.rng.chance(.6); // deterministic: ~60% of searches turn Biscuit up at his hiding spot; otherwise he evades until he wanders home
     for (const v of friends) { v.thought = say(sim, v, 'searchJoin', { pet: pet.name }); sim.say(v, v.thought, '🔍', 2.6); }
     owner.thought = `${pet.name}, where are you?`;
     sim.log(`${pet.name} the village dog is missing! ${owner.first} raised the alarm${friends.length ? `, and ${listJoin(friends.map(f => f.first))} joined the search` : ''}.`, 6, g.actors, 'search', '🐾', owner.x, owner.z);
@@ -286,8 +331,10 @@ function tickSearch(sim: Sim, g: Gathering) {
   const assign: Record<string, string[]> = g.data.assign, visited: string[] = g.data.visited;
   for (const id of g.actors) {
     const v = sim.byId.get(id)!;
-    if (Math.hypot(v.x - pet.x, v.z - pet.z) < 4.5) { found(sim, g, v); return; }
     const act = v.act as any;
+    // a search finds Biscuit only if this one is fated to (g.data.find): when the assigned searcher reaches his
+    // actual hiding spot, or simply gets close enough. An unlucky search never turns him up — he wanders home later.
+    if (g.data.find && ((act?.type === 'idle' && act._spot === pet.spot && act.t > 2.5) || Math.hypot(v.x - pet.x, v.z - pet.z) < 4.5)) { found(sim, g, v); return; }
     if (act?.type === 'idle' && act._spot && act.t > 3 && !visited.includes(act._spot)) visited.push(act._spot);
     if (v.act || v.queue.length || !free(v)) continue;
     const spot = (assign[id] ?? []).find(s => !visited.includes(s));
@@ -302,13 +349,25 @@ function found(sim: Sim, g: Gathering, finder: Villager) {
   g.done = true;
   const owner = sim.byId.get(g.host)!, name = sim.pet.name;
   const where = sim.pet.spot ? sim.place(sim.pet.spot).name : 'the edge of the village';
-  sim.pet = { ...sim.pet, state: 'home', x: -9, z: 8, spot: null };
+  sim.pet = { ...sim.pet, state: 'home', x: finder.x, z: finder.z, spot: null }; // the dog turns up right at the finder; the render dog snaps to this spot
   releaseTeam(sim, g);
-  finder.emotions.joy = 1; finder.needs.social = 100; sim.icon(finder, '🐕');
+  finder.emotions.joy = 1; finder.needs.social = 100; sim.icon(finder, '🐶');
   sim.say(finder, say(sim, finder, 'searchFound', { pet: name }), '🐕', 3);
-  sim.log(`${finder.first} found ${name} hiding out near ${where} — muddy, delighted and entirely unrepentant.${finder === owner ? '' : ` ${owner.first} could have hugged ${pr(finder).obj}.`}`, 7, [finder.id, g.host], 'search', '🐕', finder.x, finder.z);
-  if (finder !== owner) { nudge(owner, finder, 12); owner.mem.add(sim.clock, `${finder.first} found ${name} when he went missing. I won't forget it.`, 7, [finder.id], .8, 'feeling'); }
-  for (const id of g.actors) { const u = sim.byId.get(id)!; if (u !== finder) nudge(u, finder, 4); }
+  sim.log(`${finder.first} found ${name} hiding out near ${where} — muddy, delighted and entirely unrepentant.${finder === owner ? '' : ` ${owner.first} could have hugged ${pr(finder).obj}.`}`, 7, [finder.id, g.host], 'search', '🐶', finder.x, finder.z);
+  // the searchers come running from their beats and crowd round, cheering
+  for (const id of g.actors) {
+    const u = sim.byId.get(id)!; if (u === finder) continue;
+    nudge(u, finder, u === owner ? 12 : 4);
+    sim.clearPlan(u); sim.leaveSeat(u);
+    const [gx, gz] = sim.world.nav.nearestFree(finder.x + sim.rng.range(-1.3, 1.3), finder.z + sim.rng.range(-1.3, 1.3));
+    u.queue = [{ type: 'go', x: gx, z: gz, t: 0, label: `rushing to ${name}` }, { type: 'idle', anim: 'cheer', dur: 8, t: 0, label: `so glad ${name} is safe` }];
+    u.emotions.joy = Math.min(1, u.emotions.joy + .6);
+  }
+  owner.emotions.joy = 1; owner.emotions.sadness = 0; owner.emotions.fear = 0; sim.icon(owner, finder === owner ? '🥹' : '❤️');
+  if (finder !== owner) {
+    owner.mem.add(sim.clock, `${finder.first} found ${name} when he went missing. I won't forget it.`, 7, [finder.id], .8, 'feeling');
+    sim.emit('convo', [{ who: owner.id, text: `${name}! Oh, thank you, ${finder.first}!`, emoji: '🥹', at: sim.clock + 1 }, { who: finder.id, text: 'He found me, really — hiding like a rascal!', emoji: '🐕', at: sim.clock + 3 }]);
+  }
   const f = sim.fact('news', `${finder.first} found ${name} the village dog safe and sound`, finder.id, finder.id, .6, 6);
   sim.witness(`${finder.first} found the village dog`, 6, g.actors, { [finder.id]: .8, '*': .3 }, finder.x, finder.z, f, 25);
   finder.queue.unshift({ type: 'idle', anim: 'cheer', dur: 8, t: 0, label: `bringing ${name} home` });
