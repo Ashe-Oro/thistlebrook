@@ -58,6 +58,34 @@ SEEDS=7,3,11 DAYS=8 node tools/soak.mjs  # multi-seed event-count stats (fights,
 
 On a laptop GPU, frame time is bounded by JS cost. At about 2–5 ms per frame, that leaves room for 60 fps. That can't be measured here. Capture runs (`?capture`) keep full quality.
 
+## Music and ambience
+- The **adaptive score** (`src/audio/music.ts`) is original and generative, synthesised live in WebAudio. There are no audio files and no samples. Its themes evoke the sparse open-world style without quoting anyone's melodies:
+
+  | Theme | When it plays | Sound |
+  |---|---|---|
+  | Day field | By day | Sparse, rubato, open-voiced piano phrases in D major pentatonic, with long silences between them. |
+  | Village | Camera near the plaza | A warmer variation in F with a lilting 3/4 left hand and an occasional flute. |
+  | Night | At night | Slower and lower, on felt piano and celesta over soft strings. |
+  | Rain | When it rains | A muted D-dorian tint, plus a low-pass on the whole mix. |
+  | Festival / season finale | During festivals | A 6/8 jig on fiddle and flute, with piano, a frame drum and tambourine. The finale is fuller. |
+
+- **Winter** swaps in glassy bells and the odd sleigh-bell shimmer.
+- **Dawn and dusk crossfade**, because:
+  - themes are picked per phrase, by weight, with hysteresis;
+  - each phrase's pad overlaps the next.
+- **Story cues:**
+  - a tension sting on brawl and showdown beats;
+  - a resolution flourish on Found! and on resolved storylines;
+  - a tender wedding motif at the vows.
+- **Ambience** (`src/audio/ambience.ts`): wind, daytime birds, crickets and an owl at night, and rain.
+- **Controls:** sound is off until you click 🔊. That's the browser's autoplay gesture.
+  - The 🔊 popover has a mute button, music and ambience toggles, and a music volume slider.
+  - Settings are saved in `localStorage['thistlebrook.audio']`. A saved "on" resumes at your first click or key.
+- **Previews:**
+  - `node tools/music/render.mjs` renders `shots/audio/{day_field,village,night,festival}.mp3` offline, through the same engine.
+  - `node tools/music_demo.mjs` records `shots/music_demo.mp4`, a day → dusk → night transition with its score.
+- **Credits:** see `AUDIO_CREDITS.md`.
+
 ## Architecture (src/)
 - `sim/sim.ts`: world clock, action executor, parties, fights, keepsakes, weather, witnesses, fact propagation.
 - `sim/brain.ts`: `UtilityBrain`, which handles day plans (re-planned on interruptions), utility-scored choices, and reflections. `sim/llm.ts` is an optional LLM brain (off by default).
@@ -68,7 +96,7 @@ On a laptop GPU, frame time is bounded by JS cost. At about 2–5 ms per frame, 
 - `sim/god.ts`: viewer god powers.
 - `world/*`: town layout (Cozy Village + Countryside Farm), painted ground, nav grid + A*, sky/day-night, GPU rain, particles, point lights.
 - `agents/avatar.ts`: dressed characters, procedural animation, expressions, tools/props.
-- `ui/*`: chronicle feed, villager card, leaderboard, relationship web, recap, Gazette, toasts, bubbles, sound.
+- `ui/*`: chronicle feed, villager card, leaderboard, relationship web, recap, Gazette, toasts, bubbles, sound mixer; `audio/*`: generative score and ambience.
 
 v1 scope: **no economy**. Jobs are ambient routines. Keepsakes are the only objects, and they carry story value only.
 

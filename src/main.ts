@@ -699,7 +699,7 @@ function frame(now: number) {
 (window as any).terrarium = {
   letters: () => sim.letterArchive.map(l => ({ ...l, readers: [...l.readers] })),
   season: () => ({ name: world.season.name, snow: world.season.snow, day: sim.day }),
-  sim, director, world, camera, controls, renderer, scene, perfStats,
+  sim, director, world, camera, controls, renderer, scene, perfStats, sound,
   characterTriangles: () => sim.villagers.map(v => ({ id: v.id, ...v.avatar.triangleCounts() })), get fps() { return perf.fps; }, get pixelRatio() { return perf.pr; }, quality: { soft: SOFT, aa: AA }, get simMs() { return simMsAvg; }, get cpuMs() { return cpuMsAvg; },
   storylines: () => storylines(sim), pinStory, musicState: () => ({ ...musicState }),
   setSpeed: (s: number) => (speed = s), select: (id: string | null) => api.select(id), setMode: (m: any) => api.setMode(m), god: (k: string) => api.god(k), ui: () => ui,
