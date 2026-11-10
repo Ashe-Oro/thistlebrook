@@ -187,6 +187,7 @@ const perf = (() => {
         const d = tmp.copy(sph.center).distanceTo(camera.position), near = d < 26;
         if (av._lod !== near) { av._lod = near; av.body.traverse((m: any) => { if (m.isMesh) { if (m.name === 'CharacterOutline') m.visible = d < 34 || near; m.castShadow = near; } }); }
         const ol = av._ol ??= av.body.getObjectByName('CharacterOutline'); if (ol) ol.visible = d < 34;
+        av.setLod?.(d);
         let b = blobs.get(av); if (!b) { b = new THREE.Mesh(blobG, blobM); b.renderOrder = 1; scene.add(b); blobs.set(av, b); }
         b.visible = r.visible && onScreen && !near; b.position.set(r.position.x, .03, r.position.z);
       }
@@ -392,7 +393,15 @@ function frameShot(target: THREE.Vector3, subjects: THREE.Vector3[], prefYaw: nu
   for (const off of [0, .45, -.45, .9, -.9, 1.4, -1.4, Math.PI]) for (const d of [base, Math.min(maxDist * 1.2, base * 1.3)]) for (const y of heights) {
     const yaw = prefYaw + off; fsCam.set(target.x + Math.sin(yaw) * d, y, target.z + Math.cos(yaw) * d);
     let hard = 0;
-    if (fsCam.y < 3.2 && !world.nav.isFree(fsCam.x, fsCam.z)) hard += 9; // camera standing inside a wall or prop
+    if (fsCam.y < 7 && !world.nav.isFree(fsCam.x, fsCam.z)) hard += 9; // camera standing inside a wall or prop
+    if (!hard && fsCam.y < 7) for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; if (!world.nav.isFree(fsCam.x + Math.cos(a) * 1.1, fsCam.z + Math.sin(a) * 1.1)) { hard += 3; break; } } // hugging a wall
+    if (!hard) { // a wall or roof filling one side of the frame: short rays from the lens toward the frame edges
+      const fwd = fsTmp.copy(target).sub(fsCam).normalize();
+      for (const [ax, ay] of [[halfF * .85, 0], [-halfF * .85, 0], [0, -halfV * .8]]) {
+        rDir.copy(fwd); if (ax) rDir.applyAxisAngle(THREE.Object3D.DEFAULT_UP, ax); if (ay) { fsSeg.crossVectors(fwd, THREE.Object3D.DEFAULT_UP).normalize(); rDir.applyAxisAngle(fsSeg, ay); }
+        rc.set(fsCam, rDir); rc.near = 0; rc.far = Math.min(4, d * .45); rayHits.length = 0; rc.intersectObjects(solid, false, rayHits); if (rayHits.length) { hard += 3; break; }
+      }
+    }
     for (const s of subjects) { // clear line of sight from each subject's head
       rDir.copy(fsCam).sub(s); const L = rDir.length(); rDir.divideScalar(L);
       rc.set(s, rDir); rc.near = .5; rc.far = L; rayHits.length = 0; rc.intersectObjects(solid, false, rayHits);
@@ -488,7 +497,7 @@ function frame(now: number) {
   if (nell) { const on = sim.visitorUntil > sim.clock; nell.targetAlpha = on ? 1 : 0; if (on || nell.alpha > .05) { nellT += adt; nell.root.position.set(NELL[0], 0, NELL[1]); nell.targetHeading = Math.sin(nellT * .4) * .5; const k = Math.floor(nellT / 2.5) % 4; nell.anim = (['talk', 'wave', 'talk', 'cheer'] as any)[k]; nell.setExpression(k === 3 ? 'grin' : 'happy'); nell.update(speed === 0 ? 0 : adt, .8); } }
   animateGifts(sim, dt);
   world.update(adt, dt * speed * MIN_PER_SEC, sim.clock, sky.night);
-  extras?.update(adt, sim.hour, sim.rain, controls.target);
+  extras?.update(adt, sim.hour, sim.rain, controls.target, camera.position);
   // camera
   if (beat || montage) { controls.autoRotate = false; }
   else if (mode === 'director' && !selected) { dirT -= dt; if (dirT <= 0) { dirT = 1; const pick = director.pick(sim.clock, follow); if (pick && pick.id !== follow) { follow = pick.id; } } controls.autoRotate = true; controls.autoRotateSpeed = .35; }

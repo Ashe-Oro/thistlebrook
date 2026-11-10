@@ -43,7 +43,26 @@ export class Avatar {
   }
   // Per render-frame LOD hook, fed the camera distance. Presentation only: no sim state, no RNG,
   // keeps the body/head/face so picking (screen-space) and portraits (head close-up) are unaffected.
+  // Beyond ~40 m the 12-material character (12 draw calls) swaps to a one-draw twin: same skeleton and vertex
+  // buffers, per-vertex colours baked from each material group (face decal dropped, it is sub-pixel out there).
+  private farMesh: THREE.SkinnedMesh | null = null; private mainMesh: THREE.SkinnedMesh | null = null; farOn = false;
+  private buildFar() {
+    const main = this.body.getObjectByName('CharacterMesh') as THREE.SkinnedMesh | undefined; if (!main || !Array.isArray(main.material)) return null;
+    const src = main.geometry, n = src.attributes.position.count, col = new Float32Array(n * 3), c = new THREE.Color(), g = new THREE.BufferGeometry();
+    for (const k of ['position', 'normal', 'skinIndex', 'skinWeight']) if (src.attributes[k]) g.setAttribute(k, src.attributes[k]);
+    if (src.index) return null;
+    for (const gr of src.groups) { const m: any = (main.material as THREE.Material[])[gr.materialIndex!]; if (!m || m.name === 'face') continue; c.copy(m.color ?? c.set('#888')); for (let i = gr.start; i < gr.start + gr.count && i < n; i++) col.set([c.r, c.g, c.b], i * 3); }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3)); const faceG = src.groups.filter(gr => (main.material as any)[gr.materialIndex!]?.name === 'face');
+    for (const gr of faceG) for (let i = gr.start; i < gr.start + gr.count; i++) col.set([0, 0, 0], i * 3); // face quad: collapse below as degenerate by colour only
+    g.boundingSphere = src.boundingSphere; const base: any = (main.material as THREE.Material[])[0];
+    const mat = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: base.gradientMap ?? null }); mat.name = 'farLod';
+    const fm = new THREE.SkinnedMesh(g, mat); fm.name = 'CharacterFar'; fm.frustumCulled = false; fm.castShadow = false; fm.bind(main.skeleton, main.bindMatrix);
+    fm.position.copy(main.position); fm.quaternion.copy(main.quaternion); fm.scale.copy(main.scale); main.parent!.add(fm);
+    mat.transparent = this.alpha < .99; mat.opacity = this.alpha; this.mats.push(mat); this.mainMesh = main; return fm;
+  }
   setLod(dist: number) {
+    const farOn = dist > (this.farOn ? 38 : 42);
+    if (farOn !== this.farOn) { if (farOn && !this.farMesh) this.farMesh = this.buildFar(); if (this.farMesh && this.mainMesh) { this.farOn = farOn; this.farMesh.visible = farOn; this.mainMesh.visible = !farOn; } }
     const far = dist > (this.lodFar ? 30 : 34); if (far === this.lodFar) return; this.lodFar = far;
     for (const m of this.lodMeshes) m.visible = !far;
     if (this.tool) this.tool.visible = !far; if (this.carry) this.carry.visible = !far; if (this.banner) this.banner.visible = !far;
