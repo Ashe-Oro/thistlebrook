@@ -69,7 +69,8 @@ export class FX {
         mv.xyz += streak * position.y * 1.25; mv.x += position.x * max(.05, -mv.z * .0045);
         fade = smoothstep(0.,.08,age)*(1.-smoothstep(.85,1.,age));
         gl_Position = projectionMatrix * mv;`}
-        fade *= smoothstep(seed.x - .08, seed.x + .08, strength);
+        float density = fract(sin(dot(seed, vec3(127.1,311.7,74.7))) * 43758.5453);
+        fade *= smoothstep(density - .08, density + .08, strength);
       }`,
       fragmentShader: `uniform float strength; varying vec2 vUv; varying float fade;
       void main(){ ${splash ? 'float d = length(vUv-.5); float a = (1.-smoothstep(.44,.5,d))*smoothstep(.33,.4,d);' : 'float a = (1.-abs(vUv.x-.5)*2.) * sin(vUv.y*3.14159);'}

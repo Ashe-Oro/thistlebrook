@@ -12,6 +12,14 @@ export const MIN_PER_SEC = 2; // game minutes per world second (1x: one day = 12
 export interface Party { id: string; host: string; title: string; place: string; at: number; until: number; invited: Set<string>; attendees: Set<string>; announced: boolean; done: boolean; fact: Fact; }
 export interface GiftDrop { x: number; z: number; obj: THREE.Object3D; claimedBy: string | null; t: number; }
 
+// Stateless cosmetic samples: never advance the simulation RNG.
+function cosmetic(clock: number, id: string, channel = 0) {
+  let h = (Math.round(clock * 1e6) ^ Math.imul(channel + 1, 0x9e3779b9)) >>> 0;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619);
+  h = Math.imul(h ^ (h >>> 16), 0x21f0aaad); h = Math.imul(h ^ (h >>> 15), 0x735a2d97);
+  return ((h ^ (h >>> 15)) >>> 0) / 4294967296;
+}
+
 const stealthy = (a: Action) => a.type === 'steal';
 export class Sim {
   villagers: Villager[] = []; byId = new Map<string, Villager>(); clock = 6 * 60 + 15; rng = new RNG(20261109); events: SimEvent[] = []; eid = 1;
@@ -118,6 +126,14 @@ export class Sim {
   takeSeat(v: Villager, place: string): Seat | null { const s = this.world.seatsFor(place).filter(s => !s.taken).sort((a, b) => Math.hypot(a.x - v.x, a.z - v.z) - Math.hypot(b.x - v.x, b.z - v.z))[0]; if (s) { s.taken = v.id; v.seat = s; } return s ?? null; }
   leaveSeat(v: Villager) { if (v.seat) { v.seat.taken = null; v.seat = null; } }
 
+  clearPlan(v: Villager, keepAct = false) {
+    // An interrupted sit finishes its exit; an en-route reservation has no owner now.
+    const seated = v.act?.type === 'sit' && v.act._s || v.act?.type === 'attend' && v.act._at;
+    if (!keepAct || !seated) this.leaveSeat(v);
+    v.queue = [];
+    if (!keepAct) { v.act = null; v.path = null; }
+  }
+
   // ---- main step --------------------------------------------------------------------------------
   step(dt: number) {
     const gdt = dt * MIN_PER_SEC; this.clock += gdt;
@@ -174,8 +190,8 @@ export class Sim {
     const blk = (this.brain as any).block?.(v, this), key = blk ? blk.from + blk.act : '';
     if (key !== (v as any)._blk) { const first = (v as any)._blk === undefined; (v as any)._blk = key;
       if (!first && blk && ['lunch', 'event', 'evening', 'sleep'].includes(blk.act) && v.act && !v.act.locked) { const a = v.act;
-        if (['work', 'idle', 'go'].includes(a.type)) { if (a.target?.claimed === v.id) a.target.claimed = null; v.avatar.onHit = null; v.act = null; v.queue = []; }
-        else if ((a.type === 'enter' && v.doing !== 'sleeping') || a.type === 'sit') { a.interrupt = true; v.queue = []; } } }
+        if (['work', 'idle', 'go'].includes(a.type)) { if (a.target?.claimed === v.id) a.target.claimed = null; v.avatar.onHit = null; this.clearPlan(v); }
+        else if ((a.type === 'enter' && v.doing !== 'sleeping') || a.type === 'sit') { a.interrupt = true; this.clearPlan(v, true); } } }
     if (this.clock < v.busyUntil) { v.anim = v.anim === 'walk' || v.anim === 'run' ? 'talk' : v.anim; return; }
     if (!v.act) { v.act = v.queue.shift() ?? null; if (!v.act) { this.brain.choose(v, this); v.act = v.queue.shift() ?? null; } if (v.act) { v.act.t = 0; v.doing = v.act.label; } }
     if (v.act) { const cur = v.act; const done = this.run(v, cur, dt, gdt); if (done && v.act === cur) { v.act = null; } }
@@ -205,6 +221,7 @@ export class Sim {
         return false;
       }
       case 'sit': {
+        if (a.interrupt && !a._s) { this.leaveSeat(v); v.path = null; v.anim = 'idle'; return true; }
         if (!a._s) { const s = a.seat as Seat; if (!walk(s.x + Math.sin(s.rot) * .55, s.z + Math.cos(s.rot) * .55, .3)) return false; if (a._fail) { this.leaveSeat(v); return true; } a._s = 1; v.x = s.x; v.z = s.z; v.heading = s.rot; }
         v.anim = a.anim2 && Math.sin(a.t * .2) > .3 ? a.anim2 : 'sit'; if (a.t >= a.dur || a.interrupt) { this.leaveSeat(v); const s = a.seat as Seat; v.x = s.x + Math.sin(s.rot) * .6; v.z = s.z + Math.cos(s.rot) * .6; v.anim = 'idle'; return true; } return false;
       }
@@ -221,7 +238,7 @@ export class Sim {
         if (a.cx !== undefined) { // circle each other round the midpoint, trading lunges, so a brawl reads as a brawl
           const th = a.th + a.t * .22, lunge = Math.max(0, Math.sin(a.t * 4.2 + (a.side ? Math.PI : 0))), r = .62 - lunge * .2;
           v.x = a.cx + Math.cos(th) * r; v.z = a.cz + Math.sin(th) * r; v.heading = Math.atan2(a.cx - v.x, a.cz - v.z); v.avatar.targetHeading = v.heading;
-          if (lunge > .97 && this.clock - (a.lastHit ?? -9) > 1.2) { a.lastHit = this.clock; this.icon(v, this.rng.pick(['💥', '💢', '👊'])); this.emit('hit', a.cx, a.cz); this.world.fx.dust(a.cx, a.cz, 4, .9); } } if (Math.random() < dt * 4) this.world.fx.dust(v.x + (Math.random() - .5) * 1.4, v.z + (Math.random() - .5) * 1.4, 2, .8); return false; }
+          if (lunge > .97 && this.clock - (a.lastHit ?? -9) > 1.2) { a.lastHit = this.clock; this.icon(v, this.rng.pick(['💥', '💢', '👊'])); this.emit('hit', a.cx, a.cz); this.world.fx.dust(a.cx, a.cz, 4, .9); } } if (cosmetic(this.clock, v.id) < dt * 4) this.world.fx.dust(v.x + (cosmetic(this.clock, v.id, 1) - .5) * 1.4, v.z + (cosmetic(this.clock, v.id, 2) - .5) * 1.4, 2, .8); return false; }
       case 'attend': return this.attend(v, a, dt, walk);
       case 'claim': {
         const g = this.gifts.find(x => x === a.gift); if (!g || g.claimedBy) { if (g?.claimedBy && g.claimedBy !== v.id) { v.emotions.sadness += .2; v.emotions.anger += .2; this.say(v, 'Aww, too slow!', '😤', 2); } return true; }
@@ -261,15 +278,15 @@ export class Sim {
         strike(2.7); if (a.t > (a.dur ?? 50)) { av.onHit = null; r.claimed = null; av.setTool(''); amb(`${v.first} chiselled away at the quarry stone.`, '⛏️'); return true; } return false;
       }
       case 'tend': { v.anim = 'hoe'; av.setTool('hoe'); av.onHit = () => fx.chips(a.fx, .5, a.fz, [.45, .32, .2], 4); strike(3.1); if (a.t > 40) { av.setTool(''); av.onHit = null; if (a.target) a.target.claimed = null; amb(`${v.first} weeded the rows in the Fenn fields.`, '🌱'); return true; } return false; }
-      case 'water': { v.anim = 'water'; av.setTool('can'); if (Math.random() < dt * 10) fx.water(v.x + Math.sin(v.heading) * .8, .9, v.z + Math.cos(v.heading) * .8, Math.sin(v.heading), Math.cos(v.heading)); if (a.t > 30) { if (a.target) a.target.claimed = null; av.setTool(''); return true; } return false; }
-      case 'feed': { v.anim = 'feed'; av.setTool('basket'); if (!a._f) { a._f = 1; W.feedAnimals(); } if (Math.random() < dt * 3) fx.grain(v.x + Math.sin(v.heading) * .5, 1.1, v.z + Math.cos(v.heading) * .5, Math.sin(v.heading), Math.cos(v.heading)); if (a.t > 40) { av.setTool(''); amb(`${v.first} fed the hens. They followed her around like a fan club.`, '🐔'); a.target.fedDay = this.day; return true; } return false; }
+      case 'water': { v.anim = 'water'; av.setTool('can'); if (cosmetic(this.clock, v.id) < dt * 10) fx.water(v.x + Math.sin(v.heading) * .8, .9, v.z + Math.cos(v.heading) * .8, Math.sin(v.heading), Math.cos(v.heading)); if (a.t > 30) { if (a.target) a.target.claimed = null; av.setTool(''); return true; } return false; }
+      case 'feed': { v.anim = 'feed'; av.setTool('basket'); if (!a._f) { a._f = 1; W.feedAnimals(); } if (cosmetic(this.clock, v.id) < dt * 3) fx.grain(v.x + Math.sin(v.heading) * .5, 1.1, v.z + Math.cos(v.heading) * .5, Math.sin(v.heading), Math.cos(v.heading)); if (a.t > 40) { av.setTool(''); amb(`${v.first} fed the hens. They followed her around like a fan club.`, '🐔'); a.target.fedDay = this.day; return true; } return false; }
       case 'forge': { v.anim = 'hammer'; av.setTool('hammer'); av.onHit = () => { fx.sparks(a.fx, .75, a.fz, 12); this.emit('sound', 'anvil', a.fx, a.fz); }; strike(2); this.place('smithy').smokeUntil = this.clock + 5;
         if (a.t > (a.dur ?? 55)) { av.onHit = null; av.setTool(''); amb(`${v.first} hammered out ${this.rng.pick(['a new gate hinge', 'horseshoes', 'a lantern bracket', 'a weathervane rooster'])} at the anvil.`, '⚒️'); return true; } return false; }
       case 'serve': { v.anim = a.t % 30 < 15 ? 'talk' : 'wave'; return a.t > a.dur; }
       case 'sort': { v.anim = Math.sin(a.t * .4) > 0 ? 'pickup' : 'idle'; return a.t > (a.dur ?? 25); }
       case 'haul': { v.anim = Math.sin(a.t * .5) > 0 ? 'pickup' : 'idle'; av.setTool('basket'); if (a.t > (a.dur ?? 50)) { av.setTool(''); amb(`${v.first} hauled sacks of flour at the mill.`, '🌾'); return true; } return false; }
-      case 'fish': { v.anim = 'point'; if (Math.random() < dt * 1.1) fx.water(a.fx + (Math.random() - .5) * 1.6, .35, a.fz + (Math.random() - .5) * 1.6, 0, 0); if (a.t > (a.dur ?? 55)) { amb(`${v.first} sat casting a line off the dock, watching the water.`, '🎣'); return true; } return false; }
-      case 'herb': { v.anim = 'feed'; av.setTool('basket'); av.onHit = null; if (Math.random() < dt * 2) fx.chips(a.fx + (Math.random() - .5) * 1.2, .35, a.fz + (Math.random() - .5) * 1.2, [.4, .6, .3], 3); if (a.t > (a.dur ?? 45)) { av.setTool(''); amb(`${v.first} gathered a basket of herbs in the Riverside garden.`, '🌿'); return true; } return false; }
+      case 'fish': { v.anim = 'point'; if (cosmetic(this.clock, v.id) < dt * 1.1) fx.water(a.fx + (cosmetic(this.clock, v.id, 1) - .5) * 1.6, .35, a.fz + (cosmetic(this.clock, v.id, 2) - .5) * 1.6, 0, 0); if (a.t > (a.dur ?? 55)) { amb(`${v.first} sat casting a line off the dock, watching the water.`, '🎣'); return true; } return false; }
+      case 'herb': { v.anim = 'feed'; av.setTool('basket'); av.onHit = null; if (cosmetic(this.clock, v.id) < dt * 2) fx.chips(a.fx + (cosmetic(this.clock, v.id, 1) - .5) * 1.2, .35, a.fz + (cosmetic(this.clock, v.id, 2) - .5) * 1.2, [.4, .6, .3], 3); if (a.t > (a.dur ?? 45)) { av.setTool(''); amb(`${v.first} gathered a basket of herbs in the Riverside garden.`, '🌿'); return true; } return false; }
       case 'teach': { v.anim = a.t % 20 < 12 ? 'talk' : 'point'; if (a.t > (a.dur ?? 50)) { amb(`${v.first} drilled the village children on their letters at the school green.`, '📖'); return true; } return false; }
     }
     return true;
@@ -301,11 +318,11 @@ export class Sim {
     this.leaveSeat(thief);
     const fight = v.traits.bravery + v.traits.temper * .5 > .9 || thief.traits.temper > .6;
     if (fight) { const k = this.keepsakes.get(thief.act?.loot ?? ''); if (k && k.holder === thief.id) k.holder = k.owner; this.startFight(v, thief, `${v.first} caught ${thief.first} and they tumbled into a scuffle`); }
-    else { const k = this.keepsakes.get(thief.act?.loot ?? ''); if (k && k.holder === thief.id) k.holder = k.owner; this.say(thief, 'Okay, okay! Take it back!', '😰'); thief.emotions.fear = .9; this.say(v, 'Thief!', '💢'); this.log(`${v.first} caught ${thief.first} and snatched back ${k ? k.name.replace(/^(his|her) /, k.owner === v.id ? 'their ' : '$1 ') : 'what was stolen'}.`, 7, [v.id, thief.id], 'theft', '🫳'); thief.act = null; thief.queue = []; }
+    else { const k = this.keepsakes.get(thief.act?.loot ?? ''); if (k && k.holder === thief.id) k.holder = k.owner; this.say(thief, 'Okay, okay! Take it back!', '😰'); thief.emotions.fear = .9; this.say(v, 'Thief!', '💢'); this.log(`${v.first} caught ${thief.first} and snatched back ${k ? k.name.replace(/^(his|her) /, k.owner === v.id ? 'their ' : '$1 ') : 'what was stolen'}.`, 7, [v.id, thief.id], 'theft', '🫳'); this.clearPlan(thief); }
     v.opinion[thief.id] = Math.max(-100, (v.opinion[thief.id] ?? 0) - 25);
   }
   startFight(a: Villager, b: Villager, why: string) {
-    for (const x of [a, b]) { x.act = { type: 'fight', dur: 14, t: 0, label: 'scuffling', target: x === a ? b.id : a.id, locked: true }; x.queue = []; x.path = null; x.emotions.anger = 1; this.leaveSeat(x); }
+    for (const x of [a, b]) { this.clearPlan(x); x.act = { type: 'fight', dur: 14, t: 0, label: 'scuffling', target: x === a ? b.id : a.id, locked: true }; x.queue = []; x.path = null; x.emotions.anger = 1; this.leaveSeat(x); }
     { // square off on clear ground (not wrapped around a lamp post), about an arm's length apart
       const nav = this.world.nav, cx = (a.x + b.x) / 2, cz = (a.z + b.z) / 2; let dx = b.x - a.x, dz = b.z - a.z; const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
       const ok = (x: number, z: number) => nav.isFree(x - dx * .8, z - dz * .8) && nav.isFree(x + dx * .8, z + dz * .8) && nav.isFree(x - dz * .8, z + dx * .8) && nav.isFree(x + dz * .8, z - dx * .8) && nav.isFree(x, z);
@@ -341,7 +358,7 @@ export class Sim {
       for (const id of p.invited) { const v = this.byId.get(id)!; if (p.attendees.has(id) || v.act?.type === 'attend' || v.act?.locked) continue;
         if (!(p as any).decided) (p as any).decided = new Map<string, boolean>(); const dec = (p as any).decided as Map<string, boolean>;
         if (!dec.has(id)) dec.set(id, id === p.host || this.festivalUntil > this.clock || this.rng.chance(.35 + v.traits.sociability * .45 + (v.opinion[p.host] ?? 0) / 120 - (v.needs.energy < 25 ? .3 : 0)));
-        if (dec.get(id)) { if (v.act && v.act.type !== 'enter') { this.leaveSeat(v); } if (v.act?.type === 'enter' && v.doing === 'sleeping') continue; if (v.act?.type === 'enter' && v.act._in) v.act.interrupt = true; else v.act = null; v.queue = [{ type: 'attend', party: p.id, t: 0, label: `at ${p.title}` }]; } }
+        if (dec.get(id)) { if (v.act?.type === 'enter' && v.doing === 'sleeping') continue; const exiting = v.act?.type === 'enter' && v.act._in; if (exiting) v.act!.interrupt = true; this.clearPlan(v, !!exiting); v.queue = [{ type: 'attend', party: p.id, t: 0, label: `at ${p.title}` }]; } }
     }
     if (this.clock >= p.until) {
       p.done = true; const host = this.byId.get(p.host)!; const n = p.attendees.size;

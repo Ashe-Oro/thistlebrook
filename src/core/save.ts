@@ -100,7 +100,7 @@ export function loadGame(sim: Sim, director: Director): boolean {
       record.act = null; record.queue = []; record.path = null; record.pathI = 0;
       record.seat = null; record.replan = true; record.busyUntil = 0;
     }
-    if (saved.villagers.length !== sim.villagers.length || new Set(saved.villagers).size !== saved.villagers.length ||
+    if (new Set(saved.villagers).size !== saved.villagers.length ||
         saved.villagers.some((v: any) => !replacements.has(v))) return false;
     const papers = data.papers ?? [];
     if (!Array.isArray(papers) || !Array.isArray(data.recent ?? [])) return false;
@@ -121,11 +121,15 @@ export function loadGame(sim: Sim, director: Director): boolean {
       for (const k of Object.keys(record)) if (k !== 'mem') record[k] = resolve(record[k]);
     }
     resolve(saved); resolve(papers); resolve(recent);
+    if (saved.keepsakes instanceof Map) for (const v of sim.villagers) {
+      if (!records.has(v.id) && sim.keepsakes.has(v.id)) saved.keepsakes.set(v.id, sim.keepsakes.get(v.id));
+    }
     // Everything that can reject the save has completed; commit to the existing avatar owners.
     const s: any = sim;
     for (const k of Object.keys(saved)) { if (k === 'villagers' || k === 'rngS' || SKIP.has(k)) continue; s[k] = saved[k]; }
     for (const [id, record] of records) {
       const live = sim.byId.get(id)!;
+      sim.leaveSeat(live);
       Object.assign(live.mem, record.mem);
       for (const k of Object.keys(record)) if (k !== 'mem') (live as any)[k] = record[k];
       live.avatar.root.position.set(live.x, 0, live.z);

@@ -6,15 +6,15 @@ import { RNG, clamp } from '../core/util';
 import type { World } from './world';
 
 type Point = [number, number];
-interface Extra { root: THREE.Group; avatar?: Avatar; proxy?: THREE.Mesh; path: Point[]; lengths: number[]; length: number; arrival: number; departure: number; phase: number; kid: boolean; festival: boolean; elapsed: number; }
+interface Extra { root: THREE.Group; avatar?: Avatar; proxy?: THREE.Mesh; path: Point[]; lengths: number[]; length: number; arrival: number; departure: number; phase: number; kid: boolean; festival: boolean; elapsed: number; distance: number; walkPhase: number; }
 // Muted clothing tints for the far proxy; indistinguishable from the full avatar at > ~22 m.
 const CLOTH = ['#8c6b53', '#5f7a6b', '#7b6b86', '#9a6a5a', '#6b7f99', '#8a8560', '#7c9082', '#a0785f'];
 export interface ExtrasOptions { seed?: number; count?: number; }
 
 // Presentation only: no occupancy, claims, sim events or shared random streams.
-// Position is sampled from game time, so pause, fast-forward and frame rate agree.
+// Routes follow game time; idle motion follows a real-time presentation clock.
 export class Extras {
-  private root = new THREE.Group(); private people: Extra[] = []; private rng: RNG; private ready = false;
+  private root = new THREE.Group(); private people: Extra[] = []; private rng: RNG; private ready = false; private time = 0;
   private cloth?: THREE.InstancedMesh; private clothPhases: number[] = []; private dummy = new THREE.Object3D();
   private proxyMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
   private cat = new THREE.Group(); private tail = new THREE.Group();
@@ -44,7 +44,7 @@ export class Extras {
       if (avatar) { proxy = this.makeProxy(kid, def.skin, CLOTH[i % CLOTH.length], def.hair); proxy.visible = false; root.add(proxy); }
       this.root.add(root); const lengths = [0];
       for (let j = 1; j < path.length; j++) lengths.push(lengths[j - 1] + Math.hypot(path[j][0] - path[j - 1][0], path[j][1] - path[j - 1][1]));
-      this.people.push({ root, avatar, proxy, path, lengths, length: lengths[lengths.length - 1], arrival: 7 + i * .3, departure: 17 + i * .12, phase: r.range(0, 6.28), kid, festival, elapsed: 0 });
+      this.people.push({ root, avatar, proxy, path, lengths, length: lengths[lengths.length - 1], arrival: 7 + i * .3, departure: 17 + i * .12, phase: r.range(0, 6.28), kid, festival, elapsed: 0, distance: 0, walkPhase: 0 });
     }
     this.decorations();
   }
@@ -86,19 +86,21 @@ export class Extras {
   }
   update(dt: number, simHour: number, rain: number, camTarget: THREE.Vector3, camPos?: THREE.Vector3) {
     if (!Number.isFinite(simHour)) return;
-    const h = ((simHour % 24) + 24) % 24, t = h * 3600, wet = clamp(rain);
+    const realDt = Math.max(0, Number.isFinite(dt) ? dt : 0); this.time += realDt;
+    const h = ((simHour % 24) + 24) % 24, t = this.time, wet = clamp(rain);
     for (const p of this.people) {
       p.root.visible = h >= p.arrival && h < p.departure + .8 && (!p.festival || this.world.festival);
-      if (!p.root.visible) { p.elapsed = 0; continue; }
+      if (!p.root.visible) { p.elapsed = 0; p.distance = 0; p.walkPhase = 0; continue; }
       // Enter in the morning, stroll between edge/plaza, then retrace the route at dusk.
       const stroll = (h - p.arrival - .8) / (p.departure - p.arrival - .8) * Math.PI * 2 * (p.kid ? 4 : 2);
       const u = h < p.arrival + .8 ? (h - p.arrival) / .8 : h >= p.departure ? 1 - (h - p.departure) / .8 : p.festival ? 1 : .55 + .45 * Math.cos(stroll);
       const d = clamp(u) * p.length; let j = 1; while (j < p.lengths.length - 1 && p.lengths[j] < d) j++;
+      p.walkPhase += Math.abs(d - p.distance) * (p.kid ? 1.2 : .8); p.distance = d;
       const a = p.path[j - 1], b = p.path[j], f = (d - p.lengths[j - 1]) / Math.max(.001, p.lengths[j] - p.lengths[j - 1]);
       p.root.position.set(a[0] + (b[0] - a[0]) * f, 0, a[1] + (b[1] - a[1]) * f);
       const returning = h >= p.departure || h >= p.arrival + .8 && Math.sin(stroll) > 0;
       const heading = Math.atan2(b[0] - a[0], b[1] - a[1]) + (returning ? Math.PI : 0), waiting = p.festival && h >= p.arrival + .8 && h < p.departure;
-      p.elapsed += Math.max(0, Number.isFinite(dt) ? dt : 0);
+      p.elapsed += realDt;
       // Distance to the camera (falls back to the look-at point until the camera is wired in): drives both
       // the full→proxy swap and the animation-update throttle.
       const camD2 = p.root.position.distanceToSquared(camPos ?? camTarget), far = camD2 > 28 * 28;
@@ -109,7 +111,7 @@ export class Extras {
         else { p.avatar.setLod(Math.sqrt(camD2));
           if (p.elapsed >= (far ? .25 : 1 / 15)) {
             p.avatar.heading = p.avatar.targetHeading = heading; p.avatar.anim = waiting ? 'talk' : p.kid ? 'run' : 'walk';
-            p.avatar.phase = t * (p.kid ? .8 : .55) + p.phase; p.avatar.update(0, .7); p.elapsed = 0;
+            p.avatar.phase = (waiting ? t : p.walkPhase) + p.phase; p.avatar.update(0, .7); p.elapsed = 0;
           }
         }
       } else p.root.rotation.y = heading;
