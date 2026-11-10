@@ -6,6 +6,7 @@ import { loadAsset, preload } from './loader';
 import { paintGround } from './groundpaint';
 import { NavGrid } from './nav';
 import { FX } from './fx';
+import { snowMaterial } from './winter';
 import { RNG, clamp } from '../core/util';
 
 // Render-side seasonal palette, eased so a season change blends over a second or two instead of snapping.
@@ -61,6 +62,7 @@ export class World {
   ducks: { obj: THREE.Object3D; x: number; z: number; tx: number; tz: number; t: number; cx: number; cz: number; r: number }[] = [];
   // Seasonal looks (render-only). `season` is read by the sky wash and the UI top bar; grass/leaf materials are cached once.
   season = new SeasonState();
+  private snowUniform = { value: 0 };
   private groundMat?: THREE.MeshLambertMaterial;
   private leafMats?: { mat: THREE.Material & { color: THREE.Color }; orig: THREE.Color }[];
   constructor(scene: THREE.Scene) { this.scene = scene; this.nav = new NavGrid(TOWN.bounds, 0.5); this.fx = new FX(scene); }
@@ -79,6 +81,12 @@ export class World {
     }
     this.paint();
     await this.border(); await this.windmill(); await this.critters(); this.pets(); this.nightLights();
+    const animalRoots = new Set(this.animals.map(a => a.obj));
+    for (const root of this.scenery) if (!animalRoots.has(root)) root.traverse(o => {
+      if (!(o instanceof THREE.Mesh)) return;
+      const ground = o.name === 'ground' || o.name === 'groundpaint';
+      for (const mat of Array.isArray(o.material) ? o.material : [o.material]) snowMaterial(mat, this.snowUniform, ground);
+    });
     this.finishScenery();
     // keep entries reachable
     for (const p of this.places.values()) this.nav.circle(p.x, p.z, 0.6, 0);
@@ -322,14 +330,13 @@ export class World {
   }
   seatsFor(place: string) { return this.seats.filter(s => s.place === place); }
 
-  // Ease the season, then recolour the shared grass + leaf materials (no per-frame allocation) and,
-  // in winter, drift a little snow when it would otherwise rain. Render-only: never touches sim state.
+  /* Ease the palette and shared snow coverage without recompiling materials. */
   private applySeason(dt: number, day: number, rain: number) {
     this.season.set(day, dt);
     if (this.groundMat) this.groundMat.color.copy(this.season.grass);
     if (!this.leafMats) this.collectLeafMats();
     for (const l of this.leafMats!) l.mat.color.copy(l.orig).lerp(this.season.foliage, this.season.foliageMix);
-    if (this.season.snow > .4 && rain > .12) for (let i = 0; i < 3; i++) if (this.cosmeticRng.next() < dt * 22 * this.season.snow) this.snowflake();
+    this.snowUniform.value = this.season.snow;
   }
   // A leaf material is the one whose colour is clearly green (trunks/bark read brown or grey). Shared
   // materials are de-duplicated so one tint repaints every tree that uses it.
@@ -341,10 +348,6 @@ export class World {
         if (c.g > c.r * 1.05 && c.g > c.b * 1.05) { seen.add(m); this.leafMats!.push({ mat: m as any, orig: c.clone() }); }
       }
     });
-  }
-  private snowflake() {
-    const b = TOWN.bounds, x = this.cosmeticRng.range(b.minX, b.maxX), z = this.cosmeticRng.range(b.minZ, b.maxZ);
-    this.fx.normal.emit({ x, y: 7 + this.cosmeticRng.next() * 3, z, vx: this.cosmeticRng.range(-.2, .4), vy: -.6 - this.cosmeticRng.next() * .3, vz: this.cosmeticRng.range(-.3, .3), max: 8, size: .14, r: 1, g: 1, b: 1, a: .9, wobble: .55, fade: 1 });
   }
   update(dt: number, gdt: number, clock: number, night: number, day = 1, rain = 0) {
     this.night = night; const t = clock;

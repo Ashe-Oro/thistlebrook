@@ -581,6 +581,8 @@ function frame(now: number) {
   else if (intro) { introCamera(Math.min(.25, (now - (beatLast || now)) / 1000)); beatLast = now; }
   else if (!beat) controls.update(); else beatCamera(Math.min(.25, (now - (beatLast || now)) / 1000)); beatLast = now;
   sky.setShadowSpan(camera.position.distanceTo(controls.target)); sky.update(sim.hour, sim.rain, controls.target, dt * Math.max(speed, .0001), world.season); renderer.toneMappingExposure = 1.05 + sky.golden * .1 + sky.flash * .45; cinematicLight(dt); world.fx.setRain(sim.rain > .12 && world.season.snow < .5); world.fx.update(dt, controls.target);
+  world.fx.winter.update(dt, controls.target, world.season.snow, sim.rain);
+  for (const v of sim.villagers) world.fx.winter.breath(dt, v.avatar, !v.inside);
   ambient?.update(dt, dt * speed * slow * MIN_PER_SEC, sim.hour, sim.rain, sky.night, controls.target, camera.position);
   sound.ambient(sky.night, sim.rain, dt);
   document.body.classList.toggle('cinematic', cine.classList.contains('on') || !!intro || !!montage);

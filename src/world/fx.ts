@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { WinterWeather } from './winter';
 // Pooled GPU particles (smoke, dust, chips, sparks, flames, leaves, fireflies), coin pops and rain.
 const VS = `attribute float size; attribute vec4 col; varying vec4 vCol; uniform float uScale;
 void main(){ vCol = col; vec4 mv = modelViewMatrix * vec4(position,1.0); gl_PointSize = size * uScale / -mv.z; gl_Position = projectionMatrix * mv; }`;
@@ -40,10 +41,12 @@ class Pool {
 }
 
 export class FX {
+  winter: WinterWeather;
   normal: Pool; glow: Pool; coins: THREE.InstancedMesh; coinState: { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; spin: number }[] = [];
   rain: THREE.Mesh; private splashes: THREE.Mesh;
   private weather = { time: { value: 0 }, strength: { value: 0 } }; rainOn = 0; rainTarget = 0; t = 0; dummy = new THREE.Object3D();
   constructor(public scene: THREE.Scene) {
+    this.winter = new WinterWeather(scene);
     this.normal = new Pool(scene, 2500, false, 0.6); this.glow = new Pool(scene, 1500, true, 1);
     const cg = new THREE.CylinderGeometry(.09, .09, .025, 10); cg.rotateX(Math.PI / 2);
     this.coins = new THREE.InstancedMesh(cg, new THREE.MeshLambertMaterial({ color: '#f5c542', emissive: '#7a5300' }), 120); this.coins.count = 0; this.coins.frustumCulled = false; scene.add(this.coins);
