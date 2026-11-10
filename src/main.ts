@@ -420,8 +420,9 @@ function startBeat(e: SimEvent, force = false) {
   if (ffing) return false;
   if (!storyEvent(e)) return false;
   const title = beatTitle(e); if (!title && !force) return false;
-  const nowR = performance.now(); if (e.finale && beat && !montage) endBeat(); if (!force && (beat || montage || (!e.finale && nowR < beatCool))) return false;
-  const ids = e.actors.filter(id => { const v = sim.byId.get(id); return v && !v.inside; }).slice(0, 3);
+  const vows = e.kind === 'wedding' && title === 'The Wedding', vip = e.finale || vows; /* the vows and the finale outrank any beat in progress */
+  const nowR = performance.now(); if (vip && beat && !montage) endBeat(); if (!force && (beat || montage || (!vip && nowR < beatCool))) return false;
+  const ids = (vows ? e.actors.slice(0, 2) : e.actors).filter(id => { const v = sim.byId.get(id); return v && !v.inside; }).slice(0, 3);
   const fixed: Beat['fixed'] = e.finale ? [e.x, e.z, e.icon === '🎆' ? 10 : 2, -.6] : e.kind === 'rainbow' ? [e.x, e.z, 9, (e as any).yaw] : e.kind === 'traveller' ? [NELL[0], NELL[1] + 1.2, 1.1, .45] : undefined;
   if (!ids.length && !fixed) return false;
   /* Historical summaries whose cast has dispersed have no live scene to frame. */
@@ -569,16 +570,16 @@ function beatCamera(dt: number) {
     if (cast.length >= 2) { const [a, c] = cast; yaw = Math.atan2(c.x - a.x, c.z - a.z) + Math.PI / 2; if (Math.cos(yaw - b.side) < 0) yaw += Math.PI; }
   }
   if (b.aisle) {
-    yaw = 0; dist = 10; h = 4.5;
+    yaw = 0; dist = 12; h = 7.5; /* raised so the shot clears the eaves either side of the chapel lane */
     boxes.push({ x: b.aisle.x, z: b.aisle.z, height: 2.9, radius: 1.4 });
     /* Guests and officiant belong in the wedding composition as well. */
     for (const v of sim.villagers) if (!v.inside && !b.ids.includes(v.id) && Math.hypot(v.x - b.aisle.x, v.z - b.aisle.z) < 5) boxes.push({ x: v.x, z: v.z, height: v.avatar.height + .2, radius: .4 });
   }
   if (b.e.finale) { dist = 22; h = 13; } /* season finale: wide over the plaza */
   if (!b.clear || b.t >= (b.solveAt ?? 0)) {
-    b.clear = frameShot(bT, heads, yaw, dist, b.e.finale ? 26 : 14, b.e.finale ? [13, 16, 19] : [h, 5.5, 7.5], new Set(b.ids), boxes, b.aisle ? [0, .3, -.3, .61, -.61] : undefined);
+    b.clear = frameShot(bT, heads, yaw, dist, b.e.finale ? 26 : 14, b.e.finale ? [13, 16, 19] : b.aisle ? [h, 9.5, 11.5] : [h, 5.5, 7.5], new Set(b.ids), boxes, b.aisle ? [0, .3, -.3, .61, -.61] : undefined);
     b.solveAt = b.t + .5;
-    if (!b.fixed && b.title !== 'Found!' && !b.clear.visible) { endBeat(); return; } /* a dog found in the woods is worth a slightly leafy frame */
+    if (!b.fixed && !b.aisle && b.title !== 'Found!' && !b.clear.visible) { endBeat(); return; } /* a dog found in the woods is worth a slightly leafy frame */
   }
   yaw = b.clear.yaw; dist = b.clear.dist; h = b.clear.h;
   bP.set(bT.x + Math.sin(yaw) * dist, h, bT.z + Math.cos(yaw) * dist);
