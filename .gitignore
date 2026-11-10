@@ -14,3 +14,8 @@ node_modules
 dist
 CLAUDE_*.txt
 tools/_*.mjs
+
+# Vercel staging output (licensed GLBs + release bundle)
+deploy-out/
+.vercel/
+*.map

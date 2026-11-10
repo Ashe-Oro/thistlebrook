@@ -4,7 +4,11 @@ A small three.js village life sim in the spirit of Smallville / generative agent
 outfits, traits, goals, needs, keepsakes, memories, plans, crushes, grudges and alliances get on with their lives, and the
 drama comes out of the simulation.
 
-**Local only.** `licensed/` (the character engine and GLB packs) is gitignored and must never be pushed or uploaded anywhere.
+**Play it:** https://thistlebrook.vercel.app
+
+**Licensed assets are not in this repo.** The game uses the ThreeJS Assets Cozy Village, Countryside Farm and Nature packs and
+the Character Model Basic + Wardrobe engine. They live in `licensed/` (gitignored: `licensed/char` for the character engine,
+`licensed/glb/{cozy,farm,nature}` for the GLBs) and are required to build or run. Never commit them.
 
 ## Run
 ```bash
@@ -107,14 +111,17 @@ On a laptop GPU, frame time is bounded by JS cost. At about 2–5 ms per frame, 
 
 v1 scope: **no economy**. Jobs are ambient routines. Keepsakes are the only objects, and they carry story value only.
 
-## Private hosting proposal (not deployed)
-The **bundle itself contains the licensed character engine** (it is compiled in from `licensed/char`), and the GLBs are licensed,
-so the whole deployment must be private, not just the models:
-1. A private Vercel project, deployed from the CLI from this local folder (no public Git repo, and not `tailgate-games`).
-2. **Deployment Protection** (Vercel Authentication or password) on all deployments, including production.
-3. GLBs in **private Vercel Blob**. A small authenticated route (`/api/glb/[name]`) checks the session and streams the blob or
-   returns a short-lived signed URL. The client loader switches from `/glb/...` to that route.
-4. No source maps in production, `Cache-Control: private`, and `X-Robots-Tag: noindex`.
+## Hosting (Vercel)
+- Project `thistlebrook` (team ashe-oros-projects), production URL https://thistlebrook.vercel.app.
+- Production is deployed from a machine that has `licensed/`, never from a Git-triggered build (this public repo can't build
+  without the packs, so the project's ignored-build-step is `exit 0`).
+- `node tools/deploy.mjs` makes a release build (no source maps) and stages `deploy-out/` (gitignored): the app shell, the Draco
+  decoders, only the GLBs the game references, and a `vercel.json` with cache headers (`app.js`/`style.css` are content-versioned
+  in `index.html` and cached immutably; GLBs for a week; `index.html` revalidates). Then:
+  ```bash
+  cd deploy-out && vercel deploy --prod --yes --scope ashe-oros-projects   # first time: link to the existing thistlebrook project
+  ```
+- `URL=https://thistlebrook.vercel.app node tools/_prodsmoke.mjs` is a local-only smoke test (gitignored `tools/_*`).
 
 ## Optional LLM dialogue
 
