@@ -212,7 +212,7 @@ body.cinematic .topbar, body.cinematic .feedwrap, body.cinematic .lb, body.cinem
   .speeds button, .toggles button, .topbar button { min-width: 36px; padding: 0 4px; }
   .feedwrap .ph { flex-wrap: wrap; row-gap: 4px; } .feedwrap .ff { flex-wrap: wrap; } .ff button { padding: 0 8px; }
 }
-@media (max-width: 460px) { .clock .wkd, .clock .dno { display: none; } }
+@media (max-width: 460px) { .clock .wkd, .clock .dno { display: none; } .topbar #newv { display: none; } .clock { font-size: 11px; padding: 3px 4px; } }
 /* phone landscape: the villager card is a right-hand side panel so the villager stays visible on the left */
 @media (orientation: landscape) and (max-height: 500px) {
   .card { left: auto; right: 8px; width: min(380px, 48vw); top: calc(env(safe-area-inset-top, 0px) + var(--top-h) + 8px); bottom: calc(env(safe-area-inset-bottom, 0px) + var(--dock-h) + 10px); max-height: none; }
