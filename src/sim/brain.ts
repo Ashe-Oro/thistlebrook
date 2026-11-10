@@ -2,7 +2,8 @@
 // Smallville structure: planDay() writes a daily plan from goal + memories, choose() turns the current
 // plan block + needs + opportunities into concrete actions, reflect() distils memories into beliefs.
 // v1 has no economy: occupations are routines and places to be; what matters is who likes, loves, envies or wrongs whom.
-import { pr } from './lines';
+import { LEISURE, pr } from './lines';
+import type { Anim } from '../agents/avatar';
 import type { Sim } from './sim';
 import type { Villager, Action, PlanBlock } from './types';
 import { op, pickGossip, pendingInvite, possess } from './social';
@@ -68,6 +69,7 @@ export class UtilityBrain implements Brain {
     // --- urgent needs
     if (n.food < 28 && b.act !== 'sleep' && b.act !== 'event') { this.meal(v, sim); return; }
     if (n.energy < 10 && b.act !== 'sleep') { think('I can barely keep my eyes open...'); q.push(A('enter', 'napping at home', { place: v.def.home, dur: 90 })); v.doing = 'napping'; return; }
+    if (sim.rain > .25 && sim.rain <= .6 && ['stroll', 'social', 'evening'].includes(b.act) && this.ambient(v, sim)) return;
     if (sim.rain > .6 && b.act !== 'sleep' && b.act !== 'event' && R.chance(.75 - v.traits.diligence * .4)) {
       const tav = sim.place('tavern'), useTav = Math.hypot(tav.x - v.x, tav.z - v.z) < Math.hypot(home.x - v.x, home.z - v.z) + 6;
       think('Ugh, this rain! Better get inside.'); q.push(A('enter', useTav ? 'sheltering in the Tipsy Thistle' : 'sheltering at home', { place: useTav ? 'tavern' : v.def.home, dur: 40, run: true, onEnter: (x: Villager) => { x.thought = R.pick(useTav ? ['Cosier in here with the rain drumming outside.', 'Nothing beats a warm tavern on a wet day.', 'Who else got caught in that downpour?'] : ['Dry at last. Listen to that rain.', 'A cup of something warm and a window to watch from.', 'Rain on the roof. Lovely, from in here.']) as string; } })); return;
@@ -78,7 +80,7 @@ export class UtilityBrain implements Brain {
         think(R.pick(['Time for bed.', 'What a day.', 'Zzz...'])); const until = b.to + (b.to % 1440 === 0 ? H(6) + R.range(0, 30) : 0);
         q.push(A('enter', 'sleeping', { place: v.def.home, until: Math.max(until, sim.clock + 30), onEnter: (x: Villager) => { x.doing = 'sleeping'; } })); return;
       }
-      case 'breakfast': { if (n.food < 85) { q.push(A('enter', 'having breakfast', { place: v.def.home, dur: 20, onExit: (x: Villager) => { x.needs.food = Math.min(100, x.needs.food + 50); } })); return; } if (this.social(v, sim, .1)) return; this.stroll(v, sim); return; }
+      case 'breakfast': { if (n.food < 85) { q.push(A('enter', 'having breakfast', { place: v.def.home, dur: 20, onExit: (x: Villager) => { x.needs.food = Math.min(100, x.needs.food + 50); } })); return; } if (this.social(v, sim, .1)) return; if (R.chance(.35) && this.ambient(v, sim)) return; this.stroll(v, sim); return; }
       case 'lunch': {
         if (!(v as any)._lunch || (v as any)._lunch < sim.day) { (v as any)._lunch = sim.day; n.food = Math.min(100, n.food + 45); sim.icon(v, v.job === 'baker' ? '🍞' : '🥪'); }
         if (R.chance(.45)) { const seat = sim.takeSeat(v, 'bench'); if (seat) { q.push(A('sit', 'lunch on a bench', { seat, dur: 25, anim2: 'talk' })); return; } }
@@ -98,7 +100,7 @@ export class UtilityBrain implements Brain {
         if (this.social(v, sim, -.05)) return;
         if (v.partner && R.chance(.4)) { const p = sim.byId.get(v.partner)!; if (!p.inside) { const seat = sim.takeSeat(v, 'campfire'); if (seat) { q.push(A('sit', `stargazing with ${p.first}`, { seat, dur: 40, anim2: 'talk' })); return; } } }
         if (b.where === 'tavern' || R.chance(.3)) { this.tavern(v, sim); return; }
-        if (sim.hour < 20 && R.chance(.3) && this.ambient(v, sim)) return;
+        if (R.chance(.3) && this.ambient(v, sim)) return;
         if (R.chance(.4)) { const seat = sim.takeSeat(v, R.chance(.5) ? 'campfire' : 'bench'); if (seat) { q.push(A('sit', 'relaxing', { seat, dur: 40 })); return; } }
         q.push(A('enter', 'relaxing at home', { place: v.def.home, dur: 60 })); return;
       }
@@ -124,8 +126,9 @@ export class UtilityBrain implements Brain {
     if (sim.clock - ((v as any)._ambient ?? -1e9) < 300) return false;
     const R = sim.rng, W = sim.world, P = W.places;
     // [x, z, where, doing, anim, icon, chronicle, thought, ripple?, notice?]
-    type Opt = { x: number; z: number; where: string; doing: string; anim: string; icon: string; line: string; thought: string; ripple?: boolean; notice?: boolean };
-    const opts: Opt[] = []; const at = (id: string) => P.get(id);
+    type Opt = { x: number; z: number; where: string; doing: string; anim: Anim; icon: string; line: string; thought: string; ripple?: boolean; notice?: boolean; weight?: number; leisure?: boolean; seat?: typeof W.seats[number] };
+    const opts: Opt[] = []; const at = (id: string) => P.get(id), dry = sim.rain < .25, day = sim.hour >= 6 && sim.hour < 20, T = v.traits;
+    const add = (key: keyof typeof LEISURE, id: string, weight: number, dx = 0, dz = 0) => { const p = at(id); if (p) { const l = LEISURE[key]; opts.push({ ...l, x: p.x + dx, z: p.z + dz, where: `to ${p.name}`, line: `${v.first} ${l.line}`, weight, leisure: true }); } };
     let p = at('well'); if (p) opts.push({ x: p.x, z: p.z, where: 'at the well', doing: 'drawing water at the well', anim: 'pickup', icon: '🪣', line: `${v.first} drew a pail of water at the well.`, thought: 'Fresh water for the day.', ripple: true });
     p = at('notices'); if (p) opts.push({ x: p.x, z: p.z, where: 'at the notice board', doing: 'reading the notice board', anim: 'point', icon: '📌', line: `${v.first} stopped to read the notices.`, thought: 'Anything new on the board?', notice: true });
     const pid = P.has('rivpond') ? 'rivpond' : P.has('pond') ? 'pond' : ''; p = pid ? at(pid) : undefined;
@@ -135,17 +138,43 @@ export class UtilityBrain implements Brain {
     // The dog wanders per render frame; visits use its fixed plaza meeting spot.
     p = at('plaza');
     if (W.dog && p) opts.push({ x: p.x, z: p.z, where: 'with the village dog', doing: 'petting the village dog', anim: 'feed', icon: '🐕', line: `${v.first} crouched to ruffle the village dog’s ears.`, thought: 'Good dog. Who’s a good dog?' });
+    // Eight leisure choices share the old ambient budget; no work block calls this method.
+    // Use fixed shore/clearing coordinates, never the render-driven ducks or dog positions.
+    if (!dry || !day) opts.length = 0;
+    if (dry && day && T.kindness > .45) add('ducks', 'duckshore', .7 + T.kindness * .5);
+    if (dry && sim.hour >= 6 && sim.hour < 10 && T.temper < .65) add('fishing', 'dock', 1.1 + (1 - T.sociability) * .4);
+    if (dry && !day) {
+      add('warmth', 'campfire', .9 + (v.needs.energy < 45 ? .3 : 0), 0, 2.4);
+      if (T.sociability < .6 || v.partner || v.emotions.sadness > .3) add('stars', 'stargaze', .8 + v.emotions.sadness * .4);
+    }
+    if (dry && day) {
+      const seat = W.seats.filter(s => s.place === 'bench' && !s.taken).sort((a, b) => Math.hypot(a.x - v.x, a.z - v.z) - Math.hypot(b.x - v.x, b.z - v.z))[0];
+      if (seat && v.needs.energy < 75) { const l = LEISURE.watch; opts.push({ ...l, x: seat.x, z: seat.z, where: 'to a bench', line: `${v.first} ${l.line}`, weight: .7 + (100 - v.needs.energy) / 100, leisure: true, seat }); }
+      if (T.sociability < .65 && v.needs.energy > 25) add('sketch', 'school', .7 + (1 - T.sociability) * .4, 1.5, 1.5);
+      if (T.kindness > .55 || v.emotions.sadness > .3) add('flowers', 'garden', .8 + v.emotions.sadness * .4, 2, 1);
+    }
+    if (sim.rain >= .25 && sim.rain <= .6 && sim.hour >= 9 && sim.hour < 23 && v.needs.energy > 25) add('shelter', 'tavern', 1, 1.5, .3);
     if (!opts.length) return false;
-    const pick = opts.map(o => ({ o, s: 1 / (1 + Math.hypot(o.x - v.x, o.z - v.z) / 18) + R.range(0, .5) })).sort((a, b) => b.s - a.s)[0].o;
+    const pick = opts.map((o, i) => ({ o, i, s: (o.weight ?? 1) / (1 + Math.hypot(o.x - v.x, o.z - v.z) / 18) + R.range(0, .5) })).sort((a, b) => b.s - a.s || a.i - b.i)[0].o;
     (v as any)._ambient = sim.clock; v.thought = pick.thought;
     const [gx, gz] = W.nav.nearestFree(pick.x + R.range(-.6, .6), pick.z + (pick.ripple ? 1.5 : .9));
     v.queue.push(A('go', `heading ${pick.where}`, { x: gx, z: gz }));
-    v.queue.push(A('idle', pick.doing, { dur: R.range(10, 16), anim: pick.anim, face: Math.atan2(pick.x - gx, pick.z - gz), after: (s: Sim) => {
+    if (pick.seat) { pick.seat.taken = v.id; v.seat = pick.seat; v.queue.push(A('sit', pick.doing, { seat: pick.seat, dur: 18 })); }
+    v.queue.push(A('idle', pick.doing, { dur: pick.seat ? 0 : R.range(10, 16), anim: pick.anim, face: Math.atan2(pick.x - gx, pick.z - gz), after: (s: Sim) => {
+      if (Math.hypot(v.x - gx, v.z - gz) > 3) return; // A failed/aborted journey earns no remote interaction.
       if (pick.ripple) s.world.fx.water(pick.x + R.range(-.6, .6), .5, pick.z + R.range(-.4, .4), 0, 1);
       if (pick.notice) this.readNotice(v, s);
       v.needs.social = Math.min(100, v.needs.social + 6);
-      if (R.chance(.45)) s.log(pick.line, R.chance(.3) ? 2 : 1, [v.id], 'ambient', pick.icon);
-      else s.say(v, R.pick(v.def.catchphrases), pick.icon, 2.4);
+      if (pick.leisure) { v.emotions.sadness = Math.max(0, v.emotions.sadness - .04); v.emotions.joy = Math.min(1, v.emotions.joy + .04); }
+      if (R.chance(.45)) s.log(pick.line, pick.leisure ? 2 : R.chance(.3) ? 2 : 1, [v.id], 'ambient', pick.icon);
+      else s.say(v, pick.leisure ? pick.thought : R.pick(v.def.catchphrases), pick.icon, 2.4);
+      // The well remains a meeting place: only approach someone free, on friendly terms,
+      // and beyond the ordinary social cooldown. Chat uses the existing gossip/invite mix.
+      const well = at('well');
+      if (well && pick.where === 'at the well') {
+        const pal = s.villagers.find(u => u !== v && !u.inside && s.clock >= u.busyUntil && (u.act?.type === 'idle' || u.act?.type === 'sit') && Math.hypot(u.x - v.x, u.z - v.z) < 4 && op(v, u) > -10 && op(u, v) > -10 && s.clock - (v.lastSocial[u.id] ?? -9999) > 200);
+        if (pal && R.chance(.3 + T.sociability * .2)) v.queue.push(A('social', `chatting with ${pal.first} at the well`, { kind: 'chat', target: pal.id }));
+      }
     } }));
     return true;
   }

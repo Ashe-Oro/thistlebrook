@@ -83,6 +83,7 @@ export const TOWN = {
         { id: 'plaza', kind: 'plaza', name: 'the plaza', x: -9, z: 3.5 },
         { id: 'forest', kind: 'forest', name: 'the west woods', x: -36, z: -4 },
         { id: 'orchard', kind: 'orchard', name: 'the orchard', x: 3, z: 17 },
+        { id: 'stargaze', kind: 'orchard', name: 'the orchard clearing', x: 6, z: 21.5 },
       ],
     },
     {
@@ -145,6 +146,7 @@ export const TOWN = {
       ],
       spots: [
         { id: 'dock', kind: 'dock', name: 'the fishing dock', x: 2, z: 22.8 },
+        { id: 'duckshore', kind: 'pond', name: 'the mill pond shore', x: 5, z: 25 },
         { id: 'riverside', kind: 'plaza', name: 'Riverside', x: -11, z: 23 },
       ],
     },

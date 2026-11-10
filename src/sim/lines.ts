@@ -5,6 +5,19 @@
 import type { Sim } from './sim';
 import type { Villager } from './types';
 import type { Goal } from '../data/villagers';
+import type { Anim } from '../agents/avatar';
+
+// Quiet setting captions; choices and timing belong to the fixed-step brain.
+export const LEISURE: Record<'ducks' | 'fishing' | 'warmth' | 'stars' | 'watch' | 'sketch' | 'flowers' | 'shelter', { doing: string; thought: string; line: string; anim: Anim; icon: string }> = {
+  ducks: { doing: 'scattering grain for the ducks', thought: 'A little grain. There is enough for everyone, you greedy ducks.', line: 'scattered grain for the pond ducks.', anim: 'feed', icon: '🦆' },
+  fishing: { doing: 'casting a line off the dock', thought: 'Just me, the morning mist, and a very patient fish.', line: 'cast a hopeful line off the dock in the morning quiet.', anim: 'point', icon: '🎣' },
+  warmth: { doing: 'warming hands at the campfire', thought: 'Warm fingers, quiet crackling. That is better.', line: 'held out cold hands to the campfire.', anim: 'give', icon: '🔥' },
+  stars: { doing: 'stargazing in the orchard clearing', thought: 'The same stars above all our little worries.', line: 'stopped in the orchard clearing to count the stars.', anim: 'point', icon: '✨' },
+  watch: { doing: 'people-watching on a bench', thought: 'Everyone has somewhere to be. I can sit a moment.', line: 'settled on a bench to watch the village go by.', anim: 'sit', icon: '👀' },
+  sketch: { doing: 'sketching the school green', thought: 'That crooked roof has character. My drawing has even more.', line: 'sketched the roofs around the school green.', anim: 'pickup', icon: '✏️' },
+  flowers: { doing: 'admiring the herb garden flowers', thought: 'Even after a hard day, something here is blooming.', line: 'paused to admire the flowers in the herb garden.', anim: 'feed', icon: '🌼' },
+  shelter: { doing: 'waiting out the shower by the tavern door', thought: 'I will wait by the door until this shower passes.', line: 'waited by the tavern door, listening to the rain.', anim: 'idle', icon: '☔' },
+};
 
 // --- pronoun helper -------------------------------------------------------
 export function pr(v: Villager) {
