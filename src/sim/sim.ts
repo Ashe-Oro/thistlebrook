@@ -5,7 +5,7 @@ import { MemoryStream, type Fact } from '../agents/memory';
 import { RNG, clamp, hourOf, dayOf, fmtTime } from '../core/util';
 import type { Villager, Action, SimEvent, Alliance, Keepsake, Gathering, Pet, Decree } from './types';
 import type { Brain } from './brain';
-import { resolveSocial, maybeOverhear } from './social';
+import { resolveSocial, maybeOverhear, grievance, addGrievance } from './social';
 import { tickGatherings } from './gatherings';
 import { say } from './lines';
 
@@ -37,6 +37,8 @@ export class Sim {
   // villager-initiated events (gatherings.ts) — plain data so the save round-trips it all
   gatherings: Gathering[] = []; gid = 1; calDay = 0; gatherDay: Record<string, number> = {}; decrees: Decree[] = [];
   coupledAt: Record<string, number> = {}; vows: Record<string, number> = {}; proposedAt: Record<string, number> = {};
+  // drama balance: per-pair cooling-off windows, argument history and the village-wide fight lull
+  coolOff: Record<string, number> = {}; arguedAt: Record<string, number> = {}; foughtAt: Record<string, number> = {}; fightLull = 0; argueLull = 0;
   pet: Pet = { name: 'Biscuit', x: -9, z: 8, state: 'home', since: 0, spot: null };
   festivalTheme: string | null = null; festivalShown = false;
   constructor(public world: World) {}
@@ -111,6 +113,18 @@ export class Sim {
   popularity(v: Villager) { const o = this.villagers.filter(x => x !== v).map(x => x.opinion[v.id] ?? 0); return o.reduce((a, b) => a + b, 0) / Math.max(1, o.length); }
   power(v: Villager) { const al = v.alliance ? this.alliances.find(a => a.id === v.alliance)!.members.length - 1 : 0; const fans = this.villagers.filter(x => x !== v && (x.opinion[v.id] ?? 0) > 35).length; const feared = this.villagers.filter(x => x !== v && (x.opinion[v.id] ?? 0) < -40).length; return Math.round(al * 12 + fans * 8 + feared * 3 + v.stats.fights * 2 + v.stats.hosted * 3 + (v.partner ? 4 : 0)); }
   mischief(v: Villager) { return v.stats.stolen * 4 + v.stats.rumours * 3 + v.stats.fights * 3 + this.villagers.filter(x => x !== v && (x.opinion[v.id] ?? 0) < -40).length * 2; }
+  pairKey(a: string, b: string) { return [a, b].sort().join('~'); }
+  // sacred ground: true while a wedding / meeting / festival / market is in progress within ~25 m — no scenes there
+  calmAt(x: number, z: number): boolean {
+    for (const p of this.parties) { if (p.done || !p.kindTag || !['wedding', 'meeting', 'festival', 'market'].includes(p.kindTag)) continue; if (this.clock < p.at - 20 || this.clock > p.until) continue; const pl = this.place(p.place); if (Math.hypot(pl.cx - x, pl.cz - z) < 25) return true; }
+    if (this.festivalUntil > this.clock) { const pl = this.world.places.get('plaza'); if (pl && Math.hypot(pl.cx - x, pl.cz - z) < 25) return true; }
+    return false;
+  }
+  canFight(a: Villager, b: Villager): boolean {
+    if (this.clock < this.fightLull) return false; /* the whole village is still catching its breath after the last one */
+    if (this.clock < (this.coolOff[this.pairKey(a.id, b.id)] ?? 0)) return false;
+    return !this.calmAt((a.x + b.x) / 2, (a.z + b.z) / 2);
+  }
   couple(a: Villager, b: Villager) { a.partner = b.id; b.partner = a.id; a.crush = b.id; b.crush = a.id; this.couples.push([a.id, b.id]); this.coupledAt[[a.id, b.id].sort().join('~')] = this.clock; }
   breakUp(a: Villager, b: Villager) { a.partner = null; b.partner = null; if (a.crush === b.id) a.crush = null; this.couples = this.couples.filter(c => !(c.includes(a.id) && c.includes(b.id))); a.heartbreak = b.heartbreak = this.clock + 1440; const k = [a.id, b.id].sort().join('~'); delete this.coupledAt[k]; delete this.vows[k]; delete this.proposedAt[k]; }
 
@@ -331,12 +345,19 @@ export class Sim {
   }
   caught(v: Villager, thief: Villager) {
     this.leaveSeat(thief);
-    const fight = v.traits.bravery + v.traits.temper * .5 > .9 || thief.traits.temper > .6;
-    if (fight) { const k = this.keepsakes.get(thief.act?.loot ?? ''); if (k && k.holder === thief.id) k.holder = k.owner; this.startFight(v, thief, `${v.first} caught ${thief.first} and they tumbled into a scuffle`); }
-    else { const k = this.keepsakes.get(thief.act?.loot ?? ''); if (k && k.holder === thief.id) k.holder = k.owner; this.say(thief, 'Okay, okay! Take it back!', '😰'); thief.emotions.fear = .9; this.say(v, 'Thief!', '💢'); this.log(`${v.first} caught ${thief.first} and snatched back ${k ? k.name.replace(/^(his|her) /, k.owner === v.id ? 'their ' : '$1 ') : 'what was stolen'}.`, 7, [v.id, thief.id], 'theft', '🫳'); this.clearPlan(thief); }
-    v.opinion[thief.id] = Math.max(-100, (v.opinion[thief.id] ?? 0) - 25);
+    // a theft catch is a stern telling-off and the keepsake handed back; fists only for a very hot temper on top of an existing grudge
+    const grudge = grievance(this, v, thief.id) > 20 || (v.opinion[thief.id] ?? 0) < -35;
+    const fight = grudge && (v.traits.temper > .75 || thief.traits.temper > .8) && this.canFight(v, thief);
+    const k = this.keepsakes.get(thief.act?.loot ?? ''); if (k && k.holder === thief.id) k.holder = k.owner;
+    if (fight) this.startFight(v, thief, `${v.first} caught ${thief.first}, and an old grudge turned the scolding into a scuffle`);
+    else { this.say(thief, 'Okay, okay! Take it back!', '😰'); thief.emotions.fear = .9; (thief as any)._shame = this.clock + 720; this.say(v, 'Thief!', '💢'); this.log(`${v.first} caught ${thief.first}, took back ${k ? k.name.replace(/^(his|her) /, k.owner === v.id ? 'their ' : '$1 ') : 'what was stolen'} and delivered a telling-off that could be heard two gardens over.`, 7, [v.id, thief.id], 'theft', '🫳'); this.clearPlan(thief); }
+    v.opinion[thief.id] = Math.max(-100, (v.opinion[thief.id] ?? 0) - 25); addGrievance(this, v, thief.id, 18);
   }
   startFight(a: Villager, b: Villager, why: string) {
+    // a brawl is a rare, costly climax: a long pair cooling-off, a village-wide lull, and shame for both
+    const pkF = this.pairKey(a.id, b.id); this.foughtAt[pkF] = this.clock; this.coolOff[pkF] = this.clock + 1800 + this.rng.range(0, 600); this.fightLull = this.clock + 3600;
+    (a as any)._shame = this.clock + 1440; (b as any)._shame = this.clock + 1440;
+    addGrievance(this, a, b.id, -100); addGrievance(this, b, a.id, -100); /* the grudge is vented, whatever else is broken */
     for (const x of [a, b]) { this.clearPlan(x); x.act = { type: 'fight', dur: 14, t: 0, label: 'scuffling', target: x === a ? b.id : a.id, locked: true }; x.queue = []; x.path = null; x.emotions.anger = 1; this.leaveSeat(x); }
     { // square off on clear ground (not wrapped around a lamp post), about an arm's length apart
       const nav = this.world.nav, cx = (a.x + b.x) / 2, cz = (a.z + b.z) / 2; let dx = b.x - a.x, dz = b.z - a.z; const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
@@ -356,9 +377,12 @@ export class Sim {
       this.log(`The dust settled: ${w.first} came out on top, and ${l.first} limped off with bruised pride.`, 7, [w.id, l.id], 'fight', '🏆', l.x, l.z);
       this.dizzy.set(l.id, this.clock + 60); l.emotions.sadness = .7; l.emotions.anger = .8; w.emotions.joy = .4; this.icon(w, '😤'); this.icon(l, '😵');
       l.queue.push({ type: 'idle', anim: 'sad', dur: 20, t: 0, label: 'nursing bruised pride' });
+      if (this.rng.chance(.6)) this.log(`Thistlebrook tutted about it for the rest of the day — brawling in the open, honestly.`, 3, [w.id, l.id], 'gossip', '😮‍💨');
     };
     const f = this.fact('deed', `${a.first} and ${b.first} came to blows (${w.first} won)`, a.id, b.id, -.6, 7, b.id); (f as any).label = 'the brawl';
     this.witness(`${a.first} and ${b.first} got into a fight`, 7, [a.id, b.id], { [a.id]: -.8, [b.id]: -.8, '*': -.3 }, mx, mz, f, 16);
+    // fighting costs standing: everyone who saw it thinks a little less of both of them
+    for (const x of this.villagers) { if (x === a || x === b || x.inside || Math.hypot(x.x - mx, x.z - mz) > 16) continue; x.opinion[a.id] = Math.max(-100, (x.opinion[a.id] ?? 0) - 8); x.opinion[b.id] = Math.max(-100, (x.opinion[b.id] ?? 0) - 8); }
     a.opinion[b.id] = Math.max(-100, (a.opinion[b.id] ?? 0) - 20); b.opinion[a.id] = Math.max(-100, (b.opinion[a.id] ?? 0) - 20);
     a.lastSocial[b.id] = b.lastSocial[a.id] = this.clock + 600; // steer clear of each other for a while
     for (const al of this.alliances) { if (al.members.includes(l.id)) for (const m of al.members) { const mv = this.byId.get(m)!; if (mv !== l) mv.opinion[w.id] = (mv.opinion[w.id] ?? 0) - 15; } }

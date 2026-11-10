@@ -6,7 +6,7 @@ import { LEISURE, pr } from './lines';
 import type { Anim } from '../agents/avatar';
 import type { Sim } from './sim';
 import type { Villager, Action, PlanBlock } from './types';
-import { op, pickGossip, pendingInvite, possess } from './social';
+import { op, pickGossip, pendingInvite, possess, grievance, ARGUE_GRIEVANCE } from './social';
 import { proposalReady } from './gatherings';
 import { calendarFor } from './calendar';
 import { fmtTime } from '../core/util';
@@ -285,33 +285,45 @@ export class UtilityBrain implements Brain {
   // Social choice: score every (kind, target) pair against goals, traits, needs, feelings and memories.
   social(v: Villager, sim: Sim, bias: number): boolean {
     const T = v.traits, R = sim.rng, cands: [number, Action][] = [], mine = sim.keepsake(v.id), lost = mine.holder !== v.id && !(v as any)._missFrom;
+    const shamed = sim.clock < ((v as any)._shame ?? 0), vCalm = sim.calmAt(v.x, v.z);
     for (const u of sim.villagers) {
       if (u === v || u.inside || u.act?.type === 'fight' || u.act?.type === 'flee' || u.doing === 'sleeping') continue;
+      const pku = sim.pairKey(v.id, u.id);
+      if (sim.clock < (sim.coolOff[pku] ?? 0)) continue; /* cooling off: they steer clear of each other entirely */
+      const calm = vCalm || sim.calmAt(u.x, u.z); /* no rows or pranks in the shadow of a wedding, meeting, festival or market */
       const dist = Math.hypot(u.x - v.x, u.z - v.z), near = Math.max(0, 1 - dist / 45), o = op(v, u), since = sim.clock - (v.lastSocial[u.id] ?? -9999), cool = since < 90 ? .15 : since < 200 ? .6 : 1;
       const add = (s: number, a: Action) => cands.push([(s + bias) * cool * (.5 + near) + R.range(0, .15), a]);
-      add((100 - v.needs.social) / 100 * (o + 60) / 110 * (.4 + T.sociability) + (v.partner === u.id ? .35 : 0), A('social', v.partner === u.id ? `spending time with ${u.first}` : `chatting with ${u.first}`, { kind: 'chat', target: u.id }));
+      add((100 - v.needs.social) / 100 * (o + 60) / 110 * (.4 + T.sociability) + (v.partner === u.id ? .35 : 0) + (o > 40 && v.needs.food > 45 && v.needs.energy > 35 ? .12 : 0), A('social', v.partner === u.id ? `spending time with ${u.first}` : `chatting with ${u.first}`, { kind: 'chat', target: u.id }));
       const inv = pendingInvite(v, u, sim); if (inv) add(.8 + T.sociability * .4 + (inv.actor === v.id ? .6 : 0), A('social', `inviting ${u.first}`, { kind: 'invite', target: u.id, fact: inv }));
       const g = sim.clock - ((v as any)._lastGossip ?? -9999) > 170 ? pickGossip(v, u, sim) : null; if (g) add(.7 * (g.imp / 10) * (.3 + T.sociability * .5 + (v.goal === 'power' ? .3 : 0) + (1 - T.kindness) * .3 + ((g as any).romance ? .25 : 0)), A('social', `gossiping with ${u.first}`, { kind: 'gossip', target: u.id, fact: g }));
-      const giftOk = sim.clock - ((v as any)._lastGift ?? -9999) > 360 && sim.clock - ((v as any)._gave?.[u.id] ?? -9999) > 1440;
+      const giftOk = sim.clock - ((v as any)._lastGift ?? -9999) > 300 && sim.clock - ((v as any)._gave?.[u.id] ?? -9999) > 1440;
       if (giftOk) { const g2 = (v.goal === 'liked' ? .35 : v.goal === 'family' && v.family.includes(u.id) ? .6 : .05) + T.kindness * .3 + (v.crush === u.id ? .45 : 0) + (u.emotions.sadness > .5 ? .3 : 0) + (v.goal === 'liked' && o < 10 ? .2 : 0) + (v.goal === 'power' && o > 20 && !u.alliance ? .2 : 0); add(g2, A('social', `bringing ${u.first} a gift`, { kind: 'gift', target: u.id, why: u.emotions.sadness > .5 ? ` to cheer ${pr(u).obj} up` : v.goal === 'liked' && o < 10 ? ` to win ${pr(u).obj} over` : '', carry: v.job === 'baker' ? 'bread' : 'gift' })); }
       if ((v.goal === 'power' || v.goal === 'family') && o > (v.goal === 'power' ? 28 : 46) && op(u, v) > (v.goal === 'power' ? 18 : 40) && sim.clock > 600 && !u.alliance && sim.clock - ((v as any)._asked?.[u.id] ?? -9999) > 1440 && (!v.alliance || sim.alliances.find(a => a.id === v.alliance)!.members.length < 4)) add(.75 + T.ambition * .4, A('social', `recruiting ${u.first}`, { kind: 'ally', target: u.id }));
       const holdsTheirs = sim.keepsake(u.id).holder === v.id && sim.clock - (sim.keepsake(u.id).takenAt ?? 0) > 600;
       const theirO = u.opinion[v.id] ?? 0, theyHoldMine = sim.keepsakes.get(v.id)?.holder === u.id;
-      // apologise when *they* are sore at me (more than I am at them), never to whoever is sitting on my keepsake
-      if ((!theyHoldMine && theirO < -22 && theirO <= o && (T.kindness > .55 || v.goal === 'liked' || v.family.includes(u.id)) && since > 300) || (holdsTheirs && T.kindness > .45 && R.chance(.3))) add(.45 + T.kindness * .4 + (v.goal === 'liked' ? .3 : 0) + (holdsTheirs ? .3 : 0), A('social', `apologising to ${u.first}`, { kind: 'reconcile', target: u.id }));
-      if (o < -18 && T.temper > .32 && since > 200) { const done = ((v as any)._confronted ??= new Set()); const why = [...v.mem.known.values()].filter(f => f.actor === u.id && f.valence < 0 && !done.has(f.id)).sort((a, b) => b.imp - a.imp)[0]; if (why || since > 1440) add(.35 + T.temper * .5 + (why ? .2 : 0) + (v.goal === 'respect' ? .2 : 0), A('social', `confronting ${u.first}`, { kind: 'argue', target: u.id, why: why ? ((why as any).label ?? `how ${why.text.replace(/[.!]+$/, '')}`) : 'old grudges', factId: why?.id })); }
+      // apologise when *they* are sore at me (more than I am at them), never to whoever is sitting on my keepsake;
+      // after a cooled-off row or fight the kinder (or more ashamed) party comes looking to make amends
+      const spat = Math.max(sim.arguedAt[pku] ?? -1e9, sim.foughtAt[pku] ?? -1e9);
+      const sorry = spat > ((v as any)._apol?.[u.id] ?? -1e9) && sim.clock - spat < 4320 && (T.kindness > .45 || shamed || v.goal === 'liked' || v.family.includes(u.id));
+      if ((!theyHoldMine && ((sorry && since > 60) || (theirO < -22 && theirO <= o && (T.kindness > .55 || v.goal === 'liked' || v.family.includes(u.id)) && since > 300))) || (holdsTheirs && T.kindness > .45 && R.chance(.3))) add(.45 + T.kindness * .4 + (v.goal === 'liked' ? .3 : 0) + (holdsTheirs ? .3 : 0) + (sorry ? .25 : 0) + (shamed ? .3 : 0), A('social', `apologising to ${u.first}`, { kind: 'reconcile', target: u.id }));
+      // confrontations ride the grievance ladder: a grudge has to build over repeated incidents first
+      if (o < -18 && T.temper > .32 && since > 200 && !shamed && !calm && grievance(sim, v, u.id) >= ARGUE_GRIEVANCE && sim.clock >= sim.argueLull && sim.clock - (sim.arguedAt[pku] ?? -1e9) > 1560) { const done = ((v as any)._confronted ??= new Set()); const why = [...v.mem.known.values()].filter(f => f.actor === u.id && f.valence < 0 && !done.has(f.id)).sort((a, b) => b.imp - a.imp)[0]; if (why || since > 1440) add(.3 + T.temper * .4 + (why ? .15 : 0) + (v.goal === 'respect' ? .15 : 0), A('social', `confronting ${u.first}`, { kind: 'argue', target: u.id, why: why ? ((why as any).label ?? `how ${why.text.replace(/[.!]+$/, '')}`) : 'old grudges', factId: why?.id })); }
       // envy and jealousy are friction even without a grudge: the popular one, or whoever is sweet on *your* someone
       const sweetOnMine = (v.partner || v.crush) && (u.crush === (v.partner || v.crush) || ((u as any)._flirted ?? 0) > sim.clock - 720 && (u as any)._flirtWith === (v.partner || v.crush));
-      if (since > 600 && o < 25 && ((T.envy > .5 && sim.popularity(u) > sim.popularity(v) + 10) || sweetOnMine) && sim.clock - ((v as any)._sniped ?? -1e9) > 1200) add(.3 + T.envy * .35 + T.temper * .3 + (sweetOnMine ? .35 : 0), A('social', sweetOnMine ? `glaring at ${u.first}` : `sniping at ${u.first}`, { kind: 'argue', target: u.id, why: sweetOnMine ? `the way ${pr(u).sub} looks at ${sim.byId.get((v.partner || v.crush)!)!.first}` : R.pick([`getting too big for ${pr(u).pos} boots`, `${pr(u).pos} smug little smile`, `who gets the credit around here`, `being the village darling`, `${pr(u).pos} constant showing off`]), jealous: !!sweetOnMine, snipe: true }));
+      if (since > 600 && o < 25 && !shamed && !calm && sim.clock >= sim.argueLull && ((T.envy > .5 && sim.popularity(u) > sim.popularity(v) + 10 && grievance(sim, v, u.id) >= 12) || sweetOnMine) && sim.clock - ((v as any)._sniped ?? -1e9) > 2880) add(.25 + T.envy * .3 + T.temper * .25 + (sweetOnMine ? .35 : 0), A('social', sweetOnMine ? `glaring at ${u.first}` : `sniping at ${u.first}`, { kind: 'argue', target: u.id, why: sweetOnMine ? `the way ${pr(u).sub} looks at ${sim.byId.get((v.partner || v.crush)!)!.first}` : R.pick([`getting too big for ${pr(u).pos} boots`, `${pr(u).pos} smug little smile`, `who gets the credit around here`, `being the village darling`, `${pr(u).pos} constant showing off`]), jealous: !!sweetOnMine, snipe: true }));
+      // friendly rivalry: a mild needle between two villagers becomes a contest instead of a row
+      if (!calm && since > 200 && ((o < 10 && grievance(sim, v, u.id) >= 8) || o < -25) && sim.clock - ((v as any)._lastContest ?? -1e9) > 2160 && sim.clock - ((u as any)._lastContest ?? -1e9) > 1440) add(.4 + T.bravery * .2 + T.sociability * .2, A('social', `challenging ${u.first} to a contest`, { kind: 'contest', target: u.id }));
+      // harmless pranks: playful mischief bleeds off friction without fists
+      if (!calm && !shamed && since > 300 && (T.honesty < .55 || T.envy > .55) && o > -35 && sim.clock - ((v as any)._lastPrank ?? -1e9) > 2160 && sim.hour > 8 && sim.hour < 20) add(.22 + T.sociability * .2 + (1 - T.honesty) * .2 + (o > 25 ? .12 : 0), A('social', `plotting a little prank on ${u.first}`, { kind: 'prank', target: u.id }));
       // a missing keepsake: confront whoever you *believe* took it (memory may name them, or it's just a hunch)
       if (lost && sim.clock - ((v as any)._accused?.[u.id] ?? -1e9) > 1440 && !v.family.includes(u.id)) { const known = [...v.mem.known.values()].some(f => f.actor === u.id && f.target === v.id && /took|pinched/.test(f.text)); const suspect = known || sim.villagers.filter(x => x !== v && !v.family.includes(x.id)).sort((a, b) => op(v, a) - op(v, b))[0] === u; if (suspect) add(.55 + T.temper * .3 + T.bravery * .2 + (known ? .4 : 0), A('social', `confronting ${u.first} about the missing ${mine.name.replace(/^(his|her) /, '')}`, { kind: 'accuse', target: u.id })); }
       // romance
       if (v.partner === u.id && proposalReady(sim, v, u)) add(1.1 + T.bravery * .35 + (v.goal === 'love' ? .3 : 0), A('social', `about to ask ${u.first} something important`, { kind: 'propose', target: u.id, carry: 'gift' }));
       if (v.crush === u.id && canRomance(v, u) && sim.clock > v.heartbreak) {
-        if (!v.partner && since > 180 && (!u.partner || T.honesty < .4)) add(.35 + (v.goal === 'love' ? .3 : 0) + T.sociability * .25, A('social', `flirting with ${u.first}`, { kind: 'flirt', target: u.id }));
+        if (!v.partner && since > 180 && (!u.partner || T.honesty < .4)) add(.43 + (v.goal === 'love' ? .3 : 0) + T.sociability * .25, A('social', `flirting with ${u.first}`, { kind: 'flirt', target: u.id }));
         if (!v.partner && !u.partner && o > 65 && sim.clock - ((v as any)._confessed?.[u.id] ?? -1e9) > 2880 && sim.hour > 16) add(.55 + T.bravery * .45 + (v.goal === 'love' ? .3 : 0) + (u.act?.type === 'attend' || u.act?.type === 'sit' ? .25 : 0), A('social', `working up the nerve to talk to ${u.first}`, { kind: 'confess', target: u.id }));
       }
-      if (T.honesty < .5 && (u.act?.type === 'work' || u.act?.type === 'sit' || sim.clock < u.busyUntil || u.anim === 'drink') && o < 20 && dist < 25 && sim.clock > v.wanted && sim.hour > 7 && sim.hour < 20) {
+      if (!shamed && T.honesty < .5 && (u.act?.type === 'work' || u.act?.type === 'sit' || sim.clock < u.busyUntil || u.anim === 'drink') && o < 20 && dist < 25 && sim.clock > v.wanted && sim.hour > 7 && sim.hour < 20) {
         const k = [...sim.keepsakes.values()].find(k => k.holder === u.id); if (k) add(.08 + (T.envy - T.honesty) * .85 + (o < -20 ? .25 : 0) + (k.owner !== u.id ? .1 : 0), A('steal', `eyeing ${possess(k.name, u.first)}`, { target: u.id, loot: k.id }));
       }
       // fabricated rumours: dishonest schemers smear their rivals (for influence, or for love)
@@ -355,6 +367,7 @@ function thoughtFor(a: Action, v: Villager, u: Villager) {
     case 'gift': return v.crush === u.id ? `Will ${u.first} like it? What if ${u.first} doesn't like it?` : `A little something for ${u.first}${a.why ? a.why : ''}.`; case 'ally': return `${u.first} and I could do great things together.`; case 'reconcile': return `I should make things right with ${u.first}.`;
     case 'argue': return (v.opinion[u.id] ?? 0) <= -10 ? `I've had enough of ${u.first}.` : `Who does ${u.first} think ${pr(u).sub} is, anyway?`; // matches the Relationships tab: a grudge only below Neutral
     case 'steal': return `${u.first} won't miss it. Probably.`; case 'flirt': return `Be cool. Be cool. Hi, ${u.first}!`; case 'propose': return `The ring is in my pocket. Deep breath. ${u.first}...`;
+    case 'contest': return `Time to take ${u.first} down a peg. Nicely.`; case 'prank': return `Heh. ${u.first} will never see it coming.`;
     case 'confess': return `It's now or never. ${u.first}, I...`; case 'accuse': return `I know ${u.first} has it.`; case 'rumour': return `If ${u.first} only knew what I know...`; case 'deliver': return `Special delivery for ${u.first}.`;
   }
   return '...';

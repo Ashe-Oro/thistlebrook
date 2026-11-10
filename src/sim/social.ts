@@ -10,8 +10,14 @@ const COLORS = ['#e05a47', '#3f7fd6', '#e0b13a', '#8a4fc9', '#2fa37a', '#e57fb0'
 const ALLIANCE_NAMES = ['the Lantern Pact', 'the Copper Circle', 'the Hearth Guild', 'the Oak Accord', 'the Thistle League', 'the Ember Society'];
 
 export function op(a: Villager, b: Villager) { return a.opinion[b.id] ?? 0; }
+// --- grievance ledger: wrongs accumulate per pair and fade with time, so confrontations need a real build-up ---
+const GRV_HALF = 1600; /* game-minute half-life: yesterday's slight is half forgotten */
+export const ARGUE_GRIEVANCE = 25, FIGHT_GRIEVANCE = 55;
+export function grievance(sim: Sim, a: Villager, bId: string): number { const g = (a as any)._grv?.[bId]; return g ? g.v * Math.pow(.5, (sim.clock - g.t) / GRV_HALF) : 0; }
+export function addGrievance(sim: Sim, a: Villager, bId: string, amt: number) { const G = ((a as any)._grv ??= {}); const nv = Math.min(100, grievance(sim, a, bId) + amt); if (nv <= .5) delete G[bId]; else G[bId] = { v: nv, t: sim.clock }; }
 export function bump(sim: Sim, a: Villager, b: Villager, d: number) {
   const before = a.opinion[b.id] ?? 0, after = clamp(before + d, -100, 100); a.opinion[b.id] = after;
+  if (d < 0 && !a.family.includes(b.id)) addGrievance(sim, a, b.id, -d * .8); /* every slight feeds the ledger */
   if (before < 70 && after >= 70 && !a.family.includes(b.id)) { const mutual = (b.opinion[a.id] ?? 0) >= 70; const said = ((sim as any)._bff ??= new Set<string>()); const key = [a.id, b.id].sort().join('-');
     // one line per friendship: the second half of a mutual pair upgrades it instead of mirroring it
     if (!said.has(key)) { said.add(key); sim.log(mutual ? `${a.first} and ${b.first} are firm friends now.` : `${a.first} now counts ${b.first} as a close friend.`, 5, [a.id, b.id], 'bond', '💞'); } else if (mutual && !said.has(key + '!')) { said.add(key + '!'); sim.log(`${a.first} and ${b.first} are firm friends now, and it goes both ways.`, 5, [a.id, b.id], 'bond', '💞'); } if ((b.opinion[a.id] ?? 0) >= 70) sim.achieve(null, `bff-${[a.id, b.id].sort().join('-')}`, 'Best Friends', `${a.first} & ${b.first}`); }
@@ -161,10 +167,13 @@ export function resolveSocial(sim: Sim, v: Villager, t: Villager, a: Action): nu
       return convo(sim, [[v, 'Together we could run this village.', '🤝'], [t, 'I\u2019m in.', '💪'], [v, `To ${al.name}!`, '🚩']]);
     }
     case 'reconcile': {
+      const pk = sim.pairKey(v.id, t.id); ((v as any)._apol ??= {})[t.id] = sim.clock;
       const gift = v.traits.kindness > .5 || R.chance(.4); const back = sim.keepsakes.get(t.id); const returning = back && back.holder === v.id; if (returning) back!.holder = t.id;
-      const accept = t.traits.kindness * 60 + op(t, v) + (gift ? 25 : 0) + R.range(0, 30) > 25;
+      const freshSpat = sim.clock - Math.max(sim.arguedAt[pk] ?? -1e9, sim.foughtAt[pk] ?? -1e9) < 4320; /* an apology soon after a row usually lands */
+      const accept = t.traits.kindness * 60 + op(t, v) + (gift ? 25 : 0) + (freshSpat ? 15 : 0) + R.range(0, 30) > 25;
       if (!accept) { bump(sim, t, v, 3); sim.log(`${v.first} tried to apologise to ${t.first}, who wasn't ready to forgive.`, 5, [v.id, t.id], 'reconcile', '💔'); t.emotions.anger += .2; return convo(sim, [[v, say(sim, v, 'apology', { t: t.first }), '🙏'], [t, say(sim, t, 'reconcileRefuse'), '😤']]); }
       t.opinion[v.id] = Math.max(op(t, v) + 35, 10); v.opinion[t.id] = Math.max(op(v, t) + 30, 15); t.emotions.anger = 0; v.emotions.anger = 0; t.emotions.joy += .3; sim.icon(v, '🕊️'); sim.icon(t, '🕊️'); v.stats.makeups++;
+      addGrievance(sim, v, t.id, -100); addGrievance(sim, t, v.id, -100); sim.coolOff[pk] = 0; /* slate wiped both ways */
       const wronged = [...v.mem.known.values()].some(f => f.actor === t.id && f.valence < 0 && (f.target === v.id || f.about === v.id));
       const guilty = [...t.mem.known.values()].some(f => f.actor === v.id && f.valence < 0);
       if (returning) sim.log(`${v.first} came clean to ${t.first} and handed back ${back!.name.replace(/^(his|her) /, '')}. ${t.first} forgave ${pr(v).obj}.`, 7, [v.id, t.id], 'reconcile', back!.icon);
@@ -173,17 +182,70 @@ export function resolveSocial(sim: Sim, v: Villager, t: Villager, a: Action): nu
       return convo(sim, [[v, say(sim, v, 'apology', { t: t.first }), '🙏'], [t, say(sim, t, 'reconcileAccept'), '🙂'], [v, 'Friends?', '🤝'], [t, 'Friends.', '😊']]);
     }
     case 'argue': {
+      const pk = sim.pairKey(v.id, t.id);
+      if (sim.calmAt(v.x, v.z) || sim.calmAt(t.x, t.z) || sim.clock < (sim.coolOff[pk] ?? 0)) { /* never a scene at a wedding; cooling-off holds */
+        sim.icon(v, '😒'); if (R.chance(.35)) sim.log(`${v.first} shot ${t.first} a look that said "later". Not here.`, 2, [v.id, t.id], 'talk', '😒');
+        return convo(sim, [[v, '...', '😒']], 3);
+      }
       if (a.factId) ((v as any)._confronted ??= new Set()).add(a.factId);
       if (a.snipe) (v as any)._sniped = sim.clock;
       if (a.jealous) { sim.icon(v, '😤'); sim.log(`${v.first} is green with jealousy and let ${t.first} know it.`, 6, [v.id, t.id], 'romance', '😤'); }
+      const prior = sim.arguedAt[pk] ?? -1e9;
       bump(sim, v, t, -6); bump(sim, t, v, -8); v.emotions.anger = Math.min(1, v.emotions.anger + .4); t.emotions.anger = Math.min(1, t.emotions.anger + .5); sim.icon(v, '💢'); sim.icon(t, '💢');
       const grudge = a.why ?? 'old grudges';
       const lines: Line[] = [[v, say(sim, v, 'argueOpener', { t: t.first }), '😠'], [t, say(sim, t, 'argueRetort'), '🙄'], [v, say(sim, v, 'fightTaunt'), '💢'], [t, say(sim, t, 'fightTaunt'), '😡']];
-      const escalate = v.traits.temper + t.traits.temper + v.emotions.anger * .5 + R.range(0, .6) > 1.75 && v.traits.bravery > .35;
+      sim.arguedAt[pk] = sim.clock; sim.argueLull = sim.clock + 150;
+      // a kind bystander with no dog in the race may step in and talk them down before it gets ugly
+      const peace = sim.villagers.filter(w => w !== v && w !== t && !w.inside && w.doing !== 'sleeping' && Math.hypot(w.x - v.x, w.z - v.z) < 9 && (w.traits.kindness > .55 || (w.traits.sociability > .6 && w.traits.kindness > .4)) && op(w, v) > -5 && op(w, t) > -5).sort((x, y) => y.traits.kindness - x.traits.kindness)[0];
+      if (peace && R.chance(.4 + peace.traits.kindness * .35)) {
+        lines.length = 2; lines.push([peace, say(sim, peace, 'mediate'), '🕊️'], [v, say(sim, v, 'mediateStandDown', { m: peace.first }), '😤'], [t, say(sim, t, 'mediateStandDown', { m: peace.first }), '😮‍💨']);
+        v.emotions.anger = Math.max(0, v.emotions.anger - .35); t.emotions.anger = Math.max(0, t.emotions.anger - .35);
+        addGrievance(sim, v, t.id, -12); addGrievance(sim, t, v.id, -12);
+        bump(sim, v, peace, 5); bump(sim, t, peace, 5); peace.stats.makeups++; sim.icon(peace, '🕊️');
+        sim.coolOff[pk] = sim.clock + 240 + R.range(0, 60);
+        sim.log(`Voices rose between ${v.first} and ${t.first} over ${grudge}, but ${peace.first} stepped in and talked them both down.`, 5, [peace.id, v.id, t.id], 'mediate', '🕊️');
+        const f = sim.fact('deed', `${peace.first} kept the peace between ${v.first} and ${t.first}`, peace.id, peace.id, .5, 5); sim.witness(`${peace.first} defused a row between ${v.first} and ${t.first}`, 5, [peace.id, v.id, t.id], { [peace.id]: .6, '*': .2 }, v.x, v.z, f, 12);
+        return convo(sim, lines, 4);
+      }
+      // fists only after the full ladder: a fresh prior argument, a deep repeated grudge, hot tempers, no lull, no shame
+      const shamed = (x: Villager) => sim.clock < ((x as any)._shame ?? 0);
+      const escalate = prior > 0 && sim.clock - prior < 2880 && grievance(sim, v, t.id) > FIGHT_GRIEVANCE && v.traits.temper > .6 && v.traits.temper + t.traits.temper > 1.15 && v.traits.bravery > .35 && !shamed(v) && !shamed(t) && sim.canFight(v, t) && R.chance(.5);
       if (escalate) { a.after = () => { sim.startFight(v, t, `An argument between ${v.first} and ${t.first} over ${grudge} boiled over`); }; }
-      else sim.log(`${v.first} confronted ${t.first} over ${grudge}. Voices were raised.`, 5, [v.id, t.id], 'argue', '💢');
+      else { sim.coolOff[pk] = sim.clock + 300 + R.range(0, 150); sim.log(`${v.first} confronted ${t.first} over ${grudge}. Voices were raised.`, 5, [v.id, t.id], 'argue', '💢'); }
       const f = sim.fact('deed', `${v.first} and ${t.first} had a shouting match`, v.id, t.id, -.3, 4, t.id); sim.witness(`${v.first} argued with ${t.first}`, 4, [v.id, t.id], { [v.id]: -.5, [t.id]: -.6, '*': -.1 }, v.x, v.z, f, 12);
       return convo(sim, lines, 4);
+    }
+    case 'contest': { // friendly rivalry: the needle between two villagers settled with a game, not a row
+      (v as any)._lastContest = sim.clock; (t as any)._lastContest = sim.clock; soc(v, 25); soc(t, 25);
+      const picks: [string, string, (x: Villager) => number][] = [
+        ['who could skip a stone the furthest', '🪨', x => x.traits.bravery + (1 - x.traits.temper) * .3],
+        ['a race to the well and back', '🏃', x => x.traits.diligence + x.needs.energy / 150],
+        ['a pie-off, judged by whoever wandered past', '🥧', x => x.traits.diligence * .6 + x.traits.kindness * .4],
+        ['an arm-wrestle on the nearest barrel', '💪', x => x.traits.bravery + x.def.height * .4],
+      ];
+      const [what, icon, sc] = R.pick(picks); const [w, l] = sc(v) + R.range(0, .5) >= sc(t) + R.range(0, .5) ? [v, t] : [t, v];
+      bump(sim, v, t, 6); bump(sim, t, v, 6); addGrievance(sim, v, t.id, -18); addGrievance(sim, t, v.id, -18);
+      w.emotions.joy = Math.min(1, w.emotions.joy + .5); l.emotions.joy = Math.min(1, l.emotions.joy + .25); sim.icon(w, '🏅');
+      const sore = l.traits.temper > .7 && R.chance(.4); if (sore) bump(sim, l, w, -3);
+      sim.log(`${v.first} challenged ${t.first} to ${what} — ${w.first} won${sore ? `, and ${l.first} demanded a rematch on the spot` : ', and the pair of them were grinning by the end'}.`, 5, [v.id, t.id], 'contest', icon);
+      const f = sim.fact('deed', `${w.first} beat ${l.first} at ${what}`, w.id, w.id, .3, 5, l.id); sim.witness(`${w.first} and ${l.first} settled their needle with ${what}`, 5, [v.id, t.id], { [w.id]: .4, [l.id]: .2, '*': .2 }, v.x, v.z, f, 12);
+      return convo(sim, [[v, say(sim, v, 'contestChallenge', { t: t.first }), icon], [t, say(sim, t, 'contestAccept'), '😄'], [w, say(sim, w, 'contestWin'), '🏅'], [l, say(sim, l, sore ? 'contestSore' : 'contestLose'), sore ? '😤' : '😅']]);
+    }
+    case 'prank': { // harmless mischief: swapped hats and frogs in buckets, never black eyes
+      if (sim.calmAt(t.x, t.z)) return convo(sim, [[v, '...', '😏']], 3); /* no pranks at weddings or meetings */
+      (v as any)._lastPrank = sim.clock; soc(v, 15); soc(t, 10);
+      const pranks: [string, string][] = [
+        [`swapped ${t.first}'s hat for a flowerpot`, '🪴'], [`hid a very smug frog in ${t.first}'s bucket`, '🐸'],
+        [`chalked a grinning sun on ${t.first}'s door`, '🖍️'], [`tied ${t.first}'s laundry line into neat little bows`, '🎀'],
+        [`balanced a row of acorns along ${t.first}'s windowsill`, '🌰'],
+      ];
+      const [did, icon] = R.pick(pranks);
+      const laughs = t.traits.temper < .55 || op(t, v) > 25 || R.chance(.25);
+      if (laughs) { bump(sim, t, v, 4); bump(sim, v, t, 3); t.emotions.joy = Math.min(1, t.emotions.joy + .4); v.emotions.joy = Math.min(1, v.emotions.joy + .4); sim.icon(t, '😂'); }
+      else { bump(sim, t, v, -4); t.emotions.anger = Math.min(1, t.emotions.anger + .2); sim.icon(t, '😒'); }
+      sim.log(`${v.first} ${did}. ${t.first} ${laughs ? `laughed till ${pr(t).sub} had to sit down` : 'was not amused'}.`, 4, [v.id, t.id], 'prank', icon);
+      const f = sim.fact('deed', `${v.first} ${did}`, v.id, v.id, laughs ? .3 : -.2, 4, t.id); sim.witness(`${v.first} pranked ${t.first}`, 4, [v.id, t.id], { [v.id]: laughs ? .3 : -.2, [t.id]: laughs ? .2 : -.3 }, v.x, v.z, f, 10);
+      return convo(sim, [[v, say(sim, v, 'prankSpring', { t: t.first }), icon], [t, say(sim, t, laughs ? 'prankLaugh' : 'prankGrumble'), laughs ? '😂' : '😒']]);
     }
     case 'rumour': {
       const about = sim.byId.get(a.about)!; const lies = [`${about.first} talks to the scarecrow when nobody's looking`, `${about.first} re-gifts every present`, `${about.first} cried at the hen's birthday`, `${about.first} cheated at the harvest-pie contest`, `${about.first} sleeps in ${pr(about).pos} boots`, `${about.first} has been reading the mayor's mail`, `${about.first} blamed the goat for ${pr(about).pos} own mess`, `${about.first} cheats at cards`, `${about.first} badmouths everyone behind their backs`, `${about.first} kicked a chicken`, `${about.first} reads other people's letters`, `${about.first} laughed at ${t.first} behind their back`, `${about.first} faked being sick to skip the barn raising`, `${about.first} snores loud enough to wake the hens`, `${about.first} has a secret sweetheart in the next village`];
