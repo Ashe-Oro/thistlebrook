@@ -23,7 +23,7 @@ export class Director {
   paper(day: number): Paper {
     const s = this.sim, start = (day - 1) * 1440, end = day * 1440;
     const inDay = (t: number) => t >= start && t < end && t <= s.clock;
-    const evs = (s.dayStats[day] ?? []).filter(e => e.kind !== 'headline' && inDay(e.t)).sort((a, b) => b.imp - a.imp);
+    const evs = (s.dayStats[day] ?? []).filter(e => e.kind !== 'headline' && e.kind !== 'life' && inDay(e.t)).sort((a, b) => b.imp - a.imp);
     // the front page never runs a fabricated rumour or a secret crush ("nobody knows… yet") as its headline
     const top = evs.find(e => !unprintable(e.text)); const headline = top ? headlineOf(top, s, day) : 'A Quiet Day in Thistlebrook';
     const at = arcs(s);
