@@ -198,3 +198,7 @@ body.montage .feedwrap, body.montage .lb, body.montage .card, body.montage .dock
 @keyframes cutflash { from { opacity: .55; } to { opacity: 0; } }
 .cine .ct span { white-space: normal; max-height: 2.7em; }
 @media (min-width: 701px) and (pointer: fine) { .hint { left: 12px; transform: none; } }
+
+/* Letterboxed presentation keeps the caption clear of village panels. */
+.topbar, .feedwrap, .lb, .card, .dock, .hint, .caption { transition: opacity .45s; }
+body.cinematic .topbar, body.cinematic .feedwrap, body.cinematic .lb, body.cinematic .card, body.cinematic .dock, body.cinematic .hint, body.cinematic .caption, body:has(.cine.on) .topbar, body:has(.cine.on) .feedwrap, body:has(.cine.on) .lb, body:has(.cine.on) .card, body:has(.cine.on) .dock { opacity: 0 !important; pointer-events: none; }

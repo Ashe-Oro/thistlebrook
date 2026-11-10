@@ -49,6 +49,7 @@ sim.brain = brain;
 
 async function boot() {
   await world.build((n, t) => setProg(n / t * .8, `Building the village… ${n}/${t}`));
+  cacheOccluders();
   const anvil = makeAnvil(); const sm = world.places.get('smithy')!; anvil.position.set(sm.x + 2.0, 0, sm.z + 1.6); scene.add(anvil); world.nav.circle(sm.x + 2.0, sm.z + 1.6, .35);
   { const ponds = ['pond', 'rivpond'].map(id => world.places.get(id) as any).filter(Boolean).map(p => ({ x: p.cx ?? p.x, z: p.cz ?? p.z, r: 1.7 }));
     ambient = new Ambient(scene, ponds, world.fx);
@@ -65,6 +66,7 @@ async function boot() {
   start();
 }
 
+let ffing = false;
 let ambient: Ambient | null = null; let lastSpeed = 1; let speed = 1, mode: 'director' | 'free' = params.get('cam') === 'free' ? 'free' : 'director', selected: string | null = null; let acc = 0; let follow: string | null = null; let dirT = 0;
 const director = new Director(sim);
 const pcam = new THREE.PerspectiveCamera(15, 1, .3, 40); const portraits = new Map<string, HTMLCanvasElement>(); const pTime = new Map<string, number>();
@@ -198,8 +200,8 @@ function directorCare(dt: number) {
   if (!fv && !focusTarget) { const out = sim.villagers.filter(v => !v.inside); if (out.length) follow = out[0].id; }
   if (!fv || yawFix) return;
   careT0.set(fv.x, 1.2, fv.z); if (careT0.distanceTo(controls.target) > 3) return; // still travelling to the subject
-  bT.copy(careT0); const off = camera.position.clone().sub(controls.target); const dist = off.length(), yaw = Math.atan2(off.x, off.z);
-  const fix = clearYaw(yaw, dist, camera.position.y - bT.y * .3); if (fix) { yawFix = Math.atan2(Math.sin(fix), Math.cos(fix)); controls.autoRotate = false; }
+  bT.copy(careT0); const off = camera.position.clone().sub(controls.target); const dist = Math.hypot(off.x, off.z), yaw = Math.atan2(off.x, off.z);
+  const fix = clearYaw(yaw, dist, camera.position.y); camera.position.set(bT.x + Math.sin(yaw) * fix.dist, fix.h, bT.z + Math.cos(yaw) * fix.dist); if (fix.yaw) { yawFix = Math.atan2(Math.sin(fix.yaw), Math.cos(fix.yaw)); controls.autoRotate = false; }
 }
 // phones: with the villager card up as a bottom sheet, shift the picture up so the villager sits in the open space above it
 let vOff = false;
@@ -212,6 +214,7 @@ addEventListener('resize', () => { vOff = !vOff; mobileFrame(); });
 
 // ---- after the rain: a rainbow, a few villagers point it out, and (if the director has the camera) a low shot up at it ----
 function afterRain() {
+  if (ffing) return;
   const out = sim.villagers.filter(v => !v.inside); const lines = ['Look, a rainbow!', 'Would you look at that!', 'A rainbow! Make a wish.', 'Oh, how lovely.'];
   out.slice(0, 3).forEach((v, i) => setTimeout(() => ui?.bubble(v.id, lines[i % lines.length], '🌈', 4), 400 + i * 700));
   const cineShot = mode === 'director' && !selected && !beat && !intro && !montage && ui && !ui.quiet;
@@ -219,18 +222,19 @@ function afterRain() {
   if (cineShot) {
     const cx = controls.target.x, cz = controls.target.z, dx = cx - camera.position.x, dz = cz - camera.position.z;
     const e: any = { id: -1, t: sim.clock, text: 'The rain has cleared, and a rainbow arches over Thistlebrook.', imp: 5, actors: [], x: cx, z: cz, kind: 'rainbow', icon: '🌈', yaw: Math.atan2(-dx, -dz) };
-    if (startBeat(e, true) && beat) { const b = beat as any; b.yawOff = 0; b.dur = 7; }
+    if (startBeat(e, true) && beat) { (beat as Beat).dur = 7; }
   }
 }
 // ---- dawn montage: "Previously in Thistlebrook…" — quick sepia cuts to yesterday's biggest moments, then the paper ----
-let montage: { shots: { x: number; z: number; icon: string; text: string; t: number }[]; i: number; t: number; per: number; yaw: number; then: (() => void) | null } | null = null;
+let montage: { shots: { x: number; z: number; actors: string[]; target?: THREE.Vector3; clear?: Clearance; icon: string; text: string; t: number }[]; i: number; t: number; per: number; yaw: number; then: (() => void) | null } | null = null;
 function pickShots(day: number) {
   const evs = (sim.dayStats[day] ?? []).filter(e => e.imp >= 5 && !['headline', 'weather', 'reflect', 'work'].includes(e.kind) && !/Nobody knows/i.test(e.text) && Number.isFinite(e.x) && Number.isFinite(e.z)).sort((a, b) => b.imp - a.imp);
   const at = arcs(sim), used = new Set<string>(), picked: SimEvent[] = [];
   for (const e of evs) { const a = at.arcForEvent(e.id)?.arc.id ?? `${e.kind}:${e.actors.slice().sort().join()}`; if (used.has(a)) continue; if (picked.some(p => Math.hypot(p.x - e.x, p.z - e.z) < 4 && p.kind === e.kind)) continue; used.add(a); picked.push(e); if (picked.length >= 4) break; }
-  return picked.sort((a, b) => a.t - b.t).map(e => ({ x: e.x, z: e.z, icon: e.icon, t: e.t, text: e.text.includes("(It isn't true.)") ? e.text.replace(/\s*\(It isn't true\.\)/gi, '') + ' (a false rumour)' : e.text }));
+  return picked.sort((a, b) => a.t - b.t).map(e => ({ x: e.x, z: e.z, actors: [...e.actors], icon: e.icon, t: e.t, text: e.text.includes("(It isn't true.)") ? e.text.replace(/\s*\(It isn't true\.\)/gi, '') + ' (a false rumour)' : e.text }));
 }
 function startMontage(day: number, then: (() => void) | null = null): boolean {
+  if (ffing) return false;
   const shots = pickShots(day); if (shots.length < 2) return false;
   if (beat) endBeat();
   montage = { shots, i: -1, t: 0, per: 3.4, yaw: Math.atan2(camera.position.x - controls.target.x, camera.position.z - controls.target.z), then };
@@ -243,16 +247,16 @@ function montageCamera(dt: number) {
   if (idx >= m.shots.length) { endMontage(); return; }
   const sh = m.shots[idx], u = (m.t % m.per) / m.per;
   if (idx !== m.i) { m.i = idx; m.yaw += 1.9; (cine.querySelector('em') as HTMLElement).textContent = sh.icon; (cine.querySelector('span') as HTMLElement).textContent = `Yesterday, ${fmtTime(sh.t)}: ${sh.text}`; cine.classList.remove('cut'); void cine.offsetWidth; cine.classList.add('cut'); sound.play('pop', .25); }
-  if ((m as any).fixFor !== idx) { (m as any).fixFor = idx; bT.set(sh.x, 1, sh.z); (m as any).off = clearYaw(m.yaw, 11, 13); }
-  const yaw = m.yaw + (m as any).off + u * .35, dist = 11.5 - u * 2.5, h = 13.5 - u * 2.5;
-  controls.target.set(sh.x, 1, sh.z); camera.position.set(sh.x + Math.sin(yaw) * dist, h, sh.z + Math.cos(yaw) * dist); camera.lookAt(controls.target);
+  if (!sh.target) { sh.target = shotTarget(sh.x, sh.z, sh.actors); bT.copy(sh.target); sh.clear = clearYaw(m.yaw, 8, 4.2); }
+  const c = sh.clear!, yaw = m.yaw + c.yaw, dist = c.dist;
+  controls.target.copy(sh.target); camera.position.set(sh.target.x + Math.sin(yaw) * dist, c.h, sh.target.z + Math.cos(yaw) * dist); camera.lookAt(controls.target);
 }
 
 // ---- cinematic beats ---------------------------------------------------------------------------------
 // When something big happens while the director has the camera, cut to a framed, letterboxed shot of it:
 // a low two-shot across the action line (or a three-quarter on one subject), a slow push-in, a title card,
 // a touch of slow motion for brawls and a punch of camera shake on every hit. Then hand back to the director.
-interface Beat { e: SimEvent; title: string; icon: string; t: number; dur: number; ids: string[]; slow: number; side: number; fixed?: [number, number, number, number]; from: { p: THREE.Vector3; t: THREE.Vector3 } }
+interface Beat { e: SimEvent; title: string; icon: string; t: number; dur: number; ids: string[]; slow: number; side: number; clear?: Clearance; fixed?: [number, number, number, number]; from: { p: THREE.Vector3; t: THREE.Vector3 } }
 let beat: Beat | null = null, beatCool = 0, shake = 0, beatLast = 0;
 const cine = document.createElement('div'); cine.className = 'cine'; cine.innerHTML = '<i class="bar t"></i><i class="bar b"></i><div class="ct"><em></em><b></b><span></span></div>'; document.body.appendChild(cine);
 function beatTitle(e: SimEvent): string | null {
@@ -272,9 +276,10 @@ function beatTitle(e: SimEvent): string | null {
   return null;
 }
 function startBeat(e: SimEvent, force = false) {
+  if (ffing) return false;
   const title = beatTitle(e); if (!title && !force) return false;
   const nowR = performance.now(); if (!force && (beat || montage || nowR < beatCool)) return false;
-  const ids = e.actors.filter(id => { const v = sim.byId.get(id); return v && !v.inside; }).slice(0, 2);
+  const ids = e.actors.filter(id => { const v = sim.byId.get(id); return v && !v.inside && Math.hypot(v.x - e.x, v.z - e.z) < 10; }).slice(0, 2);
   const fixed: Beat['fixed'] = e.kind === 'rainbow' ? [e.x, e.z, 9, (e as any).yaw] : e.kind === 'traveller' ? [NELL[0], NELL[1] + 1.2, 1.1, .45] : e.kind === 'festival' || (e.kind === 'party' && !ids.length) ? [e.x, e.z, 1.2, -.6] : undefined;
   if (!ids.length && !fixed) return false;
   const off = camera.position.clone().sub(controls.target);
@@ -287,28 +292,46 @@ function startBeat(e: SimEvent, force = false) {
 }
 function endBeat() { if (!beat) return; const b = beat; beat = null; cine.classList.remove('on'); beatCool = performance.now() + 6000; if (mode === 'director') { follow = b.ids[0] ?? null; if (b.fixed) focusPoint(b.fixed[0], b.fixed[1], 16); director.focus = { id: b.ids[0] ?? null, until: sim.clock + 30, reason: b.e.text }; } }
 const bT = new THREE.Vector3(), bP = new THREE.Vector3(), rc = new THREE.Raycaster(), rDir = new THREE.Vector3();
-// pick a yaw offset whose camera spot has a clear line of sight to the subject (no walls, trees or stalls in the way)
-function clearYaw(yaw: number, dist: number, h: number): number {
-  for (const off of [0, .45, -.45, .9, -.9, Math.PI, Math.PI + .5, Math.PI - .5, 1.4, -1.4]) {
-    bP.set(bT.x + Math.sin(yaw + off) * dist, h + bT.y * .3, bT.z + Math.cos(yaw + off) * dist); rDir.copy(bP).sub(bT); const L = rDir.length(); rDir.divideScalar(L);
-    rc.set(bT, rDir); rc.far = L + .3; rc.camera = camera; let hits: THREE.Intersection[] = []; try { hits = rc.intersectObjects(scene.children, true); } catch { return 0; } const hit = hits.some(i => (i.object as any).isMesh && !(i.object as any).isSkinnedMesh && i.object.visible && i.distance > .9 && !(i.object.parent && (i.object.parent as any).isBone));
-    if (!hit) return off;
+interface Clearance { yaw: number; dist: number; h: number }
+const occluders: THREE.Object3D[] = [], rayHits: THREE.Intersection[] = [], rayOrigin = new THREE.Vector3();
+// Capture solid world scenery after build, before avatars, ambient animals and effects are added.
+function cacheOccluders() {
+  occluders.length = 0; scene.updateMatrixWorld(true);
+  const excluded = new Set<THREE.Object3D>([...world.animals.map(a => a.obj), ...world.ducks.map(a => a.obj), ...(world.dog ? [world.dog.obj] : [])]);
+  scene.traverse(o => { for (let p: THREE.Object3D | null = o; p; p = p.parent) if (excluded.has(p)) return; const m = o as THREE.Mesh; if (!m.isMesh || (m as any).isSkinnedMesh || !m.castShadow || /ground|water|sky|border-plants/i.test(m.name)) return; const mats = Array.isArray(m.material) ? m.material : [m.material]; if (mats.every(v => v.transparent && v.opacity < .8)) return; occluders.push(m); });
+}
+function visibleObject(o: THREE.Object3D) { for (let p: THREE.Object3D | null = o; p; p = p.parent) if (!p.visible) return false; return true; }
+function shotTarget(x: number, z: number, ids: string[]) {
+  const vs = ids.map(id => sim.byId.get(id)).filter((v): v is Villager => !!v && !v.inside && Math.hypot(v.x - x, v.z - z) < 10);
+  if (vs.length) { x = vs.reduce((n, v) => n + v.x, 0) / vs.length; z = vs.reduce((n, v) => n + v.z, 0) / vs.length; }
+  if (!world.nav.isFree(x, z)) { const p = [...world.places.values()].filter(p => p.enterable).sort((a, b) => Math.hypot(a.cx - x, a.cz - z) - Math.hypot(b.cx - x, b.cz - z))[0]; [x, z] = p && Math.hypot(p.cx - x, p.cz - z) < 7 ? world.nav.nearestFree(p.x, p.z) : world.nav.nearestFree(x, z); }
+  return new THREE.Vector3(x, 1.1, z);
+}
+// h is absolute camera height; dist is horizontal distance. Test that exact camera position.
+function clearYaw(yaw: number, dist: number, h: number): Clearance {
+  rayOrigin.copy(bT); rayOrigin.y = Math.max(1.9, bT.y + .8);
+  scene.updateMatrixWorld(true);
+  for (const off of [0, .45, -.45, .9, -.9, Math.PI, 1.4, -1.4]) for (const [d, y] of [[dist, h], [dist * .8, h], [dist * .8, h + 1.2]]) {
+    bP.set(bT.x + Math.sin(yaw + off) * d, y, bT.z + Math.cos(yaw + off) * d); rDir.copy(bP).sub(rayOrigin); const L = rDir.length(); rDir.divideScalar(L);
+    rc.set(rayOrigin, rDir); rc.near = .5; rc.far = L; rayHits.length = 0; rc.intersectObjects(occluders.filter(visibleObject), false, rayHits);
+    if (!rayHits.some(i => i.distance >= .5 && i.distance <= L)) return { yaw: off, dist: d, h: y };
   }
-  return 0;
+  return { yaw: 0, dist: dist * .65, h: h + 2.5 };
 }
 function beatCamera(dt: number) {
   if (!beat) return; const b = beat; b.t += dt; if (b.t >= b.dur || mode !== 'director' || selected) { endBeat(); return; }
-  const vs = b.ids.map(id => sim.byId.get(id)!).filter(v => v && !v.inside);
+  const vs = b.ids.map(id => sim.byId.get(id)!).filter(v => v && !v.inside && Math.hypot(v.x - b.e.x, v.z - b.e.z) < 10);
   let yaw: number, dist: number, h: number;
   if (b.fixed) { bT.set(b.fixed[0], b.fixed[2], b.fixed[1]); yaw = b.fixed[3] + Math.sin(b.t * .25) * .15; dist = 10 - b.t * .45; h = b.e.kind === 'rainbow' ? 7.6 : 3.2; if (b.e.kind === 'rainbow') { yaw = b.fixed[3] + b.t * .015; dist = 16 + b.t * .5; } }
-  else if (vs.length >= 2) { const [a, c] = vs; bT.set((a.x + c.x) / 2, 1.15, (a.z + c.z) / 2); const line = Math.atan2(c.x - a.x, c.z - a.z); let p = line + Math.PI / 2; if (Math.cos(p - b.side) < 0) p += Math.PI; yaw = p + .25 + b.t * .03; dist = Math.max(4.8, Math.hypot(c.x - a.x, c.z - a.z) * 1.5 + 5.4) - b.t * .22; h = 1.9; }
-  else if (vs.length) { const a = vs[0]; bT.set(a.x, 1.2, a.z); yaw = a.avatar.heading + .55 + b.t * .04; dist = 5.2 - b.t * .2; h = 1.75; }
-  else { endBeat(); return; }
-  if ((b as any).yawOff === undefined) (b as any).yawOff = clearYaw(yaw, dist, h); yaw += (b as any).yawOff;
-  bP.set(bT.x + Math.sin(yaw) * dist, h + bT.y * .3, bT.z + Math.cos(yaw) * dist);
+  else if (vs.length >= 2) { const [a, c] = vs; bT.set((a.x + c.x) / 2, 1.15, (a.z + c.z) / 2); const line = Math.atan2(c.x - a.x, c.z - a.z); let p = line + Math.PI / 2; if (Math.cos(p - b.side) < 0) p += Math.PI; yaw = p + .25 + b.t * .03; dist = Math.min(9, Math.max(7, Math.hypot(c.x - a.x, c.z - a.z) * 1.5 + 5.4)); h = 3.8; }
+  else if (vs.length) { const a = vs[0]; bT.set(a.x, 1.2, a.z); yaw = a.avatar.heading + .55 + b.t * .04; dist = 7.5; h = 3.8; }
+  else { bT.copy(shotTarget(b.e.x, b.e.z, [])); yaw = b.side; dist = 8; h = 4.2; }
+  if (!b.fixed) bT.copy(shotTarget(b.e.x, b.e.z, b.ids));
+  if (!b.clear) { b.side = yaw; b.clear = clearYaw(yaw, dist, h); } yaw = b.side + b.clear.yaw; dist = b.clear.dist; h = b.clear.h;
+  bP.set(bT.x + Math.sin(yaw) * dist, h, bT.z + Math.cos(yaw) * dist);
   const k = Math.min(1, b.t / .9), e = k * k * (3 - 2 * k); // ease in from where the camera was
   controls.target.lerpVectors(b.from.t, bT, e); camera.position.lerpVectors(b.from.p, bP, e);
-  if (shake > 0) { camera.position.x += (Math.random() - .5) * shake * .18; camera.position.y += (Math.random() - .5) * shake * .12; shake = Math.max(0, shake - dt * 3.5); }
+  if (shake > 0) { camera.position.x += Math.sin(b.t * 91) * shake * .09; camera.position.y += Math.sin(b.t * 127) * shake * .06; shake = Math.max(0, shake - dt * 3.5); }
   camera.lookAt(controls.target);
 }
 
@@ -338,7 +361,7 @@ function start() {
   setInterval(autosave, 20000); addEventListener('pagehide', autosave); document.addEventListener('visibilitychange', () => { if (document.hidden) autosave(); });
   sim.on('dawn', () => setTimeout(autosave, 50));
   sim.on('sound', (k: string, x: number, z: number) => sound.play(k, Math.max(0, 1 - Math.hypot(x - controls.target.x, z - controls.target.z) / 40)));
-  sim.on('dawn', (day: number) => { const p = director.papers[director.papers.length - 1]; if (p && ui.autoPaper && !params.has('nopaper')) { const show = () => { ui.showPaper(p); setTimeout(() => { if (ui.modal.querySelector('.paper')) ui.closeModal(); }, 20000); }; if (!(mode === 'director' && !selected && !intro && !params.has('nomontage') && speed > 0 && speed <= 4 && startMontage(day, show))) show(); } });
+  sim.on('dawn', (day: number) => { if (ffing) return; const p = director.papers[director.papers.length - 1]; if (p && ui.autoPaper && !params.has('nopaper')) { const show = () => { ui.showPaper(p); setTimeout(() => { if (ui.modal.querySelector('.paper')) ui.closeModal(); }, 20000); }; if (!(mode === 'director' && !selected && !intro && !params.has('nomontage') && speed > 0 && speed <= 4 && startMontage(day, show))) show(); } });
   sim.on('event', (e: SimEvent) => { if (mode === 'director' && !selected && !intro && !ui.quiet && !params.has('nobeats')) startBeat(e); });
   sim.on('hit', () => { if (beat) shake = 1; sound.play('scuffle', .5); });
   sky.onThunder = d => setTimeout(() => sound.play('thunder', .9), d * 1000);
@@ -378,6 +401,7 @@ function frame(now: number) {
   sky.setShadowSpan(camera.position.distanceTo(controls.target)); sky.update(sim.hour, sim.rain, controls.target, dt * Math.max(speed, .0001)); renderer.toneMappingExposure = 1.05 + sky.golden * .1 + sky.flash * .45; world.fx.setRain(sim.rain > .12); world.fx.update(dt, controls.target);
   ambient?.update(dt, dt * speed * slow * MIN_PER_SEC, sim.hour, sim.rain, sky.night, controls.target, camera.position);
   sound.ambient(sky.night, sim.rain, dt);
+  document.body.classList.toggle('cinematic', cine.classList.contains('on') || !!intro || !!montage);
   ui.frame(dt);
   pBudget = 2; for (const id of [...pQueue].sort((a, b) => (b === selected ? 1 : 0) - (a === selected ? 1 : 0)).slice(0, 2)) portrait(id); pBudget = 2;
   perf.beforeRender();
@@ -388,7 +412,8 @@ function frame(now: number) {
 (window as any).terrarium = {
   sim, director, world, camera, controls, renderer, scene, get fps() { return perf.fps; }, get pixelRatio() { return perf.pr; }, quality: { soft: SOFT, aa: AA }, get simMs() { return simMsAvg; }, get cpuMs() { return cpuMsAvg; },
   setSpeed: (s: number) => (speed = s), select: (id: string | null) => api.select(id), setMode: (m: any) => api.setMode(m), god: (k: string) => api.god(k), ui: () => ui,
-  fastForward(minutes: number, coarse = false) { ui.quiet = true; if (coarse) stepSimCoarse(minutes / MIN_PER_SEC); else { const n = Math.max(1, Math.ceil(minutes / MIN_PER_SEC / SIM_H - 1e-6)); for (let i = 0; i < n; i++) { sim.step(SIM_H); tickTraveller(sim); tickFestival(sim); } } ui.quiet = false; for (const v of sim.villagers) syncAvatar(v, .016); },
+  fastForward(minutes: number, coarse = false) { if (!Number.isFinite(minutes) || minutes <= 0) return; const quiet = ui.quiet, wasFfing = ffing; ffing = true; ui.quiet = true; try { if (coarse) stepSimCoarse(minutes / MIN_PER_SEC); else { const n = Math.max(1, Math.ceil(minutes / MIN_PER_SEC / SIM_H - 1e-6)); for (let i = 0; i < n; i++) { sim.step(SIM_H); tickTraveller(sim); tickFestival(sim); } } } finally { ffing = wasFfing; ui.quiet = quiet; } for (const v of sim.villagers) syncAvatar(v, .016); },
+  cineState() { camera.updateMatrixWorld(); const f = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)); return { beat: !!beat, montage: !!montage, target: { x: controls.target.x, y: controls.target.y, z: controls.target.z }, visible: sim.villagers.filter(v => !v.inside && visibleObject(v.avatar.root) && f.containsPoint(new THREE.Vector3(v.x, 1.1, v.z))).map(v => v.id) }; },
   look(x: number, z: number, dist = 30, yaw = .6, pitch = .9) { endIntro(); follow = null; focusTarget = null; mode = 'free'; controls.target.set(x, 0, z); camera.position.set(x + Math.sin(yaw) * Math.cos(pitch) * dist, Math.sin(pitch) * dist, z + Math.cos(yaw) * Math.cos(pitch) * dist); controls.update(); },
   closeUp(id: string, dist = 3.2, side = .3) { const v = sim.byId.get(id)!; follow = null; focusTarget = null; mode = 'free'; const hd = v.avatar.heading; const hy = v.avatar.height * .8; controls.target.set(v.x, hy, v.z); camera.position.set(v.x + Math.sin(hd + side) * dist, hy + .5, v.z + Math.cos(hd + side) * dist); controls.update(); },
   beat(id?: number) { const e = id === undefined ? [...sim.events].reverse().find(x => beatTitle(x)) : sim.events.find(x => x.id === id); mode = 'director'; selected = null; return e ? startBeat(e, true) : false; }, get beatOn() { return !!beat; }, montage: (day?: number) => startMontage(day ?? Math.max(1, sim.day - 1)), get montageOn() { return !!montage; }, endMontage: () => endMontage(), rainbow: () => { ambient?.force(controls.target, camera.position); afterRain(); }, ambient: () => ambient, strike: () => sky.strike(),
