@@ -1,12 +1,33 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { TOWN, scaleOf, type PlaceDef, type PlaceKind } from '../data/town';
+import { calendarFor, SEASON_LOOKS, type Season } from '../sim/calendar';
 import { loadAsset, preload } from './loader';
 import { paintGround } from './groundpaint';
 import { NavGrid } from './nav';
 import { FX } from './fx';
 import { RNG, clamp } from '../core/util';
 
+// Render-side seasonal palette, eased so a season change blends over a second or two instead of snapping.
+// Pure cosmetics driven by calendarFor(day): shared-material tints in World and the sky/fog wash in Sky read it.
+export class SeasonState {
+  name: Season = 'Spring'; index = 0;
+  grass = new THREE.Color('#ffffff'); foliage = new THREE.Color('#86c753'); foliageMix = .15;
+  sky = new THREE.Color('#dff0ff'); skyMix = .05; warmth = .12; snow = 0;
+  private tGrass = new THREE.Color(); private tFol = new THREE.Color(); private tSky = new THREE.Color(); private inited = false;
+  // No per-frame allocation: all colours are reused and lerped toward the day's target in place.
+  set(day: number, dt: number) {
+    const cal = calendarFor(day), look = SEASON_LOOKS[cal.season]; this.name = cal.season; this.index = cal.seasonIndex;
+    this.tGrass.set(look.grass); this.tFol.set(look.foliage); this.tSky.set(look.sky);
+    if (!this.inited) { this.inited = true; this.grass.copy(this.tGrass); this.foliage.copy(this.tFol); this.sky.copy(this.tSky); this.foliageMix = look.foliageMix; this.skyMix = look.skyMix; this.warmth = look.warmth; this.snow = look.snow; return; }
+    const k = Math.min(1, Math.max(0, dt) * .6); // ease toward the new season (~2 s at 1x; faster when time is sped up)
+    this.grass.lerp(this.tGrass, k); this.foliage.lerp(this.tFol, k); this.sky.lerp(this.tSky, k);
+    this.foliageMix += (look.foliageMix - this.foliageMix) * k;
+    this.skyMix += (look.skyMix - this.skyMix) * k;
+    this.warmth += (look.warmth - this.warmth) * k;
+    this.snow += (look.snow - this.snow) * k;
+  }
+}
 export interface Place { id: string; kind: PlaceKind; name: string; x: number; z: number; cx: number; cz: number; obj?: THREE.Object3D; enterable: boolean; chimney?: THREE.Vector3; district: string; inside: Set<string>; smokeUntil: number; }
 export interface Seat { x: number; z: number; y: number; rot: number; place: string; taken: string | null; }
 
@@ -38,6 +59,10 @@ export class World {
   dog?: { obj: THREE.Object3D; legs: THREE.Object3D; tail: THREE.Object3D; x: number; z: number; tx: number; tz: number; t: number; ph: number; wag: number; trot: boolean };
   private duckMesh?: THREE.InstancedMesh; private duckTime = 0;
   ducks: { obj: THREE.Object3D; x: number; z: number; tx: number; tz: number; t: number; cx: number; cz: number; r: number }[] = [];
+  // Seasonal looks (render-only). `season` is read by the sky wash and the UI top bar; grass/leaf materials are cached once.
+  season = new SeasonState();
+  private groundMat?: THREE.MeshLambertMaterial;
+  private leafMats?: { mat: THREE.Material & { color: THREE.Color }; orig: THREE.Color }[];
   constructor(scene: THREE.Scene) { this.scene = scene; this.nav = new NavGrid(TOWN.bounds, 0.5); this.fx = new FX(scene); }
 
   async build(onProgress?: (n: number, t: number) => void) {
@@ -139,6 +164,7 @@ export class World {
     }
     g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.computeVertexNormals();
     const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true })); m.receiveShadow = true; m.name = 'ground'; this.scene.add(m); this.scenery.push(m);
+    this.groundMat = m.material as THREE.MeshLambertMaterial; // tinted per season (multiplies the grass vertex colours)
   }
 
   async placeLot(district: string, l: { a: string; x: number; z: number; rot?: number; s?: number; place?: PlaceDef; solid?: boolean; tag?: string }) {
@@ -296,8 +322,33 @@ export class World {
   }
   seatsFor(place: string) { return this.seats.filter(s => s.place === place); }
 
-  update(dt: number, gdt: number, clock: number, night: number) {
+  // Ease the season, then recolour the shared grass + leaf materials (no per-frame allocation) and,
+  // in winter, drift a little snow when it would otherwise rain. Render-only: never touches sim state.
+  private applySeason(dt: number, day: number, rain: number) {
+    this.season.set(day, dt);
+    if (this.groundMat) this.groundMat.color.copy(this.season.grass);
+    if (!this.leafMats) this.collectLeafMats();
+    for (const l of this.leafMats!) l.mat.color.copy(l.orig).lerp(this.season.foliage, this.season.foliageMix);
+    if (this.season.snow > .4 && rain > .12) for (let i = 0; i < 3; i++) if (this.cosmeticRng.next() < dt * 22 * this.season.snow) this.snowflake();
+  }
+  // A leaf material is the one whose colour is clearly green (trunks/bark read brown or grey). Shared
+  // materials are de-duplicated so one tint repaints every tree that uses it.
+  private collectLeafMats() {
+    this.leafMats = []; const seen = new Set<THREE.Material>();
+    for (const tr of this.trees) tr.obj.traverse((o: any) => {
+      if (!o.isMesh) return; for (const m of (Array.isArray(o.material) ? o.material : [o.material]) as THREE.Material[]) {
+        const c = (m as any).color as THREE.Color | undefined; if (!c || seen.has(m)) continue;
+        if (c.g > c.r * 1.05 && c.g > c.b * 1.05) { seen.add(m); this.leafMats!.push({ mat: m as any, orig: c.clone() }); }
+      }
+    });
+  }
+  private snowflake() {
+    const b = TOWN.bounds, x = this.cosmeticRng.range(b.minX, b.maxX), z = this.cosmeticRng.range(b.minZ, b.maxZ);
+    this.fx.normal.emit({ x, y: 7 + this.cosmeticRng.next() * 3, z, vx: this.cosmeticRng.range(-.2, .4), vy: -.6 - this.cosmeticRng.next() * .3, vz: this.cosmeticRng.range(-.3, .3), max: 8, size: .14, r: 1, g: 1, b: 1, a: .9, wobble: .55, fade: 1 });
+  }
+  update(dt: number, gdt: number, clock: number, night: number, day = 1, rain = 0) {
     this.night = night; const t = clock;
+    this.applySeason(dt, day, rain);
     if (this.sail) this.sail.rotation.z -= dt * .45;
     for (const s of this.lamps) { s.visible = night > .01; if (s.visible) (s.material as THREE.SpriteMaterial).opacity = night * (0.85 + Math.sin(t * .37 + s.position.x) * .08); }
     this.lights[0].intensity = night * 10; this.lights[1].intensity = night * 8;
