@@ -6,6 +6,7 @@ import { fmtTime, dayOf } from '../core/util';
 import { drawWeb } from './web';
 import { arcs } from '../sim/arcs';
 import type { Arc } from '../sim/arcs';
+import { calendarFor } from '../sim/calendar';
 
 export const VCOLOR: Record<string, string> = { mara: '#e8875b', tom: '#6c8fd1', jen: '#c96bd6', ollie: '#d8b23b', pip: '#6dbb5a', rosa: '#d4574a', wren: '#5fc0c4', edgar: '#a98a62', bram: '#b5763a', sol: '#4f7fa0', posy: '#e58fb1', agnes: '#8c7bc0' };
 const setHTML = (el: Element, html: string) => { if ((el as any)._html !== html) { (el as any)._html = html; el.innerHTML = html; } };
@@ -22,6 +23,7 @@ export class UI {
   tags = new Map<string, HTMLElement>(); bubbles = new Map<string, { el: HTMLElement; until: number; t0: number }>(); icons: { el: HTMLElement; id: string; t: number }[] = []; convo: { who: string; text: string; emoji: string; at: number }[] = [];
   tab = 'rel'; cardT = 0; lbKind: 'popularity' | 'power' | 'mischief' = 'popularity'; feedFilter = 'all'; autoPaper = true;
   feedDay = 0; safeTop = 70; hint: HTMLElement | null = null;
+  calPop!: HTMLElement; calOpen = false;
   constructor(public app: AppApi, parent: HTMLElement) {
     this.root = h('div', 'ui'); parent.appendChild(this.root); this.build();
     const s = app.sim;
@@ -38,6 +40,11 @@ export class UI {
       <div class="speeds">${[[0, '⏸'], [1, '1×'], [4, '4×'], [16, '16×']].map(([s, l]) => `<button data-speed="${s}">${l}</button>`).join('')}</div>
       <div class="toggles"><button id="mode" title="Camera: cinematic director / free">🎬 Director</button><button id="snd" title="Sound">🔇</button></div>`;
     r.appendChild(top); this.clock = top.querySelector('#clock')!;
+    // The date/clock is a button: click it for a small popover of this week's fixtures and the season.
+    this.clock.style.cursor = 'pointer'; this.clock.title = 'This week in Thistlebrook';
+    this.calPop = h('div', 'calpop hidden'); this.calPop.style.display = 'none'; r.appendChild(this.calPop);
+    this.clock.addEventListener('click', () => this.toggleCal());
+    document.addEventListener('click', (e) => { const t = e.target as Node; if (this.calOpen && !this.calPop.contains(t) && !this.clock.contains(t)) this.toggleCal(); });
     (top.querySelector('.toggles') as HTMLElement).insertAdjacentHTML('beforeend', '<button id="newv" title="Start a brand-new village (the current one is forgotten)">🌱</button>');
     (top.querySelector('#newv') as HTMLButtonElement).onclick = () => { if (confirm('Start a new village? The current story (it is saved automatically) will be forgotten.')) this.app.newVillage(); };
     top.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach(b => b.onclick = () => this.app.setSpeed(+b.dataset.speed!));
@@ -212,7 +219,7 @@ export class UI {
     }
     for (const ic of this.icons) { ic.t += dt; const v = s.byId.get(ic.id)!; const pos = v.avatar.root.position; const bub = this.bubbles.get(ic.id), talking = !!bub && bub.until > performance.now(); const p = this.app.project(pos.x, v.avatar.height + (talking ? 1.9 : .9) + ic.t * .9, pos.z); const ix = Math.max(16, Math.min(W - 16, p.x)), iy = Math.max(HT, p.y); ic.el.style.transform = `translate(${ix}px, ${iy}px) translate(-50%, -50%) scale(${Math.min(1, ic.t * 5)})`; ic.el.style.opacity = String(Math.max(0, 1 - ic.t / 2.2)); this.setDisp(ic.el, p.on && !v.inside); }
     this.icons = this.icons.filter(ic => { if (ic.t > 2.2) { ic.el.remove(); return false; } return true; });
-    this.cardT -= dt; if (this.cardT <= 0) { this.cardT = .35; setHTML(this.clock, `<b>Day ${s.day}</b> · ${fmtTime(s.clock)} ${s.rain > .4 ? '🌧️' : s.hour >= 20 || s.hour < 6 ? '🌙' : s.hour < 8 ? '🌅' : '☀️'}${s.festivalUntil > s.clock ? ' 🎪' : ''}${s.visitorUntil > s.clock ? ' 🧳' : ''}`);
+    this.cardT -= dt; if (this.cardT <= 0) { this.cardT = .35; const cal = calendarFor(s.day); setHTML(this.clock, `<b>${cal.weekday} · ${cal.dayOfSeason} ${cal.season} · Day ${s.day}</b> · ${fmtTime(s.clock)} ${s.rain > .4 ? '🌧️' : s.hour >= 20 || s.hour < 6 ? '🌙' : s.hour < 8 ? '🌅' : '☀️'}${s.festivalUntil > s.clock ? ' 🎪' : ''}${s.visitorUntil > s.clock ? ' 🧳' : ''}`); if (this.calOpen) this.renderCal();
       this.measureChrome();
       this.root.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach(b => b.classList.toggle('on', +b.dataset.speed! === this.app.speed)); { const m = this.root.querySelector('#mode') as HTMLElement, html = this.app.mode === 'director' ? '🎬<span> Director</span>' : '🕹️<span> Free cam</span>'; if (m.innerHTML !== html) m.innerHTML = html; }
       this.renderCard(); this.renderLB();
@@ -223,6 +230,25 @@ export class UI {
     const tb = this.root.querySelector<HTMLElement>('.topbar'), dk = this.root.querySelector<HTMLElement>('.dock');
     if (tb) { const r = tb.getBoundingClientRect(); this.safeTop = r.bottom + 8; const th = `${Math.round(r.height)}px`; if (this.root.style.getPropertyValue('--top-h') !== th) this.root.style.setProperty('--top-h', th); }
     if (dk) { const dh = `${Math.round(dk.offsetHeight)}px`; if (this.root.style.getPropertyValue('--dock-h') !== dh) this.root.style.setProperty('--dock-h', dh); }
+  }
+  // the little calendar popover under the date/clock: this week's fixtures (from calendar tags) and the season
+  toggleCal() {
+    this.calOpen = !this.calOpen;
+    if (!this.calOpen) { this.calPop.classList.add('hidden'); this.calPop.style.display = 'none'; return; }
+    const r = this.clock.getBoundingClientRect();
+    this.calPop.classList.remove('hidden');
+    this.calPop.style.cssText = `position:fixed;z-index:50;top:${Math.round(this.safeTop)}px;left:${Math.round(Math.max(8, Math.min(r.left, innerWidth - 272)))}px;min-width:214px;max-width:min(92vw,272px);background:rgba(28,26,20,.94);color:#f3ead6;border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:10px 12px;box-shadow:0 10px 30px rgba(0,0,0,.45);font-size:13px;line-height:1.4;backdrop-filter:blur(6px);`;
+    this.renderCal();
+  }
+  renderCal() {
+    const s = this.app.sim, cal = calendarFor(s.day), start = s.day - cal.weekdayIndex;
+    const TAG: Record<string, [string, string]> = { market: ['🧺', 'Market day'], 'town-meeting': ['🏛️', 'Town meeting'], 'festival-eve': ['🎪', 'Festival eve'], rest: ['😌', 'Rest day'] };
+    let rows = '';
+    for (let i = 0; i < 7; i++) {
+      const d = start + i; if (d < 1) continue; const c = calendarFor(d), today = d === s.day, tg = c.tags[0] ? TAG[c.tags[0]] : null;
+      rows += `<div style="display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:7px;${today ? 'background:rgba(255,255,255,.14);font-weight:600;' : ''}"><span style="width:76px;opacity:${today ? '1' : '.82'}">${c.weekday}</span><span style="width:20px;text-align:right;opacity:.55">${c.dayOfSeason}</span><em style="flex:1;font-style:normal">${tg ? `${tg[0]} ${tg[1]}` : '<span style="opacity:.35">—</span>'}</em></div>`;
+    }
+    setHTML(this.calPop, `<div style="font-weight:700;margin-bottom:6px;letter-spacing:.3px">🗓️ ${cal.season} · Week ${cal.week}</div>${rows}`);
   }
   renderLB() {
     const s = this.app.sim, rows = this.app.director.ranked(this.lbKind), max = Math.max(1, ...rows.map(r => Math.abs(r.score)));

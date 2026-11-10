@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { clamp, lerp } from '../core/util';
+import type { SeasonState } from './world';
 // Day/night cycle + weather: sun arc, hemisphere tint, gradient sky dome, stars, fog.
 const KEYS: [number, string, string, string, number, number][] = [
   // hour, skyTop, skyBottom, sunColor, sunIntensity, hemi
@@ -40,10 +41,12 @@ export class Sky {
   }
   // a strike: one bright flash and a fainter re-flicker; thunder follows
   strike() { this.flashQ.push(0, .09 + this.rnd() * .08); this.onThunder?.(.35 + this.rnd() * 1.4); }
-  update(hour: number, rain: number, focus: THREE.Vector3, dt = 0) {
+  update(hour: number, rain: number, focus: THREE.Vector3, dt = 0, season?: SeasonState) {
     hour = ((hour % 24) + 24) % 24; rain = clamp(rain); this.rain = rain;
     const bump = (c: number, w: number) => clamp(1 - Math.abs(hour - c) / w);
     this.golden = Math.max(bump(7.1, 1.1), bump(18.1, 1.3)) * (1 - rain); this.mist = clamp(bump(6.6, 2.2) * 1.4) * (1 - rain * .5);
+    // Seasonal dawn/dusk grade: summer's warmth lengthens the golden hour (purely visual — hour/night arcs untouched).
+    if (season) this.golden = clamp(this.golden * (1 + season.warmth * .8));
     if (rain > .75 && dt > 0 && this.rnd() < dt * .09) this.strike();
     this.flashQ = this.flashQ.map(t => t - dt); if (this.flashQ.some(t => t <= 0)) { this.flash = 1; this.flashQ = this.flashQ.filter(t => t > 0); } else this.flash = Math.max(0, this.flash - dt * 5.5);
     let i = 0; while (i < KEYS.length - 2 && KEYS[i + 1][0] <= hour) i++;
@@ -63,6 +66,8 @@ export class Sky {
     this.stars.visible = this.night > .01 && rain < .99;
     (this.stars.material as THREE.PointsMaterial).opacity = this.night * (1 - rain) * .8;
     if (this.flash > 0) { this.top.lerp(this.flashCol, this.flash * .55); this.bot.lerp(this.flashCol, this.flash * .45); }
+    // Seasonal wash: a faint cool/warm tint over the lower sky (and so the fog, which copies it below).
+    if (season) { this.top.lerp(season.sky, season.skyMix * .5); this.bot.lerp(season.sky, season.skyMix); }
     { const f = this.scene.fog as THREE.Fog; f.color.copy(this.bot).lerp(this.mistCol, this.mist * .5); f.near = lerp(lerp(90, 35, rain), 18, this.mist * .7); f.far = lerp(lerp(230, 150, rain), 110, this.mist * .6); } this.dome.position.copy(focus); this.stars.position.copy(focus);
   }
 }
