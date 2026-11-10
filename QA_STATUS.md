@@ -108,3 +108,38 @@ Tested build: 54eb4c4. These fixes landed on master in round 3.
   - Thefts are still frequent (about 45–55 in 8 days); catches are now mostly telling-offs.
   - The Found! framing crops the dog.
   - The SwiftShader numbers are noisy when other jobs share the CPU.
+
+## Round 7
+- **Beat framing:**
+  - `frameShot` takes extra subject boxes (the dog, the arch and the guests) and fits them between the letterbox bars.
+  - The wedding searches angles within ±35° for an open front-on shot.
+  - Found! frames the finder and Biscuit up close.
+  - Beats re-aim every 0.5 s, and are skipped when the cast is hidden or spread out.
+  - At night, the director cuts to a plaza establishing shot.
+- **QA pass:** see `/workspace/terrarium-qa/round2/REPORT.md`. Six majors (M1–M6) were found and fixed. These covered:
+  - beats framing nothing;
+  - night walls;
+  - the phone top bar and landscape card;
+  - Found! and wedding framing;
+  - the Storylines strip;
+  - finale text, fireworks and lanterns.
+- **Wow features:**
+  - The **Storylines** panel works like a TV guide. You can pin a storyline so the camera follows it, and a toast shows when it resolves. The API is `terrarium.storylines()` / `pinStory(id)`.
+  - **Handwritten letters** between villagers: a Letters tab, floating cards, and `terrarium.letters()`.
+  - A **season finale** on each season's last evening:
+    - The four finales are Blossom Fair, Midsummer Lantern Night, Harvest Moon Feast and Frost Fire Gala.
+    - Each has a contest, Heart of Thistlebrook and Scoundrel awards, a grand dance, a closing toast, and fireworks (560 pooled particles in one draw call).
+- **LLM hook (optional):**
+  - `?llm=<OpenAI-compatible URL>&llmModel=…` or `localStorage['terrarium.llm']`.
+  - It rewrites display text only (dialogue lines and reflections), with a deterministic fallback, rate limits, a timeout and backoff.
+  - There are no keys in the repo, and the sim's event signature is identical with it on or off.
+- **8-day soak** (seeds 7/3/11/5):
+
+  | Measure | Seeds 7/3/11/5 |
+  |---|---|
+  | Fights | 2/1/0/1 |
+  | Arguments | 8/10/10/11 |
+  | Events | 1090/1074/1040/1078 |
+  | Errors | 0 |
+
+- **Verify** (DAYS=4): PASS, with 6.5 → 8.5 fps under SwiftShader.
