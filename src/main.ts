@@ -594,6 +594,7 @@ function frame(now: number) {
 
 // ---- hooks for headless verification & power users -------------------------------------------------
 (window as any).terrarium = {
+  season: () => ({ name: world.season.name, snow: world.season.snow, day: sim.day }),
   sim, director, world, camera, controls, renderer, scene, get fps() { return perf.fps; }, get pixelRatio() { return perf.pr; }, quality: { soft: SOFT, aa: AA }, get simMs() { return simMsAvg; }, get cpuMs() { return cpuMsAvg; },
   setSpeed: (s: number) => (speed = s), select: (id: string | null) => api.select(id), setMode: (m: any) => api.setMode(m), god: (k: string) => api.god(k), ui: () => ui,
   fastForward(minutes: number, coarse = false) { if (!Number.isFinite(minutes) || minutes <= 0) return; const quiet = ui.quiet, wasFfing = ffing; ffing = true; ui.quiet = true; try { if (coarse) stepSimCoarse(minutes / MIN_PER_SEC); else { const n = Math.max(1, Math.ceil(minutes / MIN_PER_SEC / SIM_H - 1e-6)); for (let i = 0; i < n; i++) { sim.step(SIM_H); tickTraveller(sim); tickFestival(sim); } } } finally { ffing = wasFfing; ui.quiet = quiet; } for (const v of sim.villagers) syncAvatar(v, .016); },

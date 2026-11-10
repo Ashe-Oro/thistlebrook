@@ -22,8 +22,8 @@ export function snowMaterial(mat: THREE.Material, snow: { value: number }, groun
       float snowPatch = .5 + .26 * sin(vSnowPosition.x * 1.7 + sin(vSnowPosition.z * 1.3)) + .24 * sin(vSnowPosition.z * 2.1 + vSnowPosition.x * .6);
       float snowUp = smoothstep(.55, .85, normalize(vSnowNormal).y);
       ${ground ? `float snowGrass = smoothstep(.015, .12, diffuseColor.g - diffuseColor.r);
-      float snowCover = mix(.38 + .35 * snowPatch, .82 + .16 * snowPatch, snowGrass);` : 'float snowCover = .88 + .1 * snowPatch;'}
-      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.91, .95, 1.0), uSnow * snowUp * snowCover);`);
+      float snowCover = mix(.12 + .22 * snowPatch, .68 + .22 * snowPatch, snowGrass);` : 'float snowCover = mix(.2 + .3 * snowPatch, .8 + .14 * snowPatch, smoothstep(.12, .7, vSnowPosition.y)); /* flat ground-level props (cobbles, path tiles) only dusted; roofs and tops capped */'}
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.8, .85, .92), uSnow * snowUp * snowCover);`);
   };
   mat.customProgramCacheKey = () => key + (ground ? '|winter-ground-v1' : '|winter-cap-v1');
   mat.needsUpdate = true;

@@ -15,13 +15,13 @@ export class SeasonState {
   name: Season = 'Spring'; index = 0;
   grass = new THREE.Color('#ffffff'); foliage = new THREE.Color('#86c753'); foliageMix = .15;
   sky = new THREE.Color('#dff0ff'); skyMix = .05; warmth = .12; snow = 0;
-  private tGrass = new THREE.Color(); private tFol = new THREE.Color(); private tSky = new THREE.Color(); private inited = false;
+  private lastDay = -1; private tGrass = new THREE.Color(); private tFol = new THREE.Color(); private tSky = new THREE.Color(); private inited = false;
   // No per-frame allocation: all colours are reused and lerped toward the day's target in place.
   set(day: number, dt: number) {
     const cal = calendarFor(day), look = SEASON_LOOKS[cal.season]; this.name = cal.season; this.index = cal.seasonIndex;
     this.tGrass.set(look.grass); this.tFol.set(look.foliage); this.tSky.set(look.sky);
     if (!this.inited) { this.inited = true; this.grass.copy(this.tGrass); this.foliage.copy(this.tFol); this.sky.copy(this.tSky); this.foliageMix = look.foliageMix; this.skyMix = look.skyMix; this.warmth = look.warmth; this.snow = look.snow; return; }
-    const k = Math.min(1, Math.max(0, dt) * .6); // ease toward the new season (~2 s at 1x; faster when time is sped up)
+    const jumped = this.lastDay >= 0 && Math.abs(day - this.lastDay) > 1; this.lastDay = day; const k = jumped ? 1 : Math.min(1, Math.max(0, dt) * .6); /* fast-forwarding across days snaps instead of easing */ // ease toward the new season (~2 s at 1x; faster when time is sped up)
     this.grass.lerp(this.tGrass, k); this.foliage.lerp(this.tFol, k); this.sky.lerp(this.tSky, k);
     this.foliageMix += (look.foliageMix - this.foliageMix) * k;
     this.skyMix += (look.skyMix - this.skyMix) * k;
