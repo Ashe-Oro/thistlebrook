@@ -49,9 +49,10 @@ function cinematicLight(dt: number) {
   const on = !!(beat || montage || intro);
   cineLightFade = Math.max(0, Math.min(1, cineLightFade + (on ? 1 : -1) * dt / .4));
   const darkness = Math.max(sky.night, Math.max(0, 1 - sky.sun.intensity / 1.8));
-  cineKey.intensity = cineLightFade * (.15 + darkness * 1.5);
-  cineKey.visible = cineLightFade > 0;
-  if (cineKey.visible) {
+  // no extra light: adding/removing one changes every lit shader's light count (a full recompile hitch per beat),
+  // so lift the existing hemisphere fill instead, cooler at night
+  if (cineLightFade > 0) { sky.hemi.intensity += cineLightFade * (.1 + darkness * 1.1); sky.hemi.color.lerp(cineNightTint, cineLightFade * sky.night * .3); }
+  if (false) {
     cineSide.copy(camera.position).sub(controls.target).setY(0).normalize();
     cineSide.applyAxisAngle(THREE.Object3D.DEFAULT_UP, .3).multiplyScalar(8);
     cineKey.position.copy(controls.target).add(cineSide); cineKey.position.y = controls.target.y + 7;
