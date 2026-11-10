@@ -40,29 +40,84 @@ export class Avatar {
         const g = o.geometry as THREE.BufferGeometry, tri = (g.index ? g.index.count : g.attributes.position.count) / 3;
         bx.setFromObject(o); cand.push([o, tri, bx.min.y < this.height * .68]); if (tri > maxTri) maxTri = tri; });
       for (const [m, tri, low] of cand) if (low && tri < maxTri * .22) this.lodMeshes.push(m); }
+    this.buildMerged();
   }
-  // Per render-frame LOD hook, fed the camera distance. Presentation only: no sim state, no RNG,
-  // keeps the body/head/face so picking (screen-space) and portraits (head close-up) are unaffected.
-  // Beyond ~40 m the 12-material character (12 draw calls) swaps to a one-draw twin: same skeleton and vertex
-  // buffers, per-vertex colours baked from each material group (face decal dropped, it is sub-pixel out there).
-  private farMesh: THREE.SkinnedMesh | null = null; private mainMesh: THREE.SkinnedMesh | null = null; farOn = false;
-  private buildFar() {
-    const main = this.body.getObjectByName('CharacterMesh') as THREE.SkinnedMesh | undefined; if (!main || !Array.isArray(main.material)) return null;
-    const src = main.geometry, n = src.attributes.position.count, col = new Float32Array(n * 3), c = new THREE.Color(), g = new THREE.BufferGeometry();
-    for (const k of ['position', 'normal', 'skinIndex', 'skinWeight']) if (src.attributes[k]) g.setAttribute(k, src.attributes[k]);
-    if (src.index) return null;
-    for (const gr of src.groups) { const m: any = (main.material as THREE.Material[])[gr.materialIndex!]; if (!m || m.name === 'face') continue; c.copy(m.color ?? c.set('#888')); for (let i = gr.start; i < gr.start + gr.count && i < n; i++) col.set([c.r, c.g, c.b], i * 3); }
-    g.setAttribute('color', new THREE.BufferAttribute(col, 3)); const faceG = src.groups.filter(gr => (main.material as any)[gr.materialIndex!]?.name === 'face');
-    for (const gr of faceG) for (let i = gr.start; i < gr.start + gr.count; i++) col.set([0, 0, 0], i * 3); // face quad: collapse below as degenerate by colour only
-    g.boundingSphere = src.boundingSphere; const base: any = (main.material as THREE.Material[])[0];
-    const mat = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: base.gradientMap ?? null }); mat.name = 'farLod';
-    const fm = new THREE.SkinnedMesh(g, mat); fm.name = 'CharacterFar'; fm.frustumCulled = false; fm.castShadow = false; fm.bind(main.skeleton, main.bindMatrix);
-    fm.position.copy(main.position); fm.quaternion.copy(main.quaternion); fm.scale.copy(main.scale); main.parent!.add(fm);
-    mat.transparent = this.alpha < .99; mat.opacity = this.alpha; this.mats.push(mat); this.mainMesh = main; return fm;
+  // Keep CharacterMesh intact for material/name consumers. Both twins share its skeleton and
+  // vertex buffers; only their index order and baked colours belong to this avatar.
+  private mainMesh: THREE.SkinnedMesh | null = null;
+  private nearMesh: THREE.SkinnedMesh | null = null;
+  private farMesh: THREE.SkinnedMesh | null = null;
+  private mergedMat: THREE.MeshToonMaterial | null = null;
+  private characterLod: THREE.LOD | null = null;
+  private colourStamp = '';
+  farOn = false;
+  private buildMerged() {
+    const main = this.body.getObjectByName('CharacterMesh') as THREE.SkinnedMesh | undefined;
+    if (!main?.isSkinnedMesh || !Array.isArray(main.material) || main.geometry.index) return;
+    const materials = main.material as THREE.MeshToonMaterial[], src = main.geometry;
+    const base = materials.find(m => m.isMeshToonMaterial && m.name !== 'face');
+    const face = materials.find(m => m.name === 'face');
+    if (!base || !face) return;
+    const opaqueIndices: number[] = [], faceIndices: number[] = [];
+    for (const group of src.groups) {
+      const indices = materials[group.materialIndex ?? 0] === face ? faceIndices : opaqueIndices;
+      for (let i = group.start; i < Math.min(group.start + group.count, src.attributes.position.count); i++) indices.push(i);
+    }
+    const geometry = new THREE.BufferGeometry();
+    // Include UVs for the original face texture as well as all skinning attributes.
+    for (const [name, attribute] of Object.entries(src.attributes)) geometry.setAttribute(name, attribute);
+    geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(src.attributes.position.count * 3), 3));
+    geometry.setIndex([...opaqueIndices, ...faceIndices]);
+    geometry.addGroup(0, opaqueIndices.length, 0);
+    geometry.addGroup(opaqueIndices.length, faceIndices.length, 1);
+    geometry.boundingBox = src.boundingBox; geometry.boundingSphere = src.boundingSphere;
+    const mat = base.clone(); mat.name = 'mergedLod'; mat.color.set(0xffffff); mat.vertexColors = true;
+    mat.onBeforeCompile = base.onBeforeCompile; mat.customProgramCacheKey = base.customProgramCacheKey;
+    const near = new THREE.SkinnedMesh(geometry, [mat, face]); near.name = 'CharacterNear';
+    // The far twin omits the decal triangles entirely (one opaque draw, no black face quad).
+    const farGeometry = new THREE.BufferGeometry();
+    for (const [name, attribute] of Object.entries(geometry.attributes)) farGeometry.setAttribute(name, attribute);
+    farGeometry.setIndex(opaqueIndices); farGeometry.boundingBox = src.boundingBox; farGeometry.boundingSphere = src.boundingSphere;
+    const far = new THREE.SkinnedMesh(farGeometry, mat); far.name = 'CharacterFar';
+    const lod = new THREE.LOD(); lod.name = 'CharacterLOD';
+    lod.position.copy(main.position); lod.quaternion.copy(main.quaternion); lod.scale.copy(main.scale);
+    for (const mesh of [near, far]) {
+      mesh.bindMode = main.bindMode; mesh.bind(main.skeleton, main.bindMatrix);
+      mesh.bindMatrixInverse.copy(main.bindMatrixInverse); mesh.frustumCulled = false;
+      mesh.castShadow = main.castShadow; mesh.receiveShadow = main.receiveShadow;
+    }
+    lod.addLevel(near, 0); lod.addLevel(far, 42, 4 / 42);
+    main.parent!.add(lod); main.visible = false;
+    this.mainMesh = main; this.nearMesh = near; this.farMesh = far; this.mergedMat = mat; this.characterLod = lod;
+    this.mats.push(mat); this.refreshMerged();
   }
+  /** Re-bake opaque colours after outfit tint changes; face expressions keep their original material. */
+  refreshMerged() {
+    if (!this.mainMesh || !this.nearMesh) return;
+    const materials = this.mainMesh.material as THREE.MeshToonMaterial[];
+    const colours = this.nearMesh.geometry.getAttribute('color') as THREE.BufferAttribute;
+    for (const group of this.mainMesh.geometry.groups) {
+      const material = materials[group.materialIndex ?? 0]; if (!material || material.name === 'face') continue;
+      const c = material.color;
+      for (let i = group.start; i < Math.min(group.start + group.count, colours.count); i++) colours.setXYZ(i, c.r, c.g, c.b);
+    }
+    colours.needsUpdate = true;
+    this.colourStamp = this.materialStamp();
+  }
+  private materialStamp() {
+    return (this.mainMesh?.material as THREE.MeshToonMaterial[] | undefined)?.map(m =>
+      m.name === 'face' ? '' : `${m.color.r},${m.color.g},${m.color.b}`).join(';') ?? '';
+  }
+  // Presentation only. Renderer-driven LOD also selects the detailed twin for the portrait
+  // camera, even when setLod last saw a distant main camera. Body visibility still gates both.
   setLod(dist: number) {
-    const farOn = dist > (this.farOn ? 38 : 42);
-    if (farOn !== this.farOn) { if (farOn && !this.farMesh) this.farMesh = this.buildFar(); if (this.farMesh && this.mainMesh) { this.farOn = farOn; this.farMesh.visible = farOn; this.mainMesh.visible = !farOn; } }
+    if (this.materialStamp() !== this.colourStamp) this.refreshMerged();
+    // Nonuniform emissive flashes cannot be baked into one toon material: retain the exact
+    // original rendering for their duration, including changes made by external consumers.
+    const flashing = (this.mainMesh?.material as THREE.MeshToonMaterial[] | undefined)?.some(m =>
+      m.name !== 'face' && m.emissive && m.emissiveIntensity !== 0 && m.emissive.getHex() !== 0) ?? false;
+    if (this.mainMesh && this.characterLod) { this.mainMesh.visible = flashing; this.characterLod.visible = !flashing; }
+    this.farOn = dist > (this.farOn ? 38 : 42);
     const far = dist > (this.lodFar ? 30 : 34); if (far === this.lodFar) return; this.lodFar = far;
     for (const m of this.lodMeshes) m.visible = !far;
     if (this.tool) this.tool.visible = !far; if (this.carry) this.carry.visible = !far; if (this.banner) this.banner.visible = !far;
@@ -182,5 +237,9 @@ export class Avatar {
     if (this.banner) (this.banner as any).flag.rotation.x = Math.sin(p * 4) * .15;
     this.handle.update(dt);
   }
-  dispose() { this.handle.dispose(); }
+  dispose() {
+    // Dispose only owned geometry/index/colour buffers and the one cloned material.
+    this.characterLod?.removeFromParent(); this.nearMesh?.geometry.dispose(); this.farMesh?.geometry.dispose();
+    this.mergedMat?.dispose(); this.handle.dispose();
+  }
 }

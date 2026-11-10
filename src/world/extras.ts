@@ -7,7 +7,7 @@ import type { World } from './world';
 
 type Point = [number, number];
 interface Extra { root: THREE.Group; avatar?: Avatar; proxy?: THREE.Mesh; path: Point[]; lengths: number[]; length: number; arrival: number; departure: number; phase: number; kid: boolean; festival: boolean; elapsed: number; distance: number; walkPhase: number; }
-// Muted clothing tints for the far proxy; indistinguishable from the full avatar at > ~22 m.
+// Fallback clothing tints when an outfit material has no matching semantic name.
 const CLOTH = ['#8c6b53', '#5f7a6b', '#7b6b86', '#9a6a5a', '#6b7f99', '#8a8560', '#7c9082', '#a0785f'];
 export interface ExtrasOptions { seed?: number; count?: number; }
 
@@ -41,7 +41,14 @@ export class Extras {
       root.name = `Background passer-by ${i + 1}`; root.visible = false;
       root.traverse((o: any) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; o.frustumCulled = true; } });
       // One-draw stand-in for distant passers-by: the full articulated avatar is only drawn up close.
-      if (avatar) { proxy = this.makeProxy(kid, def.skin, CLOTH[i % CLOTH.length], def.hair); proxy.visible = false; root.add(proxy); }
+      if (avatar) {
+        const source = avatar.body.getObjectByName('CharacterMesh') as THREE.SkinnedMesh;
+        const materials = (Array.isArray(source?.material) ? source.material : [source?.material]) as THREE.MeshToonMaterial[];
+        const colour = (pattern: RegExp, fallback: string) => materials.find(m => m?.color && pattern.test(m.name))?.color ?? new THREE.Color(fallback);
+        proxy = this.makeProxy(kid, colour(/skin/i, def.skin), colour(/top|shirt|sweater|cloth|torso/i, CLOTH[i % CLOTH.length]),
+          colour(/bottom|trouser|pants|leg/i, '#424553'), colour(/hair/i, def.hair), avatar.height);
+        proxy.visible = false; root.add(proxy);
+      }
       this.root.add(root); const lengths = [0];
       for (let j = 1; j < path.length; j++) lengths.push(lengths[j - 1] + Math.hypot(path[j][0] - path[j - 1][0], path[j][1] - path[j - 1][1]));
       this.people.push({ root, avatar, proxy, path, lengths, length: lengths[lengths.length - 1], arrival: 7 + i * .3, departure: 17 + i * .12, phase: r.range(0, 6.28), kid, festival, elapsed: 0, distance: 0, walkPhase: 0 });
@@ -53,16 +60,26 @@ export class Extras {
     const body = new THREE.Mesh(new THREE.CapsuleGeometry(.19, kid ? .5 : .9, 2, 5), mat); body.position.y = kid ? .55 : .8; g.add(body);
     const head = new THREE.Mesh(new THREE.SphereGeometry(.17, 6, 4), new THREE.MeshLambertMaterial({ color: '#d9a066' })); head.position.y = kid ? 1.1 : 1.55; g.add(head); return g;
   }
-  // Single merged, vertex-coloured figure (body + head + hair) — one draw call, a few hundred triangles.
-  private makeProxy(kid: boolean, skin: string, cloth: string, hair: string) {
+  // Separate torso, arms, trousers, head and hair baked into one vertex-coloured draw.
+  private makeProxy(kid: boolean, skin: THREE.Color, cloth: THREE.Color, trousers: THREE.Color, hair: THREE.Color, height: number) {
     const parts: THREE.BufferGeometry[] = [];
-    const add = (g: THREE.BufferGeometry, hex: string) => { const c = new THREE.Color(hex), n = g.attributes.position.count, col = new Float32Array(n * 3); for (let k = 0; k < n; k++) col.set([c.r, c.g, c.b], k * 3); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); parts.push(g); };
-    const bh = kid ? .5 : .9, by = kid ? .55 : .82, hy = kid ? 1.12 : 1.56, hr = kid ? .15 : .17;
-    add(new THREE.CapsuleGeometry(kid ? .17 : .19, bh, 2, 6).translate(0, by, 0), cloth);
-    add(new THREE.SphereGeometry(hr, 7, 5).translate(0, hy, 0), skin);
-    add(new THREE.SphereGeometry(hr * .98, 6, 4).scale(1, .82, 1).translate(0, hy + hr * .36, -.02), hair);
+    const add = (g: THREE.BufferGeometry, c: THREE.Color) => {
+      const n = g.attributes.position.count, col = new Float32Array(n * 3);
+      for (let k = 0; k < n; k++) col.set([c.r, c.g, c.b], k * 3);
+      g.setAttribute('color', new THREE.BufferAttribute(col, 3)); parts.push(g);
+    };
+    const h = kid ? 1.25 : 1.8, hr = kid ? .15 : .17;
+    add(new THREE.CylinderGeometry(.19, .16, h * .30, 6).translate(0, h * .57, 0), cloth);
+    for (const side of [-1, 1]) {
+      add(new THREE.CylinderGeometry(.075, .065, h * .37, 5).translate(side * .095, h * .22, 0), trousers);
+      add(new THREE.CylinderGeometry(.065, .055, h * .26, 5).translate(side * .24, h * .55, 0), cloth);
+      add(new THREE.SphereGeometry(.065, 6, 4).translate(side * .24, h * .40, 0), skin);
+    }
+    add(new THREE.SphereGeometry(hr, 7, 5).translate(0, h - hr, 0), skin);
+    // A hemisphere leaves the face skin visible instead of covering it with a second sphere.
+    add(new THREE.SphereGeometry(hr * 1.03, 7, 4, 0, Math.PI * 2, 0, Math.PI * .48).translate(0, h - hr, 0), hair);
     const mesh = new THREE.Mesh(mergeGeometries(parts)!, this.proxyMat); parts.forEach(g => g.dispose());
-    mesh.castShadow = false; mesh.receiveShadow = false; return mesh;
+    mesh.scale.setScalar(height / h); mesh.castShadow = false; mesh.receiveShadow = false; return mesh;
   }
   private decorations() {
     // One instanced draw for washing; poles and rope are deliberately simple geometry.
