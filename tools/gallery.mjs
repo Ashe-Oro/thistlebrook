@@ -67,9 +67,10 @@ await run("const S=terrarium.sim; S.rain=0; S.rainUntil=S.clock; S.nextWeather=S
 // Scuffle: two villagers who dislike each other, staged next to each other
 await ffTo(72 + 14); await run(`const S=terrarium.sim; let best=null; for (const a of S.villagers) for (const c of S.villagers) if (a!==c && !a.inside && !c.inside && (!best || (a.opinion[c.id]??0) < (best[0].opinion[best[1].id]??0))) best=[a,c]; const [a,c]=best; c.x=a.x+1.2; c.z=a.z; terrarium.look(a.x,a.z,14,.6,.5); terrarium.setMode('director'); S.startFight(a,c,a.first+' finally had it out with '+c.first); if(!terrarium.beatOn) terrarium.beat(); return [a.id,c.id]`);
 await wait(2600); await shot('20_brawl_beat'); await wait(9000); await run("terrarium.setMode('free'); const S=terrarium.sim; const e=[...S.events].reverse().find(e=>e.kind==='fight'); terrarium.look(e.x,e.z,11,.6,.45)"); await wait(1500); await shot('21_brawl_after');
-// Later in the week: the first wedding (seed 7: Sunday, day 7 afternoon), then a winter morning three weeks on
-await ffTo(168 + 15.49); await run("terrarium.setSpeed(1); terrarium.setMode('director')"); await wait(7000); await shot('30b_wedding_beat'); /* letterboxed vows beat, framed down the aisle */
-await ffTo(168 + 15.62); await run("terrarium.setSpeed(1); terrarium.setMode('free'); terrarium.look(4,-16,15,.1,1.0)"); /* seed 7: vows 15:30 Moonday (day 8) at the chapel; kiss 15:41 */ await wait(3000); await shot('30_wedding');
+// Later in the week: the first wedding after the staged scenes, then a winter morning three weeks on
+const wAt = await run("const S=terrarium.sim; for (let i = 0; i < 24 * 10; i++) { const g = S.gatherings.find(g => g.kind === 'wedding' && !g.done && g.at > S.clock + 2); if (g) return g.at; terrarium.fastForward(60); } return null"); /* the first wedding after the staged scenes (the staging shifts the story) */
+if (wAt) { await ffTo((wAt + 29.4) / 60); /* gathering opens at g.at, vows 30 min later */ await run("terrarium.setSpeed(1); terrarium.setMode('director')"); await wait(7000); await shot('30b_wedding_beat'); /* letterboxed vows beat, framed down the aisle */
+  await ffTo((wAt + 40) / 60); await run("terrarium.setSpeed(1); terrarium.setMode('free'); terrarium.look(4,-16,15,.1,1.0)"); await wait(3000); await shot('30_wedding'); }
 await ffTo(21 * 24 + 10.5); await run('terrarium.god("rain"); terrarium.fastForward(20)'); await wait(2500); await run("terrarium.setSpeed(1); terrarium.look(-6,2,34,.55,.6)"); await wait(4000); /* precipitation falls as snow in winter */ await shot('31_winter');
 await p.close(); // free the renderer before the next page
 // The search party pays off (seed 11: Pip finds Biscuit by the quarry at 11:28 on day 1)
