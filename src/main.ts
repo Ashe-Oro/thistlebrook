@@ -537,14 +537,15 @@ function beatCamera(dt: number) {
   if (!b.fixed && vs.length !== b.ids.length) { endBeat(); return; }
   const boxes: ShotBox[] = [];
   if (b.title === 'Found!' && sim.pet && world.dog) { const p = world.dog.obj.position; boxes.push({ x: p.x, z: p.z, height: .7, radius: .5 }); }
-  const heads = vs.map(v => new THREE.Vector3(v.x, v.avatar.height + .25, v.z));
-  let yaw = b.side, dist = 9, h = 4.2;
+  const cast = b.title === 'Found!' ? vs.slice(0, 1) : vs; /* Found!: the finder and the dog, close; the owner may be across the village */
+  const heads = cast.map(v => new THREE.Vector3(v.x, v.avatar.height + .25, v.z));
+  let yaw = b.side, dist = b.title === 'Found!' ? 6 : 9, h = b.title === 'Found!' ? 3 : 4.2;
   if (b.fixed) { bT.set(b.fixed[0], b.fixed[2], b.fixed[1]); yaw = b.fixed[3]; dist = 16; h = 7.6; }
   else {
     const points = [...heads, ...boxes.map(p => new THREE.Vector3(p.x, .35, p.z))];
     if (!points.length) { endBeat(); return; }
     bT.set(points.reduce((n, p) => n + p.x, 0) / points.length, 1.1, points.reduce((n, p) => n + p.z, 0) / points.length);
-    if (vs.length >= 2) { const [a, c] = vs; yaw = Math.atan2(c.x - a.x, c.z - a.z) + Math.PI / 2; if (Math.cos(yaw - b.side) < 0) yaw += Math.PI; }
+    if (cast.length >= 2) { const [a, c] = cast; yaw = Math.atan2(c.x - a.x, c.z - a.z) + Math.PI / 2; if (Math.cos(yaw - b.side) < 0) yaw += Math.PI; }
   }
   if (b.aisle) {
     yaw = 0; dist = 10; h = 4.5;
@@ -555,7 +556,7 @@ function beatCamera(dt: number) {
   if (!b.clear || b.t >= (b.solveAt ?? 0)) {
     b.clear = frameShot(bT, heads, yaw, dist, 14, [h, 5.5, 7.5], new Set(b.ids), boxes, b.aisle ? [0, .3, -.3, .61, -.61] : undefined);
     b.solveAt = b.t + .5;
-    if (!b.fixed && !b.clear.visible) { endBeat(); return; }
+    if (!b.fixed && b.title !== 'Found!' && !b.clear.visible) { endBeat(); return; } /* a dog found in the woods is worth a slightly leafy frame */
   }
   yaw = b.clear.yaw; dist = b.clear.dist; h = b.clear.h;
   bP.set(bT.x + Math.sin(yaw) * dist, h, bT.z + Math.cos(yaw) * dist);
