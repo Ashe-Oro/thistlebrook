@@ -166,8 +166,11 @@ export class UtilityBrain implements Brain {
       if (pick.notice) this.readNotice(v, s);
       v.needs.social = Math.min(100, v.needs.social + 6);
       if (pick.leisure) { v.emotions.sadness = Math.max(0, v.emotions.sadness - .04); v.emotions.joy = Math.min(1, v.emotions.joy + .04); }
-      if (R.chance(.45)) s.log(pick.line, pick.leisure ? 2 : R.chance(.3) ? 2 : 1, [v.id], 'ambient', pick.icon);
-      else s.say(v, pick.leisure ? pick.thought : R.pick(v.def.catchphrases), pick.icon, 2.4);
+      // Preserve the old narration draws so surfacing life does not shift later decisions.
+      const narrated = R.chance(.45);
+      if (narrated && !pick.leisure) R.chance(.3);
+      s.log(pick.line, 2, [v.id], 'life', pick.icon);
+      if (!narrated) s.say(v, pick.leisure ? pick.thought : R.pick(v.def.catchphrases), pick.icon, 2.4);
       // The well remains a meeting place: only approach someone free, on friendly terms,
       // and beyond the ordinary social cooldown. Chat uses the existing gossip/invite mix.
       const well = at('well');

@@ -43,7 +43,7 @@ export class UI {
     top.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach(b => b.onclick = () => this.app.setSpeed(+b.dataset.speed!));
     (top.querySelector('#mode') as HTMLButtonElement).onclick = () => this.app.setMode(this.app.mode === 'director' ? 'free' : 'director');
     (top.querySelector('#snd') as HTMLButtonElement).onclick = (e) => { this.app.sound.setMuted(!this.app.sound.muted); (e.target as HTMLElement).textContent = this.app.sound.muted ? '🔇' : '🔊'; };
-    const fw = h('div', 'feedwrap'); fw.innerHTML = `<div class="ph"><b>📜 Village chronicle</b><div class="ff"><button data-f="all" class="on">All</button><button data-f="drama">Drama</button><button data-f="social">Social</button><button data-f="work">Work</button></div><button class="feedtog" title="Collapse chronicle">▾</button></div>`;
+    const fw = h('div', 'feedwrap'); fw.innerHTML = `<div class="ph"><b>📜 Village chronicle</b><div class="ff"><button data-f="all" class="on">All</button><button data-f="drama">Drama</button><button data-f="social">Social</button><button data-f="work">Work</button><button data-f="life">Life</button></div><button class="feedtog" title="Collapse chronicle">▾</button></div>`;
     this.feed = h('div', 'feed'); fw.appendChild(this.feed); r.appendChild(fw);
     // one delegated listener for every name link and story chip in the chronicle (rows come and go; listeners don't pile up)
     this.feed.addEventListener('click', (ev) => { const t = ev.target as HTMLElement; const nm = t.closest<HTMLElement>('.nm'); if (nm) { ev.stopPropagation(); this.app.select(nm.dataset.id!); return; } const ch = t.closest<HTMLElement>('.arcchip'); if (ch) { ev.stopPropagation(); this.showArc(ch.dataset.arc!); } });
@@ -79,12 +79,14 @@ export class UI {
   rich(text: string) { return text.includes("(It isn't true.)") ? `${this.linkify(cleanLie(text))} <span class="badge false" title="A fabricated rumour — not actually true">false rumour</span>` : this.linkify(text); }
   isLie(e: SimEvent) { return e.kind === 'gossip' && e.text.includes("(It isn't true.)"); }
   cat(e: SimEvent) {
+    if (e.kind === 'life') return 'life';
     if (e.kind === 'weather') return 'weather'; // routine weather stays out of Drama; only in All
     if (this.isLie(e)) return 'drama'; // fabricated rumours are the heart of the drama
     return ['theft', 'burglary', 'fight', 'argue', 'accuse', 'god', 'traveller', 'festival', 'reconcile', 'ally', 'romance', 'rumour', 'snoop', 'sneaky', 'heartbreak'].includes(e.kind) ? 'drama'
       : ['talk', 'gift', 'gossip', 'invite', 'party', 'bond', 'reflect', 'generous', 'lunch', 'breakfast', 'evening', 'social'].includes(e.kind) ? 'social' : 'work';
   }
   addFeed(e: SimEvent) {
+    if (e.kind === 'life') { this.addLife(e); return; }
     const cat = this.cat(e), lie = this.isLie(e);
     // small talk lives in each villager's story log; routine work (imp 1) is kept only for the Work filter
     const minor = e.imp <= 1; if (minor && cat !== 'work') return;
@@ -103,7 +105,32 @@ export class UI {
     if (minor) { const m = this.feed.querySelectorAll('[data-minor]'); for (let i = 30; i < m.length; i++) m[i].remove(); }
     this.promoteCaption(e, el);
   }
+  // Same-hour life shares one compact row; keep only two samples, regardless of count.
+  addLife(e: SimEvent) {
+    const hour = String(Math.floor(e.t / 60));
+    let el = [...this.feed.querySelectorAll<HTMLElement>('.c-life')].find(row => row.dataset.hour === hour);
+    if (!el) {
+      const day = dayOf(e.t);
+      if (this.feedDay && day !== this.feedDay) this.feed.prepend(h('div', 'daysep', `— Day ${day} —`));
+      this.feedDay = day;
+      el = h('div', 'ev imp2 k-life c-life muted');
+      el.style.fontSize = '.85em';
+      el.style.opacity = '.7';
+      el.dataset.cat = 'life'; el.dataset.hour = hour; el.dataset.n = '0';
+      el.dataset.samples = '[]'; el.dataset.ids = '[]';
+      el.innerHTML = '<span class="t"></span><span class="ic">🌿</span><span class="tx"></span>';
+    }
+    const n = +(el.dataset.n ?? 0) + 1;
+    const samples: string[] = JSON.parse(el.dataset.samples!);
+    if (samples.length < 2) samples.push(e.text.replace(/[.!]+$/, ''));
+    el.dataset.n = String(n); el.dataset.samples = JSON.stringify(samples);
+    el.querySelector('.t')!.textContent = fmtTime(e.t);
+    el.querySelector('.tx')!.innerHTML = `Life in the village: ${samples.map(t => this.linkify(t)).join(' · ')}${n > 2 ? ` (+${n - 2})` : ''}${n > 1 ? `<span class="rep"> ×${n}</span>` : ''}`;
+    this.applyFilter(el); this.feed.prepend(el);
+    while (this.feed.children.length > 100) this.feed.lastChild!.remove();
+  }
   promoteCaption(e: SimEvent, el: HTMLElement) {
+    if (e.kind === 'life') return;
     let visibleInFeed = el.style.display !== 'none' && !this.feed.parentElement!.classList.contains('collapsed') && this.feed.getClientRects().length > 0;
     for (let panel: HTMLElement | null = this.feed; visibleInFeed && panel; panel = panel.parentElement) {
       const style = getComputedStyle(panel);
@@ -122,6 +149,7 @@ export class UI {
     this.arcChip(el, e.id); this.applyFilter(el);
   }
   updateFeed(e: SimEvent) {
+    if (e.kind === 'life') return; // Life narration is immutable and folded without event-ID storage.
     const el = [...this.feed.querySelectorAll<HTMLElement>('.ev')].find(row => (JSON.parse(row.dataset.ids ?? `[${row.dataset.id}]`) as number[]).includes(e.id));
     if (el) { this.refreshFeedRow(el, e); this.promoteCaption(e, el); }
   }
