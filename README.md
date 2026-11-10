@@ -80,3 +80,34 @@ so the whole deployment must be private, not just the models:
 3. GLBs in **private Vercel Blob**. A small authenticated route (`/api/glb/[name]`) checks the session and streams the blob or
    returns a short-lived signed URL. The client loader switches from `/glb/...` to that route.
 4. No source maps in production, `Cache-Control: private`, and `X-Robots-Tag: noindex`.
+
+## Optional LLM dialogue
+
+Off by default. An OpenAI-compatible chat completion server can decorate speech bubbles and the villager card's thoughts
+and beliefs. Simulation decisions, timing, memories and chronicle entries always use the deterministic originals.
+Late replies keep the original bubble; errors silently fall back and pause requests for 60 seconds.
+
+For example, serve a Qwen model with llama.cpp or vLLM on your local machine, then open:
+
+```text
+?llm=http%3A%2F%2Flocalhost%3A8000%2Fv1%2Fchat%2Fcompletions&llmModel=Qwen3-8B
+```
+
+Use the model name your server exposes. The server must allow CORS requests from the village's origin, including
+`Content-Type` and `Authorization` headers if used. An HTTPS page also needs an HTTPS endpoint.
+Optional `&llmKey=...` supplies a key for this session only; URL configuration is never saved automatically.
+Avoid putting private keys in shared URLs or browser history.
+
+Persist configuration explicitly in the browser console:
+
+```js
+terrarium.enableLLM({ endpoint: 'http://localhost:8000/v1/chat/completions', model: 'Qwen3-8B', maxCallsPerMin: 20, timeoutMs: 2500 });
+terrarium.llmStatus(); // {enabled, ok, calls, cacheHits, failures}
+terrarium.disableLLM();
+```
+
+Configuration uses localStorage `terrarium.llm` with `{endpoint, model, apiKey?, maxCallsPerMin?, timeoutMs?}`;
+calling `enableLLM` persists any supplied key in that browser. `?llm=0` disables saved configuration for one load.
+The top bar shows an enabled/offline chip. Requests have a 2500 ms default timeout, at most three in flight,
+a default limit of 20 calls per minute, and a 256-entry in-memory LRU keyed by speaker and original text.
+`ok` means enabled and outside failure backoff; counters are cumulative for this page session.
