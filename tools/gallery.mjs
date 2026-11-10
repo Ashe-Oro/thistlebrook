@@ -85,23 +85,23 @@ await p.close(); // free the renderer before the next page
   await q.close(); }
 // Round 8: the clean, cozy default — speech bubbles over heads, panels tucked into the dock (seed 7, day 3 lunch)
 const bubblesUp = (pg, n, ms = 60000) => pg.waitForFunction(n => [...document.querySelectorAll('.bubble')].filter(b => b.style.display !== 'none' && !b.classList.contains('out') && +getComputedStyle(b).opacity > .9).length >= n, n, { timeout: ms, polling: 150 }).then(() => true, () => false);
-const ffPage = (pg, m) => pg.evaluate(m => { const S = terrarium.sim; while (S.clock < m) terrarium.fastForward(Math.min(60, m - S.clock + .01)); terrarium.setSpeed(1); }, m);
+let findTalk; const ffPage = (pg, m) => pg.evaluate(m => { const S = terrarium.sim; while (S.clock < m) terrarium.fastForward(Math.min(60, m - S.clock + .01)); terrarium.setSpeed(1); }, m);
 { const q = await b.newPage({ viewport: { width: 1600, height: 900 } }); watch(q); await q.goto('http://127.0.0.1:5183/?nopaper&fresh&nosave&capture&dynres=0&seed=7'); await q.waitForFunction(() => window.terrarium && document.querySelector('.loading.done'), null, { timeout: 180000 });
-  await ffPage(q, 2 * 1440 + 12 * 60 + 5); await q.evaluate(() => { terrarium.look(-8, 3, 22, .55, .6); terrarium.setSpeed(2); }); await q.waitForTimeout(4000);
-  console.log('40 bubbles', await bubblesUp(q, 2)); await q.evaluate(() => terrarium.setSpeed(0)); await q.waitForTimeout(150); await q.screenshot({ path: `${OUT}/40_clean_default.png`, timeout: 120000 }); console.log('shot 40_clean_default');
+  // step the sim minute by minute until a conversation is queued near the plaza, then let it play at normal speed
+  findTalk = (pg, near, d) => pg.evaluate(([near, d]) => { const u = terrarium.ui(), S = terrarium.sim; for (let i = 0; i < 600; i++) { const c = u.convo.find(c => c.listener && c.at > S.clock + 1.5); if (c) { const a = S.byId.get(c.who), l = S.byId.get(c.listener); if (a && l && !a.inside && !l.inside && Math.hypot(a.x - l.x, a.z - l.z) < 4 && (!near || Math.hypot(a.x - near[0], a.z - near[1]) < 14)) { terrarium.look((a.x + l.x) / 2, (a.z + l.z) / 2, d, .55, d < 12 ? .45 : .62); terrarium.setSpeed(2); return [c.who, c.listener, S.clock]; } } terrarium.fastForward(1); } terrarium.setSpeed(2); return null; }, [near, d]);
+  await ffPage(q, 2 * 1440 + 12 * 60 + 5); console.log('40 talk', await findTalk(q, [-8, 3], 22));
+  console.log('40 bubbles', await bubblesUp(q, 1, 60000)); await bubblesUp(q, 2, 3000); await bubblesUp(q, 1, 30000); await q.evaluate(() => terrarium.setSpeed(0)); await q.waitForTimeout(150); await q.screenshot({ path: `${OUT}/40_clean_default.png`, timeout: 120000 }); console.log('shot 40_clean_default');
   // panel opened on demand: chronicle + storylines over the same scene
   await q.evaluate(() => { const u = terrarium.ui(); u.setPanel('feed', true); u.setPanel('story', true); terrarium.setSpeed(2); }); await q.waitForTimeout(2500); await bubblesUp(q, 1, 20000); await q.screenshot({ path: `${OUT}/43_panel_open.png`, timeout: 120000 }); console.log('shot 43_panel_open');
   await q.evaluate(() => { const u = terrarium.ui(); u.setPanel('feed', false); u.setPanel('story', false); });
-  // close-up on a two-way exchange: wait for a conversation to be queued, then frame its speakers
-  const pair = await q.evaluate(async () => { const u = terrarium.ui(), S = terrarium.sim; for (let i = 0; i < 400; i++) { const c = u.convo.find(c => c.listener && c.at > S.clock + 2); if (c) { const a = S.byId.get(c.who), l = S.byId.get(c.listener); if (a && l && !a.inside && !l.inside && Math.hypot(a.x - l.x, a.z - l.z) < 4) return [c.who, c.listener]; } terrarium.fastForward(1); } return null; });
-  if (pair) { await q.evaluate(([a, l]) => { const S = terrarium.sim, A = S.byId.get(a), L = S.byId.get(l); const mx = (A.x + L.x) / 2, mz = (A.z + L.z) / 2, dx = L.x - A.x, dz = L.z - A.z, n = Math.hypot(dx, dz) || 1; terrarium.look(mx, mz, 7.5, Math.atan2(-dz / n, dx / n), .42); terrarium.setSpeed(1); }, pair);
-    console.log('41 pair', pair, await bubblesUp(q, 1, 40000)); await q.evaluate(() => terrarium.setSpeed(0)); await q.waitForTimeout(150); await q.screenshot({ path: `${OUT}/41_bubbles_closeup.png`, timeout: 120000 }); console.log('shot 41_bubbles_closeup'); }
+  // close-up on a two-way exchange
+  console.log('41 talk', await findTalk(q, null, 8.5));
+  console.log('41 bubbles', await bubblesUp(q, 1, 40000)); await q.evaluate(() => terrarium.setSpeed(0)); await q.waitForTimeout(150); await q.screenshot({ path: `${OUT}/41_bubbles_closeup.png`, timeout: 120000 }); console.log('shot 41_bubbles_closeup');
   console.log('transcripts kept', await q.evaluate(() => [terrarium.sim.transcripts.length, terrarium.sim.transcripts.at(-1)]));
   await q.close(); }
 for (const [name, w, h] of [['42_phone_clean', 390, 844], ['42b_phone_landscape', 844, 390]]) {
   const q = await b.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }); watch(q); await q.goto('http://127.0.0.1:5183/?nopaper&fresh&nosave&capture&dynres=0&seed=7'); await q.waitForFunction(() => window.terrarium && document.querySelector('.loading.done'), null, { timeout: 180000 });
-  await ffPage(q, 2 * 1440 + 12 * 60 + 5); await q.evaluate(() => { terrarium.look(-8, 3, 20, .55, .7); terrarium.setSpeed(2); }); await q.waitForTimeout(4000);
-  console.log(name, await bubblesUp(q, 1)); await q.evaluate(() => terrarium.setSpeed(0)); await q.waitForTimeout(150); await q.screenshot({ path: `${OUT}/${name}.png`, timeout: 120000 }); console.log('shot', name); await q.close(); }
+  await ffPage(q, 2 * 1440 + 12 * 60 + 5); console.log(name, await findTalk(q, [-8, 3], 18), await bubblesUp(q, 1)); await q.evaluate(() => terrarium.setSpeed(0)); await q.waitForTimeout(150); await q.screenshot({ path: `${OUT}/${name}.png`, timeout: 120000 }); console.log('shot', name); await q.close(); }
 // Establishing crane shot (plays on first load for real visitors)
 { const q = await b.newPage({ viewport: { width: 1600, height: 900 } }); watch(q); await q.goto('http://127.0.0.1:5183/?nopaper&fresh&nosave&capture&dynres=0&intro&seed=7'); await q.waitForFunction(() => window.terrarium && document.querySelector('.loading.done'), null, { timeout: 180000 }); await q.waitForTimeout(5000); await q.screenshot({ path: `${OUT}/00_intro.png`, timeout: 120000 }); console.log('shot 00_intro'); await q.close(); }
 // Mobile layout

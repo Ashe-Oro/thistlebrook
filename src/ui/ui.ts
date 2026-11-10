@@ -44,7 +44,7 @@ export class UI {
     s.on('event', (e: SimEvent) => this.addFeed(e)); s.on('eventUpdate', (e: SimEvent) => this.updateFeed(e));
     s.on('bubble', (v: Villager, text: string, emoji: string, dur: number) => this.bubble(v.id, text, emoji, dur));
     s.on('icon', (v: Villager, emoji: string) => this.icon(v.id, emoji));
-    s.on('convo', (lines: { who: string; text: string; emoji: string; at: number }[]) => this.convo.push(...lines.map(l => ({ ...l, listener: lines.find(other => other.who !== l.who)?.who }))));
+    s.on('convo', (lines: { who: string; text: string; emoji: string; at: number }[]) => { this.convo.push(...lines.map(l => ({ ...l, listener: lines.find(other => other.who !== l.who)?.who }))); this.convo.sort((a, b) => a.at - b.at); });
     s.on('achievement', (a: any) => this.toast(`🏆 ${a.title}`, a.desc));
   }
   build() {
@@ -314,6 +314,7 @@ export class UI {
   private sz(el: HTMLElement) { const k = innerWidth + '|' + el.textContent; let c = this.szCache.get(el); if (!c || c.k !== k || !c.w) { c = { k, w: el.offsetWidth, h: el.offsetHeight }; this.szCache.set(el, c); } return c; }
   private setDisp(el: HTMLElement, show: boolean) { const d = show ? '' : 'none'; if (el.style.display !== d) el.style.display = d; }
 
+  private lastNow = 0;
   frame(dt: number) {
     const s = this.app.sim, now = performance.now();
     const status = llm.status(), chip = this.root.querySelector<HTMLElement>('#llm-status')!;
@@ -326,6 +327,8 @@ export class UI {
     // Tags: only on hover, or for the selected / followed villager at close range.
     // Bubbles: at most 4 (3 on phones), nearest the camera / focus first; they shrink with distance, hide when far
     // or behind a building, fade in and out, and never cover the open villager card.
+    const realDt = this.lastNow ? now - this.lastNow : 0; this.lastNow = now;
+    if (this.app.speed === 0) for (const b of this.bubbles.values()) if (b.until > now) { b.until += realDt; b.t0 += realDt; } // paused: bubbles stay up to be read
     const cam = this.app.camPos(), sel = this.app.selected, foc = this.app.focus, hov = this.app.hovered, maxB = narrow() ? 3 : 4;
     type Cand = { id: string; el: HTMLElement; x: number; y: number; w: number; h: number; sc: number; below: boolean; pri: number; fading: boolean };
     const cands: Cand[] = [];
@@ -343,7 +346,7 @@ export class UI {
       if (show && b.occ) show = false;
       if (!show) { this.setDisp(b.el, false); continue; }
       this.setDisp(b.el, true);
-      const q = this.app.project(pos.x, hh + .95, pos.z), sc = Math.max(.8, Math.min(1.08, 21 / d)), z = this.sz(b.el);
+      const q = this.app.project(pos.x, hh + .95, pos.z), sc = Math.max(.8, Math.min(1.2, 21 / d)), z = this.sz(b.el);
       const cx = q.x - W / 2, cy = q.y - innerHeight / 2;
       const pri = (v.id === sel ? 1e9 : v.id === foc ? 1e8 : 0) + (1000 - d * 12) - Math.hypot(cx, cy) * .05 + (fading ? -500 : 0) + b.t0 * 1e-6;
       cands.push({ id: v.id, el: b.el, x: q.x, y: q.y - (showTag ? 16 : 0), w: z.w * sc, h: z.h * sc, sc, below: false, pri, fading });
