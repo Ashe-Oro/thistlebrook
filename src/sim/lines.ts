@@ -377,15 +377,17 @@ export function smalltalk(sim: Sim, sp: Villager): string { return say(sim, sp, 
 
 /* Handwritten notes stay under fifty words, including greeting and signature. */
 export function letterText(sim: Sim, v: Villager, t: Villager, kind: import('./letters').LetterKind, context: string, unsigned: boolean) {
-  context = context.split(/\s+/).slice(0, 14).join(' ').replace(/[.!]+$/, '');
-  const R = sim.rng, bodies: Record<import('./letters').LetterKind, string[]> = {
-    love: ['I have a quiet crush on you. Writing it feels braver than saying it.', 'Someone in this village thinks you are rather wonderful. That someone is blushing over this paper.'],
-    apology: [`I keep thinking about this: ${context} I am sorry. Could we begin again?`, 'Our argument has stayed with me. I could not face you today. Could we begin again, gently?'],
-    thanks: [`Thank you. I keep remembering: ${context}.`, `Your kindness meant a lot: ${context}. I wanted you to know.`],
-    invite: [`You are invited to ${context}. I hope there will be a place beside you for me.`],
+  context = context.replace(/[.!]+$/, '');
+  const R = sim.rng, item = /gave \S+ (.+?)(?: and blushed)?$/.exec(context)?.[1]; /* "Wren gave Tom a basket of eggs" -> "a basket of eggs" */
+  const about = /over (.+?)(?: boiled over)?$/.exec(context)?.[1];
+  const bodies: Record<import('./letters').LetterKind, string[]> = {
+    love: ['I have a quiet crush on you. Writing it feels braver than saying it.', 'Someone in this village thinks you are rather wonderful. That someone is blushing over this paper.', 'Every time you pass the well my words run off and hide. So here they are, on paper instead.'],
+    apology: [about ? `I keep thinking about our row over ${about}. I was wrong to raise my voice. Could we begin again?` : 'Our argument has stayed with me. I was wrong to raise my voice. Could we begin again?', 'I could not face you today, so I am writing instead. I am sorry for the things I said. Tea, soon?'],
+    thanks: item ? [`Thank you for ${item}. It made my whole day.`, `I am still smiling about ${item.replace(/^an? /, 'the ')}. You are kinder than you know.`, `${item[0].toUpperCase() + item.slice(1)}! You shouldn't have. (I am very glad you did.)`] : ['Thank you for your kindness. I wanted you to know it mattered.'],
+    invite: [`You are invited to ${context}. I hope there will be a place beside you for me.`, `Come to ${context}? It won't be the same without you.`],
     prank: [context + ' Please prepare a short quack of acceptance.'],
     farewell: ['I understand that we cannot be sweethearts. It still aches a little. I wish you happy days.', 'My heart needs a quiet spell. Thank you for hearing it honestly. May things be gentle between us.'],
-    board: [context + ' Some kindness deserves to be written down.']
+    board: [`Three cheers for ${t.first}, our ${t.job}, who makes this village a warmer place.`, `A little appreciation for ${t.first} the ${t.job}. Some kindness deserves to be written down.`, `If you see ${t.first} today, say thank you. You know why. (And if you don't, ask!)`]
   };
   const greeting = kind === 'board' ? 'Dear Thistlebrook,' : R.pick([`Dear ${t.first},`, `${t.first},`, `To ${t.first},`]);
   const signature = unsigned ? kind === 'love' ? '— a secret admirer' : '— a friend of the ducks' : `— ${v.first}`;

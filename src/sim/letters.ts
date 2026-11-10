@@ -12,7 +12,7 @@ export interface Letter {
 /* Six opportunities per day; missed opportunities never accumulate into a burst. All state is plain save data. */
 export function tickLetters(sim: Sim) {
   if (sim.clock >= sim.nextLetterAt && sim.hour >= 7 && sim.hour < 21) {
-    sim.nextLetterAt = sim.clock + sim.rng.range(150, 230);
+    sim.nextLetterAt = sim.clock + sim.rng.range(220, 340);
     const writers = sim.villagers.filter(v => !v.inside && !v.act?.locked && sim.clock >= v.busyUntil && v.needs.food > 30 && v.needs.energy > 30 && !sim.letterArchive.some(l => l.from === v.id && l.delivered === undefined));
     if (writers.length) write(sim, sim.rng.pick(writers));
   }
