@@ -347,7 +347,7 @@ export class Sim {
     this.leaveSeat(thief);
     // a theft catch is a stern telling-off and the keepsake handed back; fists only for a very hot temper on top of an existing grudge
     const grudge = grievance(this, v, thief.id) > 20 || (v.opinion[thief.id] ?? 0) < -35;
-    const fight = grudge && (v.traits.temper > .75 || thief.traits.temper > .8) && this.canFight(v, thief);
+    const fight = grudge && (v.traits.temper > .62 || thief.traits.temper > .68) && this.canFight(v, thief);
     const k = this.keepsakes.get(thief.act?.loot ?? ''); if (k && k.holder === thief.id) k.holder = k.owner;
     if (fight) this.startFight(v, thief, `${v.first} caught ${thief.first}, and an old grudge turned the scolding into a scuffle`);
     else { this.say(thief, 'Okay, okay! Take it back!', '😰'); thief.emotions.fear = .9; (thief as any)._shame = this.clock + 720; this.say(v, 'Thief!', '💢'); this.log(`${v.first} caught ${thief.first}, took back ${k ? k.name.replace(/^(his|her) /, k.owner === v.id ? 'their ' : '$1 ') : 'what was stolen'} and delivered a telling-off that could be heard two gardens over.`, 7, [v.id, thief.id], 'theft', '🫳'); this.clearPlan(thief); }

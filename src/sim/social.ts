@@ -12,7 +12,7 @@ const ALLIANCE_NAMES = ['the Lantern Pact', 'the Copper Circle', 'the Hearth Gui
 export function op(a: Villager, b: Villager) { return a.opinion[b.id] ?? 0; }
 // --- grievance ledger: wrongs accumulate per pair and fade with time, so confrontations need a real build-up ---
 const GRV_HALF = 1600; /* game-minute half-life: yesterday's slight is half forgotten */
-export const ARGUE_GRIEVANCE = 25, FIGHT_GRIEVANCE = 55;
+export const ARGUE_GRIEVANCE = 16, FIGHT_GRIEVANCE = 24;
 export function grievance(sim: Sim, a: Villager, bId: string): number { const g = (a as any)._grv?.[bId]; return g ? g.v * Math.pow(.5, (sim.clock - g.t) / GRV_HALF) : 0; }
 export function addGrievance(sim: Sim, a: Villager, bId: string, amt: number) { const G = ((a as any)._grv ??= {}); const nv = Math.min(100, grievance(sim, a, bId) + amt); if (nv <= .5) delete G[bId]; else G[bId] = { v: nv, t: sim.clock }; }
 export function bump(sim: Sim, a: Villager, b: Villager, d: number) {
@@ -209,7 +209,7 @@ export function resolveSocial(sim: Sim, v: Villager, t: Villager, a: Action): nu
       }
       // fists only after the full ladder: a fresh prior argument, a deep repeated grudge, hot tempers, no lull, no shame
       const shamed = (x: Villager) => sim.clock < ((x as any)._shame ?? 0);
-      const escalate = prior > 0 && sim.clock - prior < 2880 && grievance(sim, v, t.id) > FIGHT_GRIEVANCE && v.traits.temper > .6 && v.traits.temper + t.traits.temper > 1.15 && v.traits.bravery > .35 && !shamed(v) && !shamed(t) && sim.canFight(v, t) && R.chance(.5);
+      const escalate = prior > 0 && sim.clock - prior < 5760 && grievance(sim, v, t.id) > FIGHT_GRIEVANCE && v.traits.temper > .5 && v.traits.temper + t.traits.temper > .95 && v.traits.bravery > .35 && !shamed(v) && !shamed(t) && sim.canFight(v, t) && R.chance(.5);
       if (escalate) { a.after = () => { sim.startFight(v, t, `An argument between ${v.first} and ${t.first} over ${grudge} boiled over`); }; }
       else { sim.coolOff[pk] = sim.clock + 300 + R.range(0, 150); sim.log(`${v.first} confronted ${t.first} over ${grudge}. Voices were raised.`, 5, [v.id, t.id], 'argue', '💢'); }
       const f = sim.fact('deed', `${v.first} and ${t.first} had a shouting match`, v.id, t.id, -.3, 4, t.id); sim.witness(`${v.first} argued with ${t.first}`, 4, [v.id, t.id], { [v.id]: -.5, [t.id]: -.6, '*': -.1 }, v.x, v.z, f, 12);
