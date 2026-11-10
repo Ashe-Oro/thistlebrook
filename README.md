@@ -1,6 +1,6 @@
 # Thistlebrook: a digital terrarium
 
-A small three.js village life sim in the spirit of Smallville / generative agents, made into a game you watch. Eight villagers with
+A small three.js village life sim in the spirit of Smallville / generative agents, made into a game you watch. Sixteen villagers with
 outfits, traits, goals, needs, keepsakes, memories, plans, crushes, grudges and alliances get on with their lives, and the
 drama comes out of the simulation.
 
@@ -39,7 +39,7 @@ node tools/video.mjs                  # frame-exact director's cut (virtual cloc
 `node tools/perf.mjs [W] [H]` is a headless probe. It reports **real** fps (rAF frames per wall-clock second), JS ms per frame (sim + UI + draw submission), draw calls, triangles and the dynamic render scale at three camera spots. Options: `MOBILE=1` emulates a phone; `Q='&dynres=0'` passes extra URL flags.
 
 **What the governor does (src/main.ts `perf`).**
-- **Villagers:** culled when off-screen. The ink outline is dropped beyond 34 m and real shadows beyond 26 m, where a blob shadow replaces them.
+- **Villagers:** culled when off-screen. Beyond 40 m the 12-material character (12 draw calls) swaps to a one-draw twin with baked vertex colours. The ink outline is dropped beyond 34 m and real shadows beyond 26 m, where a blob shadow replaces them.
 - **Shadow map:** refreshed every other frame (`?shadowEvery=N`).
 - **Dynamic resolution:** the render scale moves between 0.65× (0.5× on software rasterisers) and the device ratio to hold 50–58 fps (`?dynres=0` turns it off).
 - **Software rasterisers** (SwiftShader/llvmpipe, i.e. no GPU): MSAA is off and the shadow map is 1k.
@@ -51,6 +51,7 @@ node tools/video.mjs                  # frame-exact director's cut (virtual cloc
 |---|---|---|---|
 | before (round 1) | 2.8–3.3 fps | 3.7–4.3 | 3.5–4 |
 | after | ~12 fps | ~16–17 | ~12–13 |
+| round 4 (16 villagers + extras) | 10.5 fps, 130 calls | 13.5, 119 calls | 16.4, 45 calls |
 | JS cost per frame (after) | 4.6 ms | 1.7 ms | 2.3 ms |
 | phone emulation 390×844 (after) | 24 fps | 38 | 26 |
 

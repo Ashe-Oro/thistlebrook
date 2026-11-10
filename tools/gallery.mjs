@@ -45,6 +45,8 @@ await run('terrarium.look(-6,-2,62,.55,.85)'); await wait(1500); await shot('08_
 // Dawn paper
 await ffTo(24 + 6.1); await run("terrarium.setSpeed(1); terrarium.setMode('director'); return terrarium.montage(1)"); await wait(2200); await shot('27_dawn_montage'); await run('terrarium.endMontage()');
 await ffTo(24 + 6.3); await run('terrarium.ui().view("paper")'); await wait(900); await shot('09_gazette'); await run('terrarium.ui().closeModal()');
+// Late morning on day 3: the bigger village (16 villagers plus background passers-by, ducks, leisure spots)
+await ffTo(48 + 12.7); await run('terrarium.setSpeed(1); terrarium.look(-8,3,30,.55,.55)'); await wait(3500); await shot('28_town_life');
 // Day 3: relationships have history now
 await ffTo(48 + 13); await run('terrarium.setSpeed(1)');
 const pick = await run('const S=terrarium.sim; const v=S.villagers.find(v=>v.partner)||S.villagers.find(v=>v.crush)||S.villagers[2]; return v.id'); await run(`terrarium.select('${pick}')`); await wait(2500); await shot('10_card_relationships');

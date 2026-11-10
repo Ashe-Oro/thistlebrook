@@ -26,8 +26,8 @@ Tested build: 54eb4c4. These fixes landed on master in round 3.
 | 20 | Romance repeats / mirrored friend lines | Fixed | "Quietly fallen for" is logged once per pair; a repeat is a minor line. No re-crush for 3 days after a confession. Friendship gets one line per pair, upgraded to "both ways" instead of mirrored. |
 | 21 | "over what he did" | Fixed | The fight reason is now the remembered fact ("over how Tom pinched Edgar's book"). |
 | 22 | Apologies to the thief | Fixed | Villagers apologise only when the other person is sore at *them*, and never to whoever holds their keepsake. |
-| 23 | Clipping into stalls | Partly fixed | Work spots that land on a blocked nav cell now snap to the nearest free cell. Avatar-to-avatar overlap at the campfire is unchanged. |
-| 24 | Rain visuals lag / linger | Partly fixed | Rain particles start at intensity 0.12 (was 0.35), so they appear with the chronicle line. Existing streaks still finish falling when a festival clears the sky. |
+| 23 | Clipping into stalls | Fixed (round 4) | Work spots snap to free nav cells. Villagers now separate locally (fixed-step, fixed-order, deterministic): walkers yield to each other and step around talkers, workers and fighters, and conversations open at about 1.1 m. On seed 7, from 08:00 to 18:00, one pair sample came closer than 0.45 m; before this fix there were about 20. |
+| 24 | Rain visuals lag / linger | Fixed (round 4) | Rain density ramps up smoothly. When rain stops, streaks and splashes fade within about 1.2 s and are then hidden; drops fade evenly rather than from one side. The rainbow shot waits for the fade (see 26_rainbow). |
 | 25 | Intro panels ghosting | Fixed | During the intro crane (and the dawn montage) the chronicle, leaderboard, card and dock are hidden. |
 | 26 | Mobile tap targets | Fixed | Top bar, filter and dock buttons are 44–48 px. The one-row dock has short labels (Gift, Rain, Visitor, Fest, Web, Paper, Recap, People). |
 | 27 | Justified Gazette text | Fixed | Left-aligned on mobile, and the sidebar is always left-aligned. |
@@ -41,3 +41,13 @@ Tested build: 54eb4c4. These fixes landed on master in round 3.
 - **Gossip share:** gossip is now about 24–26% of events (seed 7, 3 days), down from about 30%. The cooldown went from 100 to 170 minutes and the score was scaled by 0.7. More thefts happen in daylight, and confrontations come sooner.
 - **Determinism:** real time uses the same fixed 1/30 s step as `fastForward`. Two concurrent runs of seed 7 at different frame rates produced identical events. `fastForward(min)` uses fine steps by default; `fastForward(min, true)` keeps the old coarse stepping.
 - **Click hint:** a first-visit "Click a villager to read their mind" hint. It goes away on the first selection or after 45 s.
+
+## Round 4
+
+- **Camera framing (Fable):** the dawn montage is now a real flashback. Each cut restages up to 3 actors at the recorded spot, in a pose that fits the event, at render level only. Bystanders fade out. One shared `frameShot` helper serves beats, the montage and director care. It fits the subjects in the frustum, checks line of sight from each head against cached solid occluders only, and rejects cameras with avatars in the foreground, cameras inside or hugging walls, and walls that fill an edge of the frame.
+- **Cinematics:** UI panels hide during beats, the montage and the intro (`body.cinematic`).
+- **Codex critique items:** `fastForward(0)` no longer ticks. No beats, montage, paper or rainbow fire during fast-forward. When no path exists, villagers go to the closest reachable cell and the action aborts (no arrival effects) instead of walking through walls. `nav.lineFree` is now an exact grid traversal, which fixed the stuck "enter" loops caused by smoothed paths clipping blocked corners. Old 12-villager saves migrate by id.
+- **Performance:** villagers more than 40 m from the camera swap their 12-material character for a single-draw twin with baked vertex colours. Ducks and ripple rings are instanced. Inactive rain and fx are hidden. Distant birds update less often.
+- **Bigger village:** 4 new villagers (16 in total), plus about 8 background passers-by, festival visitors, washing lines and a cat in `src/world/extras.ts`. These are cosmetic only and use their own RNG.
+- **Setting interactions:** 8 leisure activities: feeding the ducks, fishing off the dock at dawn, chats at the well, people-watching from benches, sketching, tending flowers, the campfire at night, stargazing, and sheltering under the tavern awning in the rain.
+
