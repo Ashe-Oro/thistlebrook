@@ -95,10 +95,19 @@ export class Sim {
   breakUp(a: Villager, b: Villager) { a.partner = null; b.partner = null; if (a.crush === b.id) a.crush = null; this.couples = this.couples.filter(c => !(c.includes(a.id) && c.includes(b.id))); a.heartbreak = b.heartbreak = this.clock + 1440; }
 
   // ---- movement -------------------------------------------------------------------------------
-  goTo(v: Villager, x: number, z: number) { v.path = this.world.nav.findPath(v.x, v.z, x, z) ?? [[x, z]]; v.pathI = 0; }
+  goTo(v: Villager, x: number, z: number) {
+    const nav = this.world.nav;
+    // Recover a blocked start before following any route; never walk out through a wall.
+    if (!nav.isFree(v.x, v.z)) { const [sx, sz] = nav.nearestFree(v.x, v.z, Math.max(nav.w, nav.h)); if (nav.isFree(sx, sz)) { v.x = sx; v.z = sz; } }
+    v.path = nav.findPath(v.x, v.z, x, z);
+    if (!v.path) { const [tx, tz] = nav.nearestFree(x, z, Math.max(nav.w, nav.h)); v.path = nav.findPath(v.x, v.z, tx, tz) ?? nav.findPath(v.x, v.z, tx, tz, true); }
+    v.pathI = 0; if (!v.path) { v.replan = true; v.anim = 'idle'; }
+  }
   stepMove(v: Villager, dt: number, speed: number) {
     if (!v.path) return true; const p = v.path[v.pathI]; if (!p) { v.path = null; return true; }
     const dx = p[0] - v.x, dz = p[1] - v.z, d = Math.hypot(dx, dz), st = speed * dt;
+    const nav = this.world.nav, nx = d <= st ? p[0] : v.x + dx / d * st, nz = d <= st ? p[1] : v.z + dz / d * st;
+    if (!nav.lineFree(v.x, v.z, nx, nz)) { v.path = null; v.replan = true; v.anim = 'idle'; return true; }
     if (d <= st) { v.x = p[0]; v.z = p[1]; v.pathI++; if (v.pathI >= v.path.length) { v.path = null; return true; } }
     else { v.x += dx / d * st; v.z += dz / d * st; v.heading = Math.atan2(dx, dz); }
     return false;
@@ -120,16 +129,24 @@ export class Sim {
     this.separate(dt);
     if (Math.floor(this.clock / 60) !== Math.floor((this.clock - gdt) / 60)) this.snapshot();
   }
-  // light local avoidance so people standing around don't merge into each other
+  // Fixed-step, fixed-order avoidance; social and fight choreography owns its positions.
   separate(dt: number) {
-    const vs = this.villagers, R = .62;
+    const vs = this.villagers, nav = this.world.nav, R = .55;
+    const eligible = (v: Villager) => !v.inside && !v.seat && v.act?.type !== 'fight' && v.anim !== 'fight' && v.anim !== 'talk' && this.clock >= v.busyUntil && !v.act?._met;
+    const shift = (v: Villager, dx: number, dz: number) => { if (nav.lineFree(v.x, v.z, v.x + dx, v.z + dz)) { v.x += dx; v.z += dz; } };
     for (let i = 0; i < vs.length; i++) for (let j = i + 1; j < vs.length; j++) {
-      const a = vs[i], b = vs[j]; if (a.inside || b.inside || a.seat || b.seat) continue;
-      const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz); if (d >= R) continue;
-      const push = Math.min((R - d) * .5, dt * 1.5), nx = d > 1e-3 ? dx / d : 1, nz = d > 1e-3 ? dz / d : 0;
-      const am = a.path ? .3 : 1, bm = b.path ? .3 : 1;
-      if (this.world.nav.isFree(a.x - nx * push * am, a.z - nz * push * am)) { a.x -= nx * push * am; a.z -= nz * push * am; }
-      if (this.world.nav.isFree(b.x + nx * push * bm, b.z + nz * push * bm)) { b.x += nx * push * bm; b.z += nz * push * bm; }
+      const a = vs[i], b = vs[j]; if (!eligible(a) || !eligible(b)) continue;
+      const dx = b.x - a.x, dz = b.z - a.z; if (Math.abs(dx) > 1.1 || Math.abs(dz) > 1.1) continue;
+      const d = Math.hypot(dx, dz), nx = d > 1e-3 ? dx / d : 1, nz = d > 1e-3 ? dz / d : 0;
+      if (d < R) { const push = Math.min((R - d) * .5, dt * 1.5); shift(a, -nx * push, -nz * push); shift(b, nx * push, nz * push); }
+      // Both walkers keep right, yielding opposite world-space offsets in a head-on approach.
+      if (d < 1.1 && a.path && b.path) {
+        const ap = a.path[a.pathI], bp = b.path[b.pathI]; if (!ap || !bp) continue;
+        const ax = ap[0] - a.x, az = ap[1] - a.z, bx = bp[0] - b.x, bz = bp[1] - b.z, al = Math.hypot(ax, az), bl = Math.hypot(bx, bz);
+        if (al > .01 && bl > .01 && (ax * bx + az * bz) / (al * bl) < -.7 && ax * nx + az * nz > 0 && bx * nx + bz * nz < 0) {
+          const side = dt * .65; shift(a, az / al * side, -ax / al * side); shift(b, bz / bl * side, -bx / bl * side);
+        }
+      }
     }
   }
   snapshot() { this.history.push({ t: this.clock, power: Object.fromEntries(this.villagers.map(v => [v.id, this.power(v)])), pop: Object.fromEntries(this.villagers.map(v => [v.id, Math.round(this.popularity(v))])) }); if (this.history.length > 24 * 14) this.history.shift(); }
