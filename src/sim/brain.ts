@@ -7,6 +7,8 @@ import type { Anim } from '../agents/avatar';
 import type { Sim } from './sim';
 import type { Villager, Action, PlanBlock } from './types';
 import { op, pickGossip, pendingInvite, possess } from './social';
+import { proposalReady } from './gatherings';
+import { calendarFor } from './calendar';
 import { fmtTime } from '../core/util';
 import { JOB_INFO } from '../data/villagers';
 
@@ -24,7 +26,19 @@ export class UtilityBrain implements Brain {
     const job = JOB_INFO[v.job]; const P: PlanBlock[] = [];
     const add = (from: number, to: number, act: PlanBlock['act'], note: string, where?: string) => P.push({ from: day0 + H(from), to: day0 + H(to), act, note, where });
     const crush = v.crush ? sim.byId.get(v.crush) : null;
+    const rest = calendarFor(sim.day).tags.includes('rest'); // Sunday: tools stay on their hooks
     if (v.job === 'tavernkeeper') { add(0, 9, 'sleep', 'sleep in'); add(9, 10, 'breakfast', 'breakfast'); add(10, 13, 'work', 'brew ale in the cellar', 'tavern'); add(13, 14, 'lunch', 'lunch & gossip', 'plaza'); add(14, 16.5, 'social', 'make the rounds, hear the news'); add(16.5, 24, 'evening', 'pour drinks at the Tipsy Thistle', 'tavern'); add(24, 33, 'sleep', 'sleep'); }
+    else if (rest) {
+      add(0, wake, 'sleep', 'sleep'); add(wake, wake + .8, 'breakfast', 'a slow rest-day breakfast');
+      if (T.diligence > .7) add(wake + .8, 10.5, 'work', `a little quiet tending (${job.note})`, job.workplace); // the diligent can't quite sit still
+      else add(wake + .8, 10.5, 'stroll', 'a lazy rest-day morning');
+      add(10.5, 12, 'social', 'calling on friends');
+      add(12, 13, 'lunch', 'a long rest-day lunch', 'plaza');
+      add(13, 15.5, 'stroll', crush && !v.partner ? `find a moment with ${crush.first}` : v.partner ? `a rest-day walk with ${sim.byId.get(v.partner)!.first}` : 'a rest-day wander');
+      add(15.5, 18, 'social', 'visiting the neighbours');
+      add(18, bed, 'evening', T.sociability > .55 ? 'evening at the tavern' : 'quiet evening', T.sociability > .55 ? 'tavern' : 'home');
+      add(bed, 24, 'sleep', 'sleep');
+    }
     else {
       add(0, wake, 'sleep', 'sleep'); add(wake, wake + .8, 'breakfast', 'breakfast at home');
       add(wake + .8, 12, 'work', job.note, job.workplace);
@@ -37,12 +51,13 @@ export class UtilityBrain implements Brain {
     add(24, 30, 'sleep', 'sleep');
     // Hosting: sociable, liked- or power-seeking villagers throw gatherings; invitations then spread by word of mouth.
     const tonight = sim.parties.find(p => p.at > day0 - 1440 + H(12) && p.at < day0 + 1440);
-    if (!tonight && sim.hour < 12 && (v.goal === 'liked' || v.goal === 'power' || v.goal === 'love' || T.sociability > .7) && R.chance(.22 + T.sociability * .25) && sim.parties.filter(p => p.at > day0).length === 0) {
+    if (!tonight && sim.hour < 12 && (v.goal === 'liked' || v.goal === 'power' || v.goal === 'love' || T.sociability > .7) && R.chance(.22 + T.sociability * .25) && sim.parties.filter(p => p.at > day0 && p.at < day0 + 1440).length === 0) {
       const opts: [string, string][] = [['a campfire singalong', 'campfire'], ['a storytelling night', 'campfire'], ['a barn dance', 'plaza'], ['a round of drinks', 'tavern'], ['a lantern supper', 'campfire']];
       const [title, place] = R.pick(opts); sim.scheduleParty(v, title, place, day0 + H(19.5));
     }
     for (const p of sim.parties) if (!p.done && p.at < day0 + 1440 && p.until > sim.clock && v.mem.known.has(p.id) && (op(v, sim.byId.get(p.host)!) > -25 || p.host === v.id)) {
-      P.push({ from: p.at, to: p.until, act: 'event', note: p.host === v.id ? `host ${p.title}` : `go to ${sim.byId.get(p.host)!.first}'s ${p.title}`, eventId: p.id, where: p.place });
+      // calendar fixtures and weddings carry their own name ("go to the town meeting", not "go to Edgar's the town meeting")
+      P.push({ from: p.at, to: p.until, act: 'event', note: p.host === v.id && !p.kindTag ? `host ${p.title}` : p.kindTag ? `go to ${p.title}` : `go to ${sim.byId.get(p.host)!.first}'s ${p.title}`, eventId: p.id, where: p.place });
     }
     P.sort((a, b) => a.from - b.from); v.plan = P; v.planDay = sim.day;
     v.intent = this.intent(v, sim);
@@ -291,6 +306,7 @@ export class UtilityBrain implements Brain {
       // a missing keepsake: confront whoever you *believe* took it (memory may name them, or it's just a hunch)
       if (lost && sim.clock - ((v as any)._accused?.[u.id] ?? -1e9) > 1440 && !v.family.includes(u.id)) { const known = [...v.mem.known.values()].some(f => f.actor === u.id && f.target === v.id && /took|pinched/.test(f.text)); const suspect = known || sim.villagers.filter(x => x !== v && !v.family.includes(x.id)).sort((a, b) => op(v, a) - op(v, b))[0] === u; if (suspect) add(.55 + T.temper * .3 + T.bravery * .2 + (known ? .4 : 0), A('social', `confronting ${u.first} about the missing ${mine.name.replace(/^(his|her) /, '')}`, { kind: 'accuse', target: u.id })); }
       // romance
+      if (v.partner === u.id && proposalReady(sim, v, u)) add(1.1 + T.bravery * .35 + (v.goal === 'love' ? .3 : 0), A('social', `about to ask ${u.first} something important`, { kind: 'propose', target: u.id, carry: 'gift' }));
       if (v.crush === u.id && canRomance(v, u) && sim.clock > v.heartbreak) {
         if (!v.partner && since > 180 && (!u.partner || T.honesty < .4)) add(.35 + (v.goal === 'love' ? .3 : 0) + T.sociability * .25, A('social', `flirting with ${u.first}`, { kind: 'flirt', target: u.id }));
         if (!v.partner && !u.partner && o > 65 && sim.clock - ((v as any)._confessed?.[u.id] ?? -1e9) > 2880 && sim.hour > 16) add(.55 + T.bravery * .45 + (v.goal === 'love' ? .3 : 0) + (u.act?.type === 'attend' || u.act?.type === 'sit' ? .25 : 0), A('social', `working up the nerve to talk to ${u.first}`, { kind: 'confess', target: u.id }));
@@ -338,7 +354,7 @@ function thoughtFor(a: Action, v: Villager, u: Villager) {
     case 'chat': return v.partner === u.id ? `I missed ${u.first}.` : `I wonder how ${u.first} is doing.`; case 'invite': return `${u.first} would love tonight's gathering.`; case 'gossip': return `${u.first} needs to hear this...`;
     case 'gift': return v.crush === u.id ? `Will ${u.first} like it? What if ${u.first} doesn't like it?` : `A little something for ${u.first}${a.why ? a.why : ''}.`; case 'ally': return `${u.first} and I could do great things together.`; case 'reconcile': return `I should make things right with ${u.first}.`;
     case 'argue': return (v.opinion[u.id] ?? 0) <= -10 ? `I've had enough of ${u.first}.` : `Who does ${u.first} think ${pr(u).sub} is, anyway?`; // matches the Relationships tab: a grudge only below Neutral
-    case 'steal': return `${u.first} won't miss it. Probably.`; case 'flirt': return `Be cool. Be cool. Hi, ${u.first}!`;
+    case 'steal': return `${u.first} won't miss it. Probably.`; case 'flirt': return `Be cool. Be cool. Hi, ${u.first}!`; case 'propose': return `The ring is in my pocket. Deep breath. ${u.first}...`;
     case 'confess': return `It's now or never. ${u.first}, I...`; case 'accuse': return `I know ${u.first} has it.`; case 'rumour': return `If ${u.first} only knew what I know...`; case 'deliver': return `Special delivery for ${u.first}.`;
   }
   return '...';

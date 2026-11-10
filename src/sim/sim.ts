@@ -3,13 +3,20 @@ import { KEEPSAKES, type VillagerDef } from '../data/villagers';
 import { World, type Place, type Seat } from '../world/world';
 import { MemoryStream, type Fact } from '../agents/memory';
 import { RNG, clamp, hourOf, dayOf, fmtTime } from '../core/util';
-import type { Villager, Action, SimEvent, Alliance, Keepsake } from './types';
+import type { Villager, Action, SimEvent, Alliance, Keepsake, Gathering, Pet, Decree } from './types';
 import type { Brain } from './brain';
 import { resolveSocial, maybeOverhear } from './social';
+import { tickGatherings } from './gatherings';
+import { say } from './lines';
 
 export const MIN_PER_SEC = 2; // game minutes per world second (1x: one day = 12 real minutes)
 
-export interface Party { id: string; host: string; title: string; place: string; at: number; until: number; invited: Set<string>; attendees: Set<string>; announced: boolean; done: boolean; fact: Fact; }
+export interface Party {
+  id: string; host: string; title: string; place: string; at: number; until: number; invited: Set<string>; attendees: Set<string>; announced: boolean; done: boolean; fact: Fact;
+  // gatherings.ts choreography (all plain data): what flavour of do this is, a point everyone faces,
+  // a hush for vows/speeches, a burst of cheering, and whether the party has turned into a dance
+  kindTag?: string; wedding?: [string, string]; focus?: [number, number]; quietUntil?: number; cheerUntil?: number; dance?: boolean;
+}
 export interface GiftDrop { x: number; z: number; obj: THREE.Object3D; claimedBy: string | null; t: number; }
 
 // Stateless cosmetic samples: never advance the simulation RNG.
@@ -27,6 +34,11 @@ export class Sim {
   alliances: Alliance[] = []; parties: Party[] = []; rain = 0; rainUntil = 0; nextWeather = 60 * 30; festivalUntil = 0; visitorUntil = 0; gifts: GiftDrop[] = [];
   listeners: { [k: string]: ((...a: any[]) => void)[] } = {}; dayStats: Record<number, SimEvent[]> = {}; achievementsGlobal = new Set<string>();
   history: { t: number; power: Record<string, number>; pop: Record<string, number> }[] = []; lastDay = 0; dizzy = new Map<string, number>(); brain!: Brain; factN = 1;
+  // villager-initiated events (gatherings.ts) — plain data so the save round-trips it all
+  gatherings: Gathering[] = []; gid = 1; calDay = 0; gatherDay: Record<string, number> = {}; decrees: Decree[] = [];
+  coupledAt: Record<string, number> = {}; vows: Record<string, number> = {}; proposedAt: Record<string, number> = {};
+  pet: Pet = { name: 'Biscuit', x: -9, z: 8, state: 'home', since: 0, spot: null };
+  festivalTheme: string | null = null; festivalShown = false;
   constructor(public world: World) {}
   on(k: string, f: (...a: any[]) => void) { (this.listeners[k] ??= []).push(f); }
   emit(k: string, ...a: any[]) { for (const f of this.listeners[k] ?? []) f(...a); }
@@ -99,8 +111,8 @@ export class Sim {
   popularity(v: Villager) { const o = this.villagers.filter(x => x !== v).map(x => x.opinion[v.id] ?? 0); return o.reduce((a, b) => a + b, 0) / Math.max(1, o.length); }
   power(v: Villager) { const al = v.alliance ? this.alliances.find(a => a.id === v.alliance)!.members.length - 1 : 0; const fans = this.villagers.filter(x => x !== v && (x.opinion[v.id] ?? 0) > 35).length; const feared = this.villagers.filter(x => x !== v && (x.opinion[v.id] ?? 0) < -40).length; return Math.round(al * 12 + fans * 8 + feared * 3 + v.stats.fights * 2 + v.stats.hosted * 3 + (v.partner ? 4 : 0)); }
   mischief(v: Villager) { return v.stats.stolen * 4 + v.stats.rumours * 3 + v.stats.fights * 3 + this.villagers.filter(x => x !== v && (x.opinion[v.id] ?? 0) < -40).length * 2; }
-  couple(a: Villager, b: Villager) { a.partner = b.id; b.partner = a.id; a.crush = b.id; b.crush = a.id; this.couples.push([a.id, b.id]); }
-  breakUp(a: Villager, b: Villager) { a.partner = null; b.partner = null; if (a.crush === b.id) a.crush = null; this.couples = this.couples.filter(c => !(c.includes(a.id) && c.includes(b.id))); a.heartbreak = b.heartbreak = this.clock + 1440; }
+  couple(a: Villager, b: Villager) { a.partner = b.id; b.partner = a.id; a.crush = b.id; b.crush = a.id; this.couples.push([a.id, b.id]); this.coupledAt[[a.id, b.id].sort().join('~')] = this.clock; }
+  breakUp(a: Villager, b: Villager) { a.partner = null; b.partner = null; if (a.crush === b.id) a.crush = null; this.couples = this.couples.filter(c => !(c.includes(a.id) && c.includes(b.id))); a.heartbreak = b.heartbreak = this.clock + 1440; const k = [a.id, b.id].sort().join('~'); delete this.coupledAt[k]; delete this.vows[k]; delete this.proposedAt[k]; }
 
   // ---- movement -------------------------------------------------------------------------------
   goTo(v: Villager, x: number, z: number) {
@@ -140,6 +152,7 @@ export class Sim {
     const d = this.day; if (d !== this.lastDay && this.hour >= 6) { if (this.lastDay) { this.emit('dawn', this.lastDay); } this.lastDay = d; for (const v of this.villagers) v.replan = true; this.snapshot(); }
     this.weather(gdt); this.world.simTick(gdt, this.clock); this.world.crowd = this.villagers;
     for (const p of this.parties) this.partyTick(p);
+    tickGatherings(this);
     for (const g of this.gifts) g.t += gdt;
     for (const v of this.villagers) this.tickVillager(v, dt, gdt);
     this.separate(dt);
@@ -354,7 +367,9 @@ export class Sim {
   partyTick(p: Party) {
     if (p.done) return;
     if (!p.announced && this.clock >= p.at - 10) { p.announced = true; }
-    if (this.clock >= p.at && this.clock < p.until) {
+    // fixed-time fixtures (weddings, meetings, market, festivals) draw people in early so the walk
+    // across the village is done before the ceremony starts; spontaneous parties start on the dot
+    if (this.clock >= p.at - (p.kindTag ? 25 : 0) && this.clock < p.until) {
       for (const id of p.invited) { const v = this.byId.get(id)!; if (p.attendees.has(id) || v.act?.type === 'attend' || v.act?.locked) continue;
         if (!(p as any).decided) (p as any).decided = new Map<string, boolean>(); const dec = (p as any).decided as Map<string, boolean>;
         if (!dec.has(id)) dec.set(id, id === p.host || this.festivalUntil > this.clock || this.rng.chance(.35 + v.traits.sociability * .45 + (v.opinion[p.host] ?? 0) / 120 - (v.needs.energy < 25 ? .3 : 0)));
@@ -364,9 +379,9 @@ export class Sim {
       p.done = true; const host = this.byId.get(p.host)!; const n = p.attendees.size;
       for (const id of p.attendees) { const v = this.byId.get(id)!; if (v !== host) { v.opinion[host.id] = Math.min(100, (v.opinion[host.id] ?? 0) + 6); } v.needs.social = 100; v.stats.parties++; if (v.act?.type === 'attend') v.act = null; this.leaveSeat(v); }
       if (n >= 2) host.stats.hosted++;
-      if (n >= 2) { this.log(`${p.title} wound down — ${n} villagers came${n >= 5 ? '. The whole village is talking about it' : ''}.`, n >= 5 ? 7 : 5, [host.id, ...p.attendees], 'party', '🎉', this.place(p.place).x, this.place(p.place).z); if (n >= 5) this.achieve(host, 'party', 'Life of the Party', `${host.first}'s gathering drew ${n} guests`); }
-      else this.log(`Hardly anyone showed up to ${p.title}. ${host.first} looked crestfallen.`, 5, [host.id], 'party', '😞');
-      if (n < 2) { host.emotions.sadness = .8; host.mem.add(this.clock, `Nobody came to my ${p.title}`, 7, [host.id], -.8); }
+      if (n >= 2) { this.log(`${p.title} wound down — ${n} villagers came${n >= 5 ? '. The whole village is talking about it' : ''}.`, n >= 5 ? 7 : 5, [host.id, ...p.attendees], 'party', '🎉', this.place(p.place).x, this.place(p.place).z); if (n >= 5 && !p.kindTag) this.achieve(host, 'party', 'Life of the Party', `${host.first}'s gathering drew ${n} guests`); }
+      else if (!p.kindTag) this.log(`Hardly anyone showed up to ${p.title}. ${host.first} looked crestfallen.`, 5, [host.id], 'party', '😞');
+      if (n < 2 && !p.kindTag) { host.emotions.sadness = .8; host.mem.add(this.clock, `Nobody came to my ${p.title}`, 7, [host.id], -.8); } // a sparse calendar fixture wounds nobody
     }
   }
   ringN = 0;
@@ -379,11 +394,13 @@ export class Sim {
       if (!a.seat && !a.spot) { a.seat = p.place === 'campfire' ? this.takeSeat(v, 'campfire') : (p.place === 'plaza' ? this.takeSeat(v, 'bench') : null); if (!a.seat) { const ang = this.rng.range(0, 6.28), r = p.place === 'campfire' ? 3.4 : 2.2 + this.rng.range(0, 1.5); a.spot = [pl.cx + Math.sin(ang) * r, pl.cz + 2.5 + Math.cos(ang) * r]; if (p.place === 'tavern') a.spot = [pl.x + this.rng.range(-3.5, 3.5), pl.z + this.rng.range(.5, 3)]; a.spot = this.world.nav.nearestFree(a.spot[0], a.spot[1]); } }
       const [x, z] = a.seat ? [a.seat.x + Math.sin(a.seat.rot) * .55, a.seat.z + Math.cos(a.seat.rot) * .55] : a.spot;
       if (!walk(x, z, .35)) return false; if (a._fail) { this.leaveSeat(v); return true; } a._at = 1; p.attendees.add(v.id); if (a.seat) { v.x = a.seat.x; v.z = a.seat.z; v.heading = a.seat.rot; }
-      if (v.id !== p.host) { const host = this.byId.get(p.host)!; this.say(v, this.rng.pick([`Thanks for having me, ${host.first}!`, 'What a night!', 'Save me a seat!', 'I brought my appetite.']), this.rng.pick(['🎉', '🍻', '😄'])); }
+      if (p.kindTag === 'market') this.say(v, say(this, v, 'marketBanter'), '🧺');
+      else if (p.kindTag === 'meeting') { if (this.rng.chance(.4)) this.say(v, say(this, v, 'meetingAye'), '🏛️'); }
+      else if (v.id !== p.host) { const host = this.byId.get(p.host)!; this.say(v, p.wedding ? this.rng.pick(['What a lovely day for it!', 'I always cry at weddings.', 'Look at the pair of them!']) : this.rng.pick([`Thanks for having me, ${host.first}!`, 'What a night!', 'Save me a seat!', 'I brought my appetite.']), this.rng.pick(['🎉', '🍻', '😄'])); }
       else this.say(v, this.rng.pick(['Welcome, welcome!', 'Everyone grab a seat!', 'Let the fun begin!']), '🎉');
     }
     const host = this.byId.get(p.host)!;
-    if (!a.seat) { v.heading = Math.atan2(pl.cx - v.x, (p.place === 'campfire' ? pl.cz : pl.cz + 4) - v.z); }
+    if (!a.seat) { const f = p.focus; v.heading = Math.atan2((f ? f[0] : pl.cx) - v.x, (f ? f[1] : p.place === 'campfire' ? pl.cz : pl.cz + 4) - v.z); }
     const ringed = a.ring !== undefined && this.festivalUntil > this.clock;
     if (ringed) { // promenade round the ring for a while, then stop and dance facing in
       const promenade = Math.floor(a.t / 10) % 2 === 0, ang = a.ring * .79 + (a.ringT = (a.ringT ?? 0) + (promenade ? dt * .07 : 0)), nx = pl.cx + Math.cos(ang) * 3.1, nz = pl.cz + Math.sin(ang) * 3.1;
@@ -391,21 +408,26 @@ export class Sim {
       if (!promenade) v.heading = Math.atan2(pl.cx - v.x, pl.cz - v.z); v.anim = promenade ? 'walk' : (Math.floor(a.t / 5) % 3 === 2 ? 'cheer' : 'dance');
       if (!promenade && this.rng.chance(dt * .01)) this.world.fx.sparkle(v.x, 1.6, v.z, [1, .85, .45], 4);
     }
-    const k = Math.floor(a.t / 12) % 4; if (!ringed) v.anim = a.seat ? (k === 2 ? 'talk' : 'sit') : (this.festivalUntil > this.clock || p.title.includes('dance') ? (k % 2 ? 'dance' : 'cheer') : (k === 1 ? 'talk' : k === 3 ? 'drink' : 'idle'));
+    const k = Math.floor(a.t / 12) % 4; if (!ringed) v.anim = a.seat ? (k === 2 ? 'talk' : 'sit') : (this.festivalUntil > this.clock || p.title.includes('dance') || p.dance ? (k % 2 ? 'dance' : 'cheer') : (k === 1 ? 'talk' : k === 3 ? 'drink' : 'idle'));
+    // gatherings choreography: a hush during vows and speeches, a burst of cheering on the big moment
+    const quiet = (p.quietUntil ?? 0) > this.clock;
+    if (!a.seat && quiet) v.anim = Math.floor(a.t / 9) % 3 === 1 ? 'talk' : 'idle';
+    if (!a.seat && (p.cheerUntil ?? 0) > this.clock) v.anim = 'cheer';
     if (a.seat) { v.x = a.seat.x; v.z = a.seat.z; v.heading = a.seat.rot; }
     v.needs.social = Math.min(100, v.needs.social + dt * 2); v.emotions.joy = Math.min(1, v.emotions.joy + dt * .02);
-    if (this.rng.next() < dt * .05) { const others = [...p.attendees].filter(x => x !== v.id); if (others.length) { const o = this.byId.get(this.rng.pick(others))!; v.opinion[o.id] = Math.min(100, (v.opinion[o.id] ?? 0) + 1); this.say(v, this.rng.pick(['Ha! Good one.', `Cheers, ${o.first}!`, 'Remember last spring?', 'More cider!', 'La la laaa~', ...v.def.catchphrases]), this.rng.pick(['😄', '🍻', '🎶', '😂'])); } }
+    if (!quiet && this.rng.next() < dt * .05) { const others = [...p.attendees].filter(x => x !== v.id); if (others.length) { const o = this.byId.get(this.rng.pick(others))!; v.opinion[o.id] = Math.min(100, (v.opinion[o.id] ?? 0) + 1); this.say(v, p.kindTag === 'market' ? say(this, v, 'marketBanter') : this.rng.pick(['Ha! Good one.', `Cheers, ${o.first}!`, 'Remember last spring?', 'More cider!', 'La la laaa~', ...v.def.catchphrases]), this.rng.pick(['😄', '🍻', '🎶', '😂'])); } }
     if (v.id === host.id && !a._fed && a.t > 30) { a._fed = 1; for (const id of p.attendees) this.byId.get(id)!.needs.food = Math.min(100, this.byId.get(id)!.needs.food + 35); this.say(host, this.rng.pick(['Food for everyone!', 'Drinks are on me!', 'Dig in, friends!']), '🍲'); }
     // sweethearts sit close; crushes steal glances (romance happens at parties)
     if (v.crush && !a._glance && a.t > 20 && p.attendees.has(v.crush) && this.rng.next() < dt * .02) { a._glance = 1; const c = this.byId.get(v.crush)!; v.emotions.love = Math.min(1, v.emotions.love + .5); this.icon(v, v.partner === c.id ? '💞' : '💗'); if (v.partner !== c.id) { v.opinion[c.id] = Math.min(100, (v.opinion[c.id] ?? 0) + 3); this.say(v, this.rng.pick([`${c.first} looks lovely tonight...`, 'Is it warm in here?', '*sigh*']), '💗', 2.6); } }
     return false;
   }
-  scheduleParty(host: Villager, title: string, place: string, at: number, dur = 150) {
+  // opts: calendar fixtures and gatherings pass their own announcement line (or none), chronicle kind/icon and a kindTag
+  scheduleParty(host: Villager, title: string, place: string, at: number, dur = 150, opts: { announce?: string | false; kind?: string; icon?: string; tag?: string } = {}) {
     const f = this.fact('invite', `${host.first} is hosting ${title} at ${this.place(place).name} at ${fmtTime(at)}`, host.id, host.id, .3, 5);
     f.event = { host: host.id, place, at, title };
-    const p: Party = { id: f.id, host: host.id, title, place, at, until: at + dur, invited: new Set([host.id]), attendees: new Set(), announced: false, done: false, fact: f };
-    this.parties.push(p); host.mem.learn(f); host.mem.add(this.clock, `I decided to host ${title} at ${this.place(place).name} tonight`, 6, [host.id], .5, 'plan', f.id);
-    this.log(`${host.first} is planning ${title} at ${this.place(place).name} tonight and has started spreading the word.`, 5, [host.id], 'party', '💌');
+    const p: Party = { id: f.id, host: host.id, title, place, at, until: at + dur, invited: new Set([host.id]), attendees: new Set(), announced: false, done: false, fact: f, kindTag: opts.tag };
+    this.parties.push(p); host.mem.learn(f); host.mem.add(this.clock, `I decided to host ${title} at ${this.place(place).name}${opts.announce === undefined ? ' tonight' : ''}`, 6, [host.id], .5, 'plan', f.id);
+    if (opts.announce !== false) this.log(opts.announce ?? `${host.first} is planning ${title} at ${this.place(place).name} tonight and has started spreading the word.`, 5, [host.id], opts.kind ?? 'party', opts.icon ?? '💌');
     return p;
   }
   learnFact(v: Villager, f: Fact, from?: Villager) {

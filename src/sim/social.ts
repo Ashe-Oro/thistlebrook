@@ -4,6 +4,7 @@ import { JOB_INFO } from '../data/villagers';
 import type { Fact } from '../agents/memory';
 import { clamp } from '../core/util';
 import { say, smalltalk, pr } from './lines';
+import { planWedding, recordProposal } from './gatherings';
 
 const COLORS = ['#e05a47', '#3f7fd6', '#e0b13a', '#8a4fc9', '#2fa37a', '#e57fb0'];
 const ALLIANCE_NAMES = ['the Lantern Pact', 'the Copper Circle', 'the Hearth Guild', 'the Oak Accord', 'the Thistle League', 'the Ember Society'];
@@ -92,6 +93,32 @@ export function resolveSocial(sim: Sim, v: Villager, t: Villager, a: Action): nu
       const f = sim.fact('deed', `${v.first} confessed to ${t.first} and got turned down`, v.id, v.id, -.2, 7, t.id); t.mem.learn(f);
       a.after = () => { v.queue.unshift({ type: 'enter', place: v.def.home, dur: 60, t: 0, label: 'moping at home' }); };
       return convo(sim, [[v, say(sim, v, 'confess', { t: t.first }), '💗'], [t, say(sim, t, 'confessNo'), '😟'], [v, say(sim, v, 'confessHeartbroken', { t: t.first }), '💔']], 5);
+    }
+    case 'propose': { // a long-standing sweetheart pops the question (gatherings.ts gates how often)
+      recordProposal(sim, v, t); soc(v, 25); soc(t, 25);
+      const yes = op(t, v) >= 60 && !(op(t, v) < 78 && R.chance(.1 + t.traits.ambition * .08)); // rarely, cold feet
+      const lines: Line[] = [[v, say(sim, v, 'propose', { t: t.first }), '💍']];
+      if (yes) {
+        v.emotions.love = t.emotions.love = 1; v.emotions.joy = t.emotions.joy = 1; sim.icon(v, '💍'); sim.icon(t, '💞');
+        sim.world.fx.sparkle(t.x, 1.8, t.z, [1, .75, .5], 30);
+        bump(sim, v, t, 10); bump(sim, t, v, 12);
+        lines.push([t, say(sim, t, 'proposeYes'), '🥹'], [v, 'You and me. Always.', '💞']);
+        sim.log(`${v.first} dropped to one knee and asked ${t.first} to marry ${pr(v).obj} — and ${t.first} said YES! Thistlebrook has a wedding coming.`, 8, [v.id, t.id], 'romance', '💍');
+        const f = sim.fact('news', `${v.first} proposed to ${t.first} — a wedding is coming`, v.id, v.id, .5, 8, t.id); (f as any).romance = true;
+        sim.witness(`${v.first} proposed to ${t.first}`, 8, [v.id, t.id], { [v.id]: 1, [t.id]: 1, '*': .3 }, v.x, v.z, f, 16);
+        v.mem.add(sim.clock, `I asked ${t.first} to marry me. ${pr(t).Sub} said yes!`, 9, [t.id], 1, 'feeling');
+        t.mem.add(sim.clock, `${v.first} proposed. I said yes.`, 9, [v.id], 1, 'feeling');
+        sim.achieve(null, `proposal-${[v.id, t.id].sort().join('-')}`, 'The Proposal', `${v.first} asked, ${t.first} said yes`);
+        planWedding(sim, v, t);
+      } else {
+        lines.push([t, say(sim, t, 'proposeNo'), '😟'], [v, say(sim, v, 'confessHeartbroken', { t: t.first }), '💔']);
+        v.emotions.sadness = 1; t.emotions.sadness = .5; bump(sim, v, t, -6); bump(sim, t, v, -3); sim.icon(v, '💔');
+        sim.log(`${v.first} went down on one knee for ${t.first}… who wasn't ready. They walked home in silence, a careful arm's length apart.`, 8, [v.id, t.id], 'romance', '💔');
+        const f = sim.fact('deed', `${v.first} proposed to ${t.first} and was told "not yet"`, v.id, v.id, -.2, 7, t.id); (f as any).romance = true; t.mem.learn(f);
+        v.mem.add(sim.clock, `I asked ${t.first} to marry me. ${pr(t).Sub} said not yet.`, 9, [t.id], -.6, 'feeling');
+        a.after = () => { v.queue.unshift({ type: 'enter', place: v.def.home, dur: 50, t: 0, label: 'staring at the ceiling' }); };
+      }
+      return convo(sim, lines, 5);
     }
     case 'deliver': { // Jen hands over a letter; she may already know what's in it
       const L = a.letter; sim.letters = sim.letters.filter(x => x !== L); const from = sim.byId.get(L.from);

@@ -252,6 +252,62 @@ const LIB: Record<string, Variant[]> = {
     'Ha! Good one.', 'Cheers, {t}!', 'Remember last spring?', 'More cider!', 'La la laaa~', 'Best night in ages, this.',
     'Who brought the good cheese?', ['Dance with me, {t}!', outgoing],
   ],
+  // proposal & wedding
+  propose: [
+    '{t}… will you marry me?', 'I have a question. The big one, {t}.', 'Grow old with me, {t}?',
+    'Marry me, {t}. Here, in Thistlebrook.', ['{t}, marry me. Say yes.', brave],
+    ['I practised this all week… {t}, marry me?', shy], ['My heart decided ages ago, {t}.', G('love')],
+  ],
+  proposeYes: [
+    'Yes! Yes, you wonderful fool!', 'Of course I will.', 'Took you long enough. Yes!',
+    'A hundred times, yes.', ['I—yes. A thousand times.', shy], ['Finally! YES!', outgoing],
+  ],
+  proposeNo: [
+    'Oh… I’m not ready. Not yet.', 'Ask me again some day. Not today.', 'I love you. But not yet.',
+    ['Don’t make me answer that today.', timid], ['I need time. Please.', shy],
+  ],
+  vows: [
+    'I promise you every morning I have.', 'Through rain and harvest, I’m yours.', 'You and me, {t}. Always.',
+    'I vow it before everyone: my heart is yours.', 'Every day, {t}. I choose you.',
+  ],
+  vowsReply: [
+    'And I am yours. Always.', 'Then it’s settled. Forever.', 'I do. With all my heart.', 'Always, {t}. Always.',
+  ],
+  // festival contests
+  contestTaunt: [
+    'Settle it here and now!', 'Winner takes the bragging rights!', 'Try to keep up.', 'Before the whole village, then!',
+    ['You’ll eat those words.', hot], ['May the best of us win.', calm], ['I was born for this.', ambi],
+  ],
+  contestCheer: [
+    'Go on! Go on!', 'Don’t you dare lose!', 'Ha! Did you see that?!', 'A contest! Gather round!', 'My money’s on the angry one!',
+  ],
+  // lost-pet search
+  searchAlarm: [
+    '{pet}! {pet}! Here, boy!', 'Has anyone seen {pet}?!', 'He always comes when I whistle. Always!',
+    '{pet}’s gone — he’s GONE!',
+  ],
+  searchJoin: [
+    'We’ll find him before dark.', 'He can’t have gone far.', 'I’ll check down by the water.',
+    ['Dogs like me. I’ll find him.', kind], ['Probably chasing rabbits again.', calm],
+  ],
+  searchFound: [
+    'There you are, you daft hound!', 'Found him! FOUND HIM!', 'Covered in mud and proud of it.',
+    'Come here, you worry of a dog.',
+  ],
+  // town meeting
+  meetingPitch: [
+    'Order, order! One matter tonight.', 'Neighbours, lend me your ears.', 'We settle this the Thistlebrook way: a vote.',
+    ['Quickly now, some of us have work at dawn.', diligent], ['Listen well — this matters.', G('power')],
+  ],
+  meetingAye: [
+    'Aye!', 'Seconded!', 'Put it to the vote!', 'Get on with it!', 'Hear, hear!',
+    ['I have strong opinions on this.', hot], ['Whatever keeps the peace.', calm],
+  ],
+  // market day (no money changes hands in v1 — it's a social morning at the stalls)
+  marketBanter: [
+    'Smell those apples!', 'The stalls look grand today.', 'Fresh this morning, promise!',
+    'Half the village is out, look.', 'Saved you the best of the basket.', ['I hear all the news at the stalls.', outgoing],
+  ],
   // invitations
   inviteAccept: [ 'I’ll be there!', 'Wouldn’t miss it!', 'Count me in.', 'Save me a seat!', ['Try and stop me!', outgoing] ],
   inviteMaybe: [ 'Maybe I’ll stop by.', 'We’ll see.', 'If I finish up in time.', 'Perhaps, perhaps.', ['I’ll… think about it.', shy] ],

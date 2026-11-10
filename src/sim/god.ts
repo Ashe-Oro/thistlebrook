@@ -50,12 +50,21 @@ export async function spawnTraveller(sim: Sim) {
 export function tickTraveller(sim: Sim) { if (sim.visitorUntil && sim.clock > sim.visitorUntil) { sim.visitorUntil = 0; sim.world.setMerchant(false); sim.world.places.delete('cart'); sim.log('The storyteller packed up her wagon and rolled on, leaving a trail of whispers behind her.', 3, [], 'traveller', '👋', -19, 2); } }
 export type { Villager };
 export async function startFestival(sim: Sim) {
-  if (sim.festivalUntil > sim.clock) return; await sim.world.setFestival(true); sim.festivalUntil = sim.clock + 200;
+  if (sim.festivalUntil > sim.clock) return; await sim.world.setFestival(true); sim.festivalShown = true; sim.festivalUntil = sim.clock + 200;
   const host = [...sim.villagers].sort((a, b) => sim.popularity(b) - sim.popularity(a))[0];
   if (sim.rainUntil > sim.clock) { sim.rainUntil = sim.clock; sim.log('The clouds parted, as if on cue.', 3, [], 'weather', '🌤️', -9, 5); }
-  const p = sim.scheduleParty(host, 'the Thistlebrook Festival', 'plaza', sim.clock + 1, 180);
+  const title = sim.festivalTheme ?? 'the Thistlebrook Festival'; // a town-meeting vote may have named the theme
+  const p = sim.scheduleParty(host, title, 'plaza', sim.clock + 1, 180, { tag: 'festival' });
   for (const v of sim.villagers) { sim.learnFact(v, p.fact); p.invited.add(v.id); if (v.doing === 'sleeping') continue; sim.icon(v, '🎪'); }
   sim.log(`Festival! Bunting went up over the plaza and ${host.first} was chosen to lead the dancing.`, 7, [host.id], 'festival', '🎪', -9, 5);
 }
-export function tickFestival(sim: Sim) { if (sim.festivalUntil && sim.clock > sim.festivalUntil) { sim.festivalUntil = 0; sim.world.setFestival(false); } }
+// Render follower for both festival sources: the viewer god power awaits the world itself, while the
+// sim-driven festival-eve (gatherings.ts) only flips festivalUntil/festivalShown synchronously and
+// relies on this per-frame tick to raise and strike the bunting. Sim state never waits on assets.
+export function tickFestival(sim: Sim) {
+  const on = sim.festivalUntil > sim.clock;
+  if (on && !sim.festivalShown) { sim.festivalShown = true; void sim.world.setFestival(true); }
+  if (!on && sim.festivalShown) { sim.festivalShown = false; void sim.world.setFestival(false); }
+  if (sim.festivalUntil && sim.clock > sim.festivalUntil) sim.festivalUntil = 0;
+}
 export { THREE };
