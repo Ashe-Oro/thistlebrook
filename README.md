@@ -69,6 +69,13 @@ On a laptop GPU, frame time is bounded by JS cost. At about 2–5 ms per frame, 
 - `world/*`: town layout (Cozy Village + Countryside Farm), painted ground, nav grid + A*, sky/day-night, GPU rain, particles, point lights.
 - `agents/avatar.ts`: dressed characters, procedural animation, expressions, tools/props.
 - `ui/*`: chronicle feed, villager card, leaderboard, relationship web, recap, Gazette, toasts, bubbles, sound.
+- `ui/bubbletext.ts`: turns dialogue and chronicle events into short speech-bubble lines (2–8 words, mood tint from the emoji). Only the display is shortened. `sim.transcripts` keeps every exchange's full lines (speakers, time, place) for a future "read their conversation" view once villagers are real AI agents.
+
+### Default screen (round 8, cozy declutter)
+- The world is the star. Interactions appear as small rounded speech bubbles over heads. Two-way exchanges alternate, and at most 4 bubbles show at once (3 on phones), nearest the camera or focus first. Bubbles shrink with distance and hide when the speaker is far away or behind a building.
+- The chronicle, storylines and leaderboard start **closed**. Open them from the dock (📜 📺 🏆). The open/closed state is saved in `localStorage` under `thistlebrook.panels`. 📜 shows a small badge for big news you haven't seen.
+- The dock is one slim row of icons with tooltips. The top bar is a few floating pills. Name tags appear only on hover, or for the selected/followed villager at close range. The first-visit tip shows once.
+- Captions, achievement toasts and beat titles are one short line each. The letterbox is thin. A letter arrives as a small toast you can tap to open the handwritten card.
 
 v1 scope: **no economy**. Jobs are ambient routines. Keepsakes are the only objects, and they carry story value only.
 
