@@ -16,7 +16,7 @@ const h = (tag: string, cls = '', html = '') => { const e = document.createEleme
 const esc = (s: string) => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' } as any)[c]);
 export interface AppApi { sim: Sim; director: Director; setSpeed(s: number): void; togglePause(): void; speed: number; select(id: string | null): void; selected: string | null; portrait(id: string): HTMLCanvasElement; setMode(m: 'director' | 'free'): void; mode: string;
   pinStory(id: string | null): boolean; pinnedStory: string | null;
-  god(kind: string): boolean; newVillage(): void; sound: { setMuted(m: boolean): void; muted: boolean; play(k: string, v?: number): void }; project(x: number, y: number, z: number): { x: number; y: number; on: boolean }; camDist(): number; }
+  god(kind: string): boolean; newVillage(): void; sound: import('./sound').Sound; project(x: number, y: number, z: number): { x: number; y: number; on: boolean }; camDist(): number; }
 
 function sim0(v: Villager, s: any) { const f = s.villagers.filter((u: Villager) => u.crush === v.id && u.partner !== v.id && u !== v); return f.length ? `<span class="it love" title="Only you can see this">💌 ${f.map((u: Villager) => u.first).join(' & ')} ${f.length > 1 ? 'are' : 'is'} sweet on them</span>` : ''; }
 const cleanLie = (t: string) => t.replace(/\s*\(It isn't true\.\)/gi, '').replace(/\.\s*,/g, ',').replace(/\s+/g, ' ').trim();
@@ -53,7 +53,21 @@ export class UI {
     (top.querySelector('#newv') as HTMLButtonElement).onclick = () => { if (confirm('Start a new village? The current story (it is saved automatically) will be forgotten.')) this.app.newVillage(); };
     top.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach(b => b.onclick = () => this.app.setSpeed(+b.dataset.speed!));
     (top.querySelector('#mode') as HTMLButtonElement).onclick = () => this.app.setMode(this.app.mode === 'director' ? 'free' : 'director');
-    (top.querySelector('#snd') as HTMLButtonElement).onclick = (e) => { this.app.sound.setMuted(!this.app.sound.muted); (e.target as HTMLElement).textContent = this.app.sound.muted ? '🔇' : '🔊'; };
+    { /* sound: the first click turns sound on (a browser gesture) and opens the mixer; after that it toggles the mixer */
+      const snd = top.querySelector('#snd') as HTMLButtonElement, so = this.app.sound, pop = h('div', 'sndpop hidden'); pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', 'Sound settings');
+      pop.innerHTML = `<button data-a="mute"></button><label><input type="checkbox" data-a="music"> 🎵 Music</label><label class="vol">Music volume <input type="range" min="0" max="1" step="0.05" data-a="vol"></label><label><input type="checkbox" data-a="amb"> 🌿 Ambience</label>`;
+      r.appendChild(pop);
+      const sync = () => { snd.textContent = so.muted ? '🔇' : '🔊'; snd.title = so.muted ? 'Sound off: click for music and ambience' : 'Sound settings'; (pop.querySelector('[data-a=mute]') as HTMLElement).textContent = so.muted ? '🔊 Turn sound on' : '🔇 Mute all';
+        (pop.querySelector('[data-a=music]') as HTMLInputElement).checked = so.settings.music; (pop.querySelector('[data-a=amb]') as HTMLInputElement).checked = so.settings.amb; (pop.querySelector('[data-a=vol]') as HTMLInputElement).value = String(so.settings.vol); };
+      so.onChange = sync; sync();
+      snd.onclick = (e) => { e.stopPropagation(); if (so.muted) { so.setMuted(false); pop.classList.remove('hidden'); } else pop.classList.toggle('hidden'); const b = snd.getBoundingClientRect(); pop.style.top = `${b.bottom + 6}px`; pop.style.right = `${Math.max(6, innerWidth - b.right)}px`; };
+      pop.addEventListener('click', e => e.stopPropagation());
+      (pop.querySelector('[data-a=mute]') as HTMLElement).onclick = () => { so.setMuted(!so.muted); if (so.muted) pop.classList.add('hidden'); };
+      (pop.querySelector('[data-a=music]') as HTMLInputElement).onchange = e => so.setMusic((e.target as HTMLInputElement).checked);
+      (pop.querySelector('[data-a=amb]') as HTMLInputElement).onchange = e => so.setAmbience((e.target as HTMLInputElement).checked);
+      (pop.querySelector('[data-a=vol]') as HTMLInputElement).oninput = e => so.setVolume(+(e.target as HTMLInputElement).value);
+      addEventListener('pointerdown', e => { if (!pop.contains(e.target as Node) && e.target !== snd) pop.classList.add('hidden'); });
+    }
     const fw = h('div', 'feedwrap'); fw.innerHTML = `<div class="ph"><b>📜 Village chronicle</b><div class="ff"><button data-f="all" class="on">All</button><button data-f="drama">Drama</button><button data-f="social">Social</button><button data-f="work">Work</button><button data-f="life">Life</button></div><button class="feedtog" title="Collapse chronicle">▾</button></div>`;
     this.feed = h('div', 'feed'); fw.appendChild(this.feed); r.appendChild(fw);
     // one delegated listener for every name link and story chip in the chronicle (rows come and go; listeners don't pile up)
