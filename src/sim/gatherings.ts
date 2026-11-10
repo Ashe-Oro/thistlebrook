@@ -188,7 +188,7 @@ function tickWedding(sim: Sim, g: Gathering) {
       a.emotions.joy = b.emotions.joy = 1; a.emotions.love = b.emotions.love = 1;
       for (const v of [a, b]) v.act = { type: 'idle', anim: 'cheer', dur: 15, t: 0, label: 'just married', locked: true, face: (v.act as any)?.face ?? v.heading };
       sim.emit('convo', [{ who: a.id, text: 'I do.', emoji: '💞', at: sim.clock + 1 }, { who: b.id, text: 'I do.', emoji: '💞', at: sim.clock + 2.5 }]);
-      sim.log(`${a.first} and ${b.first} sealed it with a kiss as the whole village cheered and petals rained down.`, 7, [a.id, b.id], 'wedding', '💒', fx, fz);
+      sim.log(`A kiss under the arch, petals on the wind, and the whole village cheering for ${a.first} and ${b.first}.`, 7, [a.id, b.id], 'wedding', '💋', fx, fz);
       return;
     }
     if (sim.clock >= d.toastAt && !d.toasted) { // a toast from whoever is closest to the couple
@@ -349,7 +349,7 @@ function found(sim: Sim, g: Gathering, finder: Villager) {
   g.done = true;
   const owner = sim.byId.get(g.host)!, name = sim.pet.name;
   const where = sim.pet.spot ? sim.place(sim.pet.spot).name : 'the edge of the village';
-  sim.pet = { ...sim.pet, state: 'home', x: finder.x, z: finder.z, spot: null }; // the dog turns up right at the finder; the render dog snaps to this spot
+  sim.pet = { ...sim.pet, state: 'home', x: finder.x + Math.sin(finder.heading) * 1.1, z: finder.z + Math.cos(finder.heading) * 1.1, spot: null }; /* the dog bounds up just in front of the finder */
   releaseTeam(sim, g);
   finder.emotions.joy = 1; finder.needs.social = 100; sim.icon(finder, '🐶');
   sim.say(finder, say(sim, finder, 'searchFound', { pet: name }), '🐕', 3);
