@@ -322,6 +322,30 @@ export class World {
   }
   seatsFor(place: string) { return this.seats.filter(s => s.place === place); }
 
+  // Wedding props: a flower arch and two blocks of benches with an aisle, raised in front of the venue on
+  // the wedding day and struck after the party. Procedural, merged into a couple of draws, no shadows.
+  weddingArch?: THREE.Group;
+  setWeddingArch(place: { cx: number; cz: number } | null) {
+    if (!place) { if (this.weddingArch) this.weddingArch.visible = false; return; }
+    if (!this.weddingArch) this.weddingArch = this.buildWeddingArch();
+    this.weddingArch.visible = true; this.weddingArch.position.set(place.cx, 0, place.cz + 6); // the arch sits on the ceremony ground, matching gatherings.ts
+  }
+  private buildWeddingArch(): THREE.Group {
+    const g = new THREE.Group(); g.name = 'Wedding arch'; const wood: THREE.BufferGeometry[] = [], flower: THREE.BufferGeometry[] = [];
+    for (const sx of [-1.1, 1.1]) wood.push(new THREE.CylinderGeometry(.08, .1, 2.4, 6).translate(sx, 1.2, 0)); // posts
+    wood.push(new THREE.TorusGeometry(1.1, .075, 6, 18, Math.PI).translate(0, 2.4, 0));                           // arched top
+    for (let i = 0; i <= 11; i++) { const a = Math.PI * i / 11; flower.push(new THREE.SphereGeometry(.11, 6, 5).translate(Math.cos(a) * 1.1, 2.4 + Math.sin(a) * 1.1, 0)); } // flowers along the arch
+    for (const sx of [-1.1, 1.1]) for (let i = 0; i < 3; i++) flower.push(new THREE.SphereGeometry(.12, 6, 5).translate(sx + (i - 1) * .12, .18 + i * .13, .05));            // post-base posies
+    for (const side of [-1, 1]) for (let row = 0; row < 3; row++) { const bx = side * 2.2, bz = 1.9 + row * 1.2;  // two blocks of benches, an aisle down the middle
+      wood.push(new THREE.BoxGeometry(1.8, .09, .32).translate(bx, .45, bz));
+      for (const lx of [-.8, .8]) wood.push(new THREE.BoxGeometry(.1, .45, .28).translate(bx + lx, .22, bz)); }
+    const wm = new THREE.Mesh(mergeGeometries(wood)!, new THREE.MeshLambertMaterial({ color: '#b98d63', flatShading: true }));
+    const fm = new THREE.Mesh(mergeGeometries(flower)!, new THREE.MeshLambertMaterial({ color: '#e8a7bd', flatShading: true }));
+    wm.castShadow = fm.castShadow = false; wm.receiveShadow = false;
+    wood.forEach(x => x.dispose()); flower.forEach(x => x.dispose());
+    g.add(wm, fm); this.scene.add(g); return g;
+  }
+
   // Ease the season, then recolour the shared grass + leaf materials (no per-frame allocation) and,
   // in winter, drift a little snow when it would otherwise rain. Render-only: never touches sim state.
   private applySeason(dt: number, day: number, rain: number) {

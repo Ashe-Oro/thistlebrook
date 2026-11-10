@@ -391,6 +391,10 @@ export class Sim {
     if (!a._at) {
       // the festival is a ring dance round the plaza (promenade, then dance in place), not a bench-sit
       if (this.festivalUntil > this.clock && p.place === 'plaza' && a.ring === undefined && !a.seat) { a.ring = this.ringN = (this.ringN + 1) % 16; a.spot = [pl.cx + Math.cos(a.ring * .79) * 3.1, pl.cz + Math.sin(a.ring * .79) * 3.1]; }
+      if (p.wedding && !a.seat && !a.spot) { // wedding guests fill two blocks facing the arch, an aisle down the middle (matches the rendered benches)
+        const i = a.wrow ?? (a.wrow = ((p as any)._wn = ((p as any)._wn ?? 0) + 1) - 1), side = i % 2 ? 1 : -1, row = (i >> 1) % 3, back = Math.floor(i / 6);
+        a.spot = this.world.nav.nearestFree(pl.cx + side * (1.15 + (row === 1 ? .5 : 0)), pl.cz + 7.9 + (row + back * 3) * 1.2);
+      }
       if (!a.seat && !a.spot) { a.seat = p.place === 'campfire' ? this.takeSeat(v, 'campfire') : (p.place === 'plaza' ? this.takeSeat(v, 'bench') : null); if (!a.seat) { const ang = this.rng.range(0, 6.28), r = p.place === 'campfire' ? 3.4 : 2.2 + this.rng.range(0, 1.5); a.spot = [pl.cx + Math.sin(ang) * r, pl.cz + 2.5 + Math.cos(ang) * r]; if (p.place === 'tavern') a.spot = [pl.x + this.rng.range(-3.5, 3.5), pl.z + this.rng.range(.5, 3)]; a.spot = this.world.nav.nearestFree(a.spot[0], a.spot[1]); } }
       const [x, z] = a.seat ? [a.seat.x + Math.sin(a.seat.rot) * .55, a.seat.z + Math.cos(a.seat.rot) * .55] : a.spot;
       if (!walk(x, z, .35)) return false; if (a._fail) { this.leaveSeat(v); return true; } a._at = 1; p.attendees.add(v.id); if (a.seat) { v.x = a.seat.x; v.z = a.seat.z; v.heading = a.seat.rot; }
