@@ -239,3 +239,4 @@ body.cinematic .storyguide, body:has(.cine.on) .storyguide { opacity:0; pointer-
 .guidecard { padding: 7px 9px; } .guidecard p { margin: 3px 0; font-size: 12.5px; } .guidecard small { font-size: 10.5px; } .guidecard meter { height: 6px; margin: 3px 0; }
 .guidelast { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media (min-width: 1101px) and (pointer: fine) { .storyguide:not(.expanded) { max-height: 36vh; } .storyguide:not(.expanded) .guidecard:nth-child(n+4) { display: none; } .storyguide:not(.expanded) .guidecard small { display: none; } }
+.storyfollow.hidden { display: none; }
