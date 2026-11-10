@@ -28,7 +28,7 @@ export class Avatar {
     this.outfit = generateOutfit(def, seed);
     this.handle = createDressedCharacter({ styleId: 'hero', paletteId: def.palette, colors: { skin: def.skin, hair: def.hair } as any, proportions: { targetHeight: def.height } as any }, this.outfit);
     this.body = this.handle.group; this.root.add(this.body); this.bones = this.handle.build.boneByShortName; this.height = def.height;
-    for (const b of this.handle.build.bones as THREE.Bone[]) this.bind.set(b, b.quaternion.clone());
+    for (const b of this.handle.build.bones as THREE.Bone[]) { this.bind.set(b, b.quaternion.clone()); b.matrixAutoUpdate = false; b.updateMatrix(); }
     this.hips = this.bones.Hips; this.hipsY = this.hips.position.y; this.root.updateMatrixWorld(true); this.hipM = new THREE.Vector3().setFromMatrixPosition(this.hips.matrixWorld).y || this.height * .5;
     this.body.traverse((m: any) => { if (m.isMesh) { m.castShadow = true; m.frustumCulled = false; const arr = Array.isArray(m.material) ? m.material : [m.material]; for (const mt of arr) if (!this.mats.includes(mt)) this.mats.push(mt); } });
     this.handle.face?.setAutoBlink?.(true);
@@ -49,7 +49,7 @@ export class Avatar {
   private farMesh: THREE.SkinnedMesh | null = null;
   private mergedMat: THREE.MeshToonMaterial | null = null;
   private characterLod: THREE.LOD | null = null;
-  private colourStamp = '';
+  private colourStamp: number[] = [];
   farOn = false;
   private buildMerged() {
     const main = this.body.getObjectByName('CharacterMesh') as THREE.SkinnedMesh | undefined;
@@ -102,16 +102,20 @@ export class Avatar {
       for (let i = group.start; i < Math.min(group.start + group.count, colours.count); i++) colours.setXYZ(i, c.r, c.g, c.b);
     }
     colours.needsUpdate = true;
-    this.colourStamp = this.materialStamp();
+    this.colourStamp.length = 0;
+    for (const m of materials) if (m.name !== 'face') this.colourStamp.push(m.color.r, m.color.g, m.color.b);
   }
-  private materialStamp() {
-    return (this.mainMesh?.material as THREE.MeshToonMaterial[] | undefined)?.map(m =>
-      m.name === 'face' ? '' : `${m.color.r},${m.color.g},${m.color.b}`).join(';') ?? '';
+  private coloursChanged() {
+    const materials = this.mainMesh?.material as THREE.MeshToonMaterial[] | undefined; let i = 0;
+    if (materials) for (const m of materials) if (m.name !== 'face') {
+      if (m.color.r !== this.colourStamp[i++] || m.color.g !== this.colourStamp[i++] || m.color.b !== this.colourStamp[i++]) return true;
+    }
+    return false;
   }
   // Presentation only. Renderer-driven LOD also selects the detailed twin for the portrait
   // camera, even when setLod last saw a distant main camera. Body visibility still gates both.
   setLod(dist: number) {
-    if (this.materialStamp() !== this.colourStamp) this.refreshMerged();
+    if (this.coloursChanged()) this.refreshMerged();
     // Nonuniform emissive flashes cannot be baked into one toon material: retain the exact
     // original rendering for their duration, including changes made by external consumers.
     const flashing = (this.mainMesh?.material as THREE.MeshToonMaterial[] | undefined)?.some(m =>
@@ -164,13 +168,34 @@ export class Avatar {
   }
   private leg(side: 'L' | 'R', fwd: number, knee = 0) { this.pose(side === 'L' ? 'LeftUpLeg' : 'RightUpLeg', -fwd, 0, 0); this.pose(side === 'L' ? 'LeftLeg' : 'RightLeg', knee, 0, 0); }
 
-  update(dt: number, speed01: number) {
-    dt = clamp(dt, 0, .1);
-    this.phase += dt; const p = this.phase, A = this.anim;
-    const changed = A !== this.previousAnim; this.previousAnim = A;
+  private placementDt: number | null = null;
+  private updatePlacement(dt: number) {
     // heading ease
     const dh = Math.atan2(Math.sin(this.targetHeading - this.heading), Math.cos(this.targetHeading - this.heading)); this.heading += dh * Math.min(1, dt * 9); this.root.rotation.y = this.heading;
     if (Math.abs(this.targetAlpha - this.alpha) > .001) { this.alpha += (this.targetAlpha - this.alpha) * Math.min(1, dt * 5); const a = this.alpha; this.root.visible = a > .03; for (const m of this.mats) { const face = m.name === 'face'; m.transparent = a < .99 || face; m.opacity = a; m.depthWrite = a > .5 && !face; } }
+  }
+  private renderElapsed = 0; private renderFrame = 0;
+  private static renderFrustum = new THREE.Frustum(); private static renderMatrix = new THREE.Matrix4();
+  private static renderSphere = new THREE.Sphere();
+  /** Presentation clock only: hidden actors advance phase without rebuilding their pose. */
+  updateVisible(dt: number, speed01: number, camera: THREE.Camera) {
+    const sphere = Avatar.renderSphere; sphere.center.copy(this.root.position); sphere.center.y += this.height * .5; sphere.radius = this.height * .85;
+    Avatar.renderMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    const on = Avatar.renderFrustum.setFromProjectionMatrix(Avatar.renderMatrix).intersectsSphere(sphere);
+    const d2 = sphere.center.distanceToSquared(camera.position), every = d2 > 40 * 40 ? 3 : d2 > 28 * 28 ? 2 : 1;
+    this.renderElapsed += dt; this.renderFrame++;
+    /* Fades must continue while hidden so returning indoors/outdoors never leaves a stale opacity. */
+    if (!on || (!this.root.visible && this.targetAlpha === 0) || !this.body.visible || this.renderFrame % every !== 0) { this.phase += dt; this.updatePlacement(dt); return; }
+    /* phase already advanced on skipped frames; apply elapsed time only to smoothing/blink. */
+    const elapsed = Math.min(this.renderElapsed, .3); this.renderElapsed = 0;
+    this.phase -= elapsed - dt; this.placementDt = dt; this.update(elapsed, speed01); this.placementDt = null;
+  }
+
+  update(dt: number, speed01: number) {
+    dt = clamp(dt, 0, .3);
+    this.phase += dt; const p = this.phase, A = this.anim;
+    const changed = A !== this.previousAnim; this.previousAnim = A;
+    this.updatePlacement(this.placementDt ?? dt);
     for (const [b, q] of this.bind) b.quaternion.copy(q);
     let hipY = 0, spineX = 0, headX = 0, headY = 0, hipRot = 0;
     const breathe = Math.sin(p * 2.2) * .02;
@@ -235,6 +260,7 @@ export class Avatar {
     this.hips.position.y = this.hipsY + hipY * this.hipsY / this.hipM;
     this.body.position.y = this.seatY;
     if (this.banner) (this.banner as any).flag.rotation.x = Math.sin(p * 4) * .15;
+    for (const b of this.bind.keys()) b.updateMatrix();
     this.handle.update(dt);
   }
   dispose() {
