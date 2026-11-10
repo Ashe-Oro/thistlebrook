@@ -297,19 +297,29 @@ function stageShot(sh: MontageShot, prefYaw: number) {
   montageOverride.clear(); montageHidden.clear();
   const cast = sh.actors.map(id => sim.byId.get(id)).filter((v): v is Villager => !!v).slice(0, 3);
   const n = cast.length, sep = sh.kind === 'fight' ? .95 : 1.3;
-  const px = Math.sin(prefYaw + Math.PI / 2), pz = Math.cos(prefYaw + Math.PI / 2);
-  const spots: { x: number; z: number }[] = n === 2
-    ? [{ x: sh.x + px * sep * .5, z: sh.z + pz * sep * .5 }, { x: sh.x - px * sep * .5, z: sh.z - pz * sep * .5 }]
-    : n === 3 ? [0, 1, 2].map(k => { const a = prefYaw + Math.PI / 2 + k * Math.PI * 2 / 3; return { x: sh.x + Math.sin(a) * .85, z: sh.z + Math.cos(a) * .85 }; })
-    : [{ x: sh.x, z: sh.z }];
-  for (const s of spots) if (!world.nav.isFree(s.x, s.z)) [s.x, s.z] = world.nav.nearestFree(s.x, s.z);
-  const cx = spots.reduce((a, s) => a + s.x, 0) / spots.length, cz = spots.reduce((a, s) => a + s.z, 0) / spots.length;
+  const place = (yaw0: number) => {
+    const px = Math.sin(yaw0 + Math.PI / 2), pz = Math.cos(yaw0 + Math.PI / 2);
+    const sp: { x: number; z: number }[] = n === 2
+      ? [{ x: sh.x + px * sep * .5, z: sh.z + pz * sep * .5 }, { x: sh.x - px * sep * .5, z: sh.z - pz * sep * .5 }]
+      : n === 3 ? [0, 1, 2].map(k => { const a = yaw0 + Math.PI / 2 + k * Math.PI * 2 / 3; return { x: sh.x + Math.sin(a) * .85, z: sh.z + Math.cos(a) * .85 }; })
+      : [{ x: sh.x, z: sh.z }];
+    for (const q of sp) if (!world.nav.isFree(q.x, q.z)) [q.x, q.z] = world.nav.nearestFree(q.x, q.z);
+    return sp;
+  };
+  let spots = place(prefYaw);
+  let cx = spots.reduce((a, s) => a + s.x, 0) / spots.length, cz = spots.reduce((a, s) => a + s.z, 0) / spots.length;
   for (const v of sim.villagers) if (!cast.includes(v) && !v.inside && Math.hypot(v.x - cx, v.z - cz) < 11) montageHidden.add(v.id); // keep extras out of the memory
-  const heads = spots.map(s => new THREE.Vector3(s.x, 1.6, s.z));
-  const f = frameShot(new THREE.Vector3(cx, 1.1, cz), heads, prefYaw, 4.2, 9.5, [3.3, 4.4, 5.5], new Set(cast.map(v => v.id)));
+  let heads = spots.map(s => new THREE.Vector3(s.x, 1.6, s.z));
+  let f = frameShot(new THREE.Vector3(cx, 1.1, cz), heads, prefYaw, 4.2, 9.5, [3.3, 4.4, 5.5], new Set(cast.map(v => v.id)));
+  // the memory is ours to restage: if the clear angle is not the one we staged for, turn the cast to face the lens side-on
+  if (n >= 2 && Math.abs(Math.atan2(Math.sin(f.yaw - prefYaw), Math.cos(f.yaw - prefYaw))) > .3) {
+    spots = place(f.yaw); cx = spots.reduce((a, s) => a + s.x, 0) / spots.length; cz = spots.reduce((a, s) => a + s.z, 0) / spots.length;
+    heads = spots.map(s => new THREE.Vector3(s.x, 1.6, s.z)); f = frameShot(new THREE.Vector3(cx, 1.1, cz), heads, f.yaw, 4.2, 9.5, [3.3, 4.4, 5.5], new Set(cast.map(v => v.id)));
+  }
   cast.forEach((v, i) => {
     const s = spots[i], pose = flashbackPose(sh.kind, sh.icon, i);
-    const heading = n >= 2 ? Math.atan2((n === 2 ? spots[1 - i].x : cx) - s.x, (n === 2 ? spots[1 - i].z : cz) - s.z) : f.yaw + .4;
+    let heading = n >= 2 ? Math.atan2((n === 2 ? spots[1 - i].x : cx) - s.x, (n === 2 ? spots[1 - i].z : cz) - s.z) : f.yaw + .4;
+    if (n >= 2) { const dYaw = Math.atan2(Math.sin(f.yaw - heading), Math.cos(f.yaw - heading)); heading += Math.sign(dYaw) * Math.min(Math.abs(dYaw), .65); } // stage cheat: open up to the lens
     montageOverride.set(v.id, { x: s.x, z: s.z, heading, ...pose });
     v.avatar.heading = heading; v.avatar.snapAlpha(1); // cuts must never expose a fading body
     syncAvatar(v, 0); // stageShot runs after the normal avatar pass: place this cut immediately
@@ -457,6 +467,10 @@ function frameShot(target: THREE.Vector3, subjects: THREE.Vector3[], prefYaw: nu
       rc.set(fsCam, rDir.divideScalar(L)); rc.near = .05; rc.far = Math.max(.05, L - .35);
       rayHits.length = 0; rc.intersectObjects(solid, false, rayHits); // native InstancedMesh.raycast preserves instance transforms
       if (rayHits.length) hard += rayHits[0].distance < L * .6 ? 12 : i < subjects.length ? 8 : 2;
+    }
+    for (let i = 0; i < subjects.length; i++) for (let j = i + 1; j < subjects.length; j++) { // subjects hiding behind each other
+      const ai = Math.atan2(subjects[i].x - fsCam.x, subjects[i].z - fsCam.z), aj = Math.atan2(subjects[j].x - fsCam.x, subjects[j].z - fsCam.z);
+      if (Math.abs(Math.atan2(Math.sin(ai - aj), Math.cos(ai - aj))) < .16) hard += 6;
     }
     for (const v of sim.villagers) {
       if (subjectIds?.has(v.id) || v.inside || montageHidden.has(v.id) || montageOverride.has(v.id)) continue;
