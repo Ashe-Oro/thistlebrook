@@ -145,7 +145,7 @@ function syncAvatar(v: Villager, dt: number) {
   const o = montage ? montageOverride.get(v.id) : null;
   if (o) { // flashback ghost: a montage actor restaged at the recorded event spot, render layer only — sim fields untouched
     av.root.position.set(o.x, 0, o.z); av.targetHeading = o.heading; av.anim = o.anim;
-    av.targetAlpha = 1; av.seated = false; av.sitH = .5;
+    if (av.alpha < .999) av.snapAlpha(1); av.seated = false; av.sitH = .5;
     if (av.toolKind) av.setTool(''); if (av.carryKind) av.setCarry('');
     av.setExpression(o.expr); av.update(dt, .8); return;
   }

@@ -67,6 +67,8 @@ export class Avatar {
     for (const m of this.lodMeshes) m.visible = !far;
     if (this.tool) this.tool.visible = !far; if (this.carry) this.carry.visible = !far; if (this.banner) this.banner.visible = !far;
   }
+  // jump straight to an opacity (cuts, flashbacks): mid-fade transparency sorting can paint the face decal black
+  snapAlpha(a: number) { this.alpha = this.targetAlpha = a; this.root.visible = a > .03; for (const m of this.mats) { const face = m.name === 'face'; m.transparent = a < .99 || face; m.opacity = a; m.depthWrite = a > .5 && !face; } }
   setExpression(e: string) { e = EXPR_MAP[e] ?? 'neutral'; if (e !== this.expr) { this.expr = e; this.handle.setExpression(e); } }
   setTool(kind: string) {
     if (kind === this.toolKind) return; if (this.tool) this.tool.parent?.remove(this.tool); this.tool = null; this.toolKind = kind; if (!kind) return;
