@@ -194,6 +194,9 @@ body.intro .feedwrap, body.intro .lb, body.intro .card, body.intro .dock, body.i
 /* dawn montage: a warm "memory" grade and quick flash cuts */
 body.montage canvas { filter: sepia(.42) saturate(.85) contrast(1.06) brightness(1.03); transition: filter .6s; }
 body.montage .feedwrap, body.montage .lb, body.montage .card, body.montage .dock, body.montage .hint, body.montage .caption { opacity: 0 !important; pointer-events: none; transition: opacity .5s; }
+/* flashback shots restage yesterday's actors: today's tags, bubbles and icons would be lies over a memory */
+body.montage .overlay { opacity: 0; transition: opacity .4s; }
+body.montage .cine::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(20, 12, 4, .38)); }
 .cine.cut::after { content: ''; position: absolute; inset: 0; background: #fff8e8; animation: cutflash .45s ease-out forwards; }
 @keyframes cutflash { from { opacity: .55; } to { opacity: 0; } }
 .cine .ct span { white-space: normal; max-height: 2.7em; }
