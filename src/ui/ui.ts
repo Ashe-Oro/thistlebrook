@@ -240,7 +240,7 @@ export class UI {
     // floating = a small toast ("✉️ A note from Ollie") that expands into the handwritten card when tapped
     if (floating) { if (this.quiet) return; const s = this.app.sim, from = s.byId.get(l.from)?.first ?? 'someone', to = s.byId.get(l.to)?.first ?? '';
       this.toasts.querySelector('.letter-toast')?.remove();
-      const el = h('button', 'letter-toast', `<span class="lt-ic">✉️</span><span class="lt-tx"><b>${esc(from)} → ${esc(to)}</b><small>${esc(shortLine(l.text.split('\n').find(x => x.trim()) ?? '', 6))}</small></span>`);
+      const el = h('button', 'letter-toast', `<span class="lt-ic">✉️</span><span class="lt-tx"><b>${esc(from)} → ${esc(to)}</b><small>${esc(shortLine(l.text.split('\n').map(x => x.trim()).find(x => x.split(' ').length >= 3) ?? l.text, 6))}</small></span>`);
       el.title = 'Read the letter'; el.onclick = () => { el.remove(); this.showLetter(l); }; this.toasts.appendChild(el); setTimeout(() => el.classList.add('out'), 6500); setTimeout(() => el.remove(), 7300); }
     else { this.modal.innerHTML = `<div class="letter-view"><button class="letter-close">Close</button>${this.letterHTML(l)}</div>`; this.modal.classList.remove('hidden'); this.modal.querySelector<HTMLButtonElement>('.letter-close')!.onclick = () => this.closeModal(); }
   }
