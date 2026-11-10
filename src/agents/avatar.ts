@@ -114,17 +114,35 @@ export class Avatar {
   }
   // Presentation only. Renderer-driven LOD also selects the detailed twin for the portrait
   // camera, even when setLod last saw a distant main camera. Body visibility still gates both.
-  setLod(dist: number) {
+  setLod(dist: number, farDistance = 40) {
+    if (this.characterLod) { const level = this.characterLod.levels[1]; level.distance = farDistance; level.hysteresis = 4 / farDistance; }
     if (this.coloursChanged()) this.refreshMerged();
     // Nonuniform emissive flashes cannot be baked into one toon material: retain the exact
     // original rendering for their duration, including changes made by external consumers.
     const flashing = (this.mainMesh?.material as THREE.MeshToonMaterial[] | undefined)?.some(m =>
       m.name !== 'face' && m.emissive && m.emissiveIntensity !== 0 && m.emissive.getHex() !== 0) ?? false;
     if (this.mainMesh && this.characterLod) { this.mainMesh.visible = flashing; this.characterLod.visible = !flashing; }
-    this.farOn = dist > (this.farOn ? 38 : 42);
+    this.farOn = dist > (this.farOn ? farDistance - 4 : farDistance);
     const far = dist > (this.lodFar ? 30 : 34); if (far === this.lodFar) return; this.lodFar = far;
     for (const m of this.lodMeshes) m.visible = !far;
     if (this.tool) this.tool.visible = !far; if (this.carry) this.carry.visible = !far; if (this.banner) this.banner.visible = !far;
+  }
+  /** Shared presentation policy for villagers and full-character extras. */
+  setCrowdQuality(dist: number, farDistance: number, nearCount: number) {
+    this.setLod(dist, farDistance);
+    const shadow = dist < 16;
+    if (this.crowdShadow !== shadow) {
+      this.crowdShadow = shadow;
+      this.body.traverse((o: any) => { if (o.isMesh) o.castShadow = shadow && o.name !== 'CharacterOutline'; });
+    }
+    const outline = this.body.getObjectByName('CharacterOutline');
+    if (outline) { outline.visible = dist < 16 && nearCount <= 8; /* Never skin the inverted hull again for the shadow map. */ outline.castShadow = false; }
+  }
+  private crowdShadow?: boolean;
+  /** Submitted triangles per twin, before shadow passes; available without reading asset files. */
+  triangleCounts() {
+    const triangles = (o?: THREE.Object3D | null) => { const g = (o as THREE.Mesh | undefined)?.geometry; return g ? (g.index?.count ?? g.attributes.position.count) / 3 : 0; };
+    return { near: triangles(this.nearMesh ?? this.mainMesh), outline: triangles(this.body.getObjectByName('CharacterOutline')), far: triangles(this.farMesh) };
   }
   // jump straight to an opacity (cuts, flashbacks): mid-fade transparency sorting can paint the face decal black
   snapAlpha(a: number) { this.alpha = this.targetAlpha = a; this.root.visible = a > .03; for (const m of this.mats) { const face = m.name === 'face'; m.transparent = a < .99 || face; m.opacity = a; m.depthWrite = a > .5 && !face; } }

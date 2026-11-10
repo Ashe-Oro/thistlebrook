@@ -200,18 +200,29 @@ const perf = (() => {
     tick(now: number) { frames++; if (now - t0 >= 1000) { fps = frames * 1000 / (now - t0); frames = 0; t0 = now;
         if (dynRes && now - lastAdjust > 1000) { const want = fps < 30 ? pr - .2 : fps < 50 ? pr - .1 : fps > 58 ? pr + .05 : pr; const np = Math.max(minPR, Math.min(maxPR, want)); if (Math.abs(np - pr) > .01) { pr = np; renderer.setPixelRatio(pr); renderer.setSize(innerWidth, innerHeight); lastAdjust = now; } } } },
     beforeRender() {
-      n++; if (n % shadowEvery === 0) renderer.shadowMap.needsUpdate = true;
+      n++;
       camera.updateMatrixWorld(); pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); frus.setFromProjectionMatrix(pm);
-      const avs: any[] = sim.villagers.map(v => v.avatar); if (nell) avs.push(nell);
-      for (const av of avs) {
-        const r = av.root as THREE.Object3D; sph.center.set(r.position.x, r.position.y + av.height * .5, r.position.z); sph.radius = av.height * .75;
-        const onScreen = frus.intersectsSphere(sph); av.body.visible = onScreen;
-        const d = tmp.copy(sph.center).distanceTo(camera.position), near = d < 26;
-        if (av._lod !== near) { av._lod = near; av.body.traverse((m: any) => { if (m.isMesh) { if (m.name === 'CharacterOutline') m.visible = d < 34 || near; m.castShadow = near; } }); }
-        const ol = av._ol ??= av.body.getObjectByName('CharacterOutline'); if (ol) ol.visible = d < 34;
-        av.setLod?.(d);
+      const actors = sim.villagers.map(v => ({ avatar: v.avatar as Avatar, proxy: undefined as THREE.Mesh | undefined }));
+      if (nell) actors.push({ avatar: nell, proxy: undefined });
+      actors.push(...(extras?.renderActors() ?? []));
+      let visibleCount = 0, nearCount = 0;
+      const views = actors.map(({ avatar: av, proxy }) => {
+        const r = av.root; sph.center.set(r.position.x, r.position.y + av.height * .5, r.position.z); sph.radius = av.height * .85;
+        const onScreen = r.visible && frus.intersectsSphere(sph), d = tmp.copy(sph.center).distanceTo(camera.position);
+        if (onScreen) { visibleCount++; if (d < 26) nearCount++; }
+        return { av, proxy, onScreen, d };
+      });
+      /* Keep isolated actors detailed; dense views use the same opaque silhouette in one draw. */
+      const farDistance = visibleCount > 10 ? 22 : 40, crowd = visibleCount > 10;
+      if (n % (crowd ? Math.max(3, shadowEvery) : shadowEvery) === 0) renderer.shadowMap.needsUpdate = true;
+      sky.setShadowSpan(camera.position.distanceTo(controls.target), crowd);
+      for (const { av, proxy, onScreen, d } of views) {
+        const r = av.root, proxyFar = !!proxy && d > Math.min(28, farDistance);
+        if (proxy) proxy.visible = onScreen && proxyFar;
+        av.body.visible = onScreen && !proxyFar;
+        av.setCrowdQuality(d, farDistance, nearCount);
         let b = blobs.get(av); if (!b) { b = new THREE.Mesh(blobG, blobM); b.renderOrder = 1; scene.add(b); blobs.set(av, b); }
-        b.visible = r.visible && onScreen && !near; b.position.set(r.position.x, .03, r.position.z);
+        b.visible = onScreen && (d >= 16 || proxyFar); b.position.set(r.position.x, .03, r.position.z);
       }
     },
   };
@@ -593,7 +604,7 @@ function frame(now: number) {
   if (montage) { montageCamera(Math.min(.25, dt)); }
   else if (intro) { introCamera(Math.min(.25, (now - (beatLast || now)) / 1000)); beatLast = now; }
   else if (!beat) controls.update(); else beatCamera(Math.min(.25, (now - (beatLast || now)) / 1000)); beatLast = now;
-  sky.setShadowSpan(camera.position.distanceTo(controls.target)); sky.update(sim.hour, sim.rain, controls.target, dt * Math.max(speed, .0001), world.season); renderer.toneMappingExposure = 1.05 + sky.golden * .1 + sky.flash * .45; cinematicLight(dt); world.fx.setRain(sim.rain > .12 && world.season.snow < .5); world.fx.update(dt, controls.target);
+  sky.update(sim.hour, sim.rain, controls.target, dt * Math.max(speed, .0001), world.season); renderer.toneMappingExposure = 1.05 + sky.golden * .1 + sky.flash * .45; cinematicLight(dt); world.fx.setRain(sim.rain > .12 && world.season.snow < .5); world.fx.update(dt, controls.target);
   ambient?.update(dt, dt * speed * slow * MIN_PER_SEC, sim.hour, sim.rain, sky.night, controls.target, camera.position);
   sound.ambient(sky.night, sim.rain, dt);
   document.body.classList.toggle('cinematic', cine.classList.contains('on') || !!intro || !!montage);
@@ -610,7 +621,8 @@ function frame(now: number) {
 
 // ---- hooks for headless verification & power users -------------------------------------------------
 (window as any).terrarium = {
-  sim, director, world, camera, controls, renderer, scene, perfStats, get fps() { return perf.fps; }, get pixelRatio() { return perf.pr; }, quality: { soft: SOFT, aa: AA }, get simMs() { return simMsAvg; }, get cpuMs() { return cpuMsAvg; },
+  sim, director, world, camera, controls, renderer, scene, perfStats,
+  characterTriangles: () => sim.villagers.map(v => ({ id: v.id, ...v.avatar.triangleCounts() })), get fps() { return perf.fps; }, get pixelRatio() { return perf.pr; }, quality: { soft: SOFT, aa: AA }, get simMs() { return simMsAvg; }, get cpuMs() { return cpuMsAvg; },
   setSpeed: (s: number) => (speed = s), select: (id: string | null) => api.select(id), setMode: (m: any) => api.setMode(m), god: (k: string) => api.god(k), ui: () => ui,
   fastForward(minutes: number, coarse = false) { if (!Number.isFinite(minutes) || minutes <= 0) return; const quiet = ui.quiet, wasFfing = ffing; ffing = true; ui.quiet = true; try { if (coarse) stepSimCoarse(minutes / MIN_PER_SEC); else { const n = Math.max(1, Math.ceil(minutes / MIN_PER_SEC / SIM_H - 1e-6)); for (let i = 0; i < n; i++) { sim.step(SIM_H); tickTraveller(sim); tickFestival(sim); } } } finally { ffing = wasFfing; ui.quiet = quiet; } for (const v of sim.villagers) syncAvatar(v, .016); },
   cineState() { camera.updateMatrixWorld(); const f = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)); return { beat: !!beat, montage: !!montage, target: { x: controls.target.x, y: controls.target.y, z: controls.target.z }, visible: sim.villagers.filter(v => !v.inside && visibleObject(v.avatar.root) && f.containsPoint(new THREE.Vector3(v.x, 1.1, v.z))).map(v => v.id) }; },

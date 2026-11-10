@@ -39,7 +39,7 @@ export class Extras {
         avatar.phase = r.range(0, 10); avatar.handle.face?.setAutoBlink?.(false); root = avatar.root;
       } catch { root = this.fallback(kid); }
       root.name = `Background passer-by ${i + 1}`; root.visible = false;
-      root.traverse((o: any) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; o.frustumCulled = true; } });
+      root.traverse((o: any) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; o.frustumCulled = !o.isSkinnedMesh; } });
       // One-draw stand-in for distant passers-by: the full articulated avatar is only drawn up close.
       if (avatar) {
         const source = avatar.body.getObjectByName('CharacterMesh') as THREE.SkinnedMesh;
@@ -139,6 +139,8 @@ export class Extras {
     }
     this.tail.rotation.x = Math.sin(t * .5) * .3; this.cat.visible = wet < .65;
   }
+  /** Include proxy actors in crowd pressure; the governor handles full bodies and blobs. */
+  renderActors() { return this.people.filter(p => p.avatar && p.root.visible).map(p => ({ avatar: p.avatar!, proxy: p.proxy })); }
   /** Currently visible people; excludes the cat and decorative props. */
   count() { return this.people.reduce((n, p) => n + Number(p.root.visible), 0); }
 }

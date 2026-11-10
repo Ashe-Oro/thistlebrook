@@ -35,8 +35,8 @@ export class Sky {
   }
   // shadow frustum follows the camera's framing: tight (sharper, cheaper) when close, the whole village when pulled back
   private span = 60;
-  setShadowSpan(camDist: number) {
-    const want = Math.min(60, Math.max(18, camDist * 1.6 + 8)); if (Math.abs(want - this.span) / this.span < .12) return; this.span = want;
+  setShadowSpan(camDist: number, crowd = false) {
+    const want = Math.min(crowd ? 36 : 60, Math.max(18, camDist * (crowd ? 1.1 : 1.6) + 8)); if (Math.abs(want - this.span) / this.span < .12) return; this.span = want;
     const c = this.sun.shadow.camera; c.left = -want; c.right = want; c.top = want * .75; c.bottom = -want * .75; c.updateProjectionMatrix();
   }
   // a strike: one bright flash and a fainter re-flicker; thunder follows
