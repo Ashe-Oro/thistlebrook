@@ -17,6 +17,7 @@ import { saveGame, loadGame, clearSave, peekSave } from './core/save';
 import { arcs } from './sim/arcs';
 import { Ambient } from './world/ambient';
 import { fmtTime } from './core/util';
+import { Extras } from './world/extras'; let extras: Extras | null = null;
 
 const mobile = matchMedia('(pointer: coarse)').matches || innerWidth < 760;
 function params0() { return new URLSearchParams(location.search); }
@@ -54,6 +55,7 @@ async function boot() {
   { const ponds = ['pond', 'rivpond'].map(id => world.places.get(id) as any).filter(Boolean).map(p => ({ x: p.cx ?? p.x, z: p.cz ?? p.z, r: 1.7 }));
     ambient = new Ambient(scene, ponds, world.fx);
     ambient.onRainbow = () => afterRain(); ambient.onSplash = (x, z) => sound.play('splash', Math.max(0, 1 - Math.hypot(x - controls.target.x, z - controls.target.z) / 25) * .5); }
+  try { extras = new Extras(world, scene); await extras.init(); } catch (e) { console.warn('extras', e); extras = null; }
   setProg(.85, 'Dressing the villagers…');
   // Old Nell, the travelling storyteller (a visitor NPC, not a villager: she only appears with the Traveller god power)
   nell = new Avatar({ id: 'nell', name: 'Old Nell', job: 'postmistress', goal: 'liked', home: 'home-spare', age: '70s', traits: VILLAGERS[0].traits, bio: '', palette: 'autumn', skin: '#e3b590', hair: '#d8d8d8', height: 1.58,
@@ -386,6 +388,7 @@ function frame(now: number) {
   if (nell) { const on = sim.visitorUntil > sim.clock; nell.targetAlpha = on ? 1 : 0; if (on || nell.alpha > .05) { nellT += adt; nell.root.position.set(NELL[0], 0, NELL[1]); nell.targetHeading = Math.sin(nellT * .4) * .5; const k = Math.floor(nellT / 2.5) % 4; nell.anim = (['talk', 'wave', 'talk', 'cheer'] as any)[k]; nell.setExpression(k === 3 ? 'grin' : 'happy'); nell.update(speed === 0 ? 0 : adt, .8); } }
   animateGifts(sim, dt);
   world.update(adt, dt * speed * MIN_PER_SEC, sim.clock, sky.night);
+  extras?.update(adt, sim.hour, sim.rain, controls.target);
   // camera
   if (beat || montage) { controls.autoRotate = false; }
   else if (mode === 'director' && !selected) { dirT -= dt; if (dirT <= 0) { dirT = 1; const pick = director.pick(sim.clock, follow); if (pick && pick.id !== follow) { follow = pick.id; } } controls.autoRotate = true; controls.autoRotateSpeed = .35; }
