@@ -57,6 +57,7 @@ export class UI {
     fw.querySelectorAll<HTMLButtonElement>('[data-f]').forEach(b => b.onclick = () => { this.feedFilter = b.dataset.f!; fw.querySelectorAll('[data-f]').forEach(x => x.classList.toggle('on', x === b)); this.refilter(); });
     const ftog = fw.querySelector<HTMLButtonElement>('.feedtog')!; ftog.onclick = () => { const col = fw.classList.toggle('collapsed'); ftog.textContent = col ? '▸' : '▾'; ftog.title = col ? 'Expand chronicle' : 'Collapse chronicle'; };
     if (matchMedia('(max-width: 700px), (pointer: coarse)').matches) ftog.click(); // phones start with the chronicle folded to a one-line strip
+    const letterStyle = document.createElement('style'); letterStyle.textContent = `.handwritten{background:#f8edcf;color:#513b31;padding:22px;border:1px solid #d2b984;border-radius:3px;box-shadow:0 6px 22px #30201040;font:16px/1.6 "Segoe Print","Bradley Hand","Comic Neue",cursive;transform:rotate(-1deg);text-align:left;overflow-wrap:anywhere}.handwritten p{margin:8px 0}.letter-float{display:block;width:min(320px,82vw);border:0;background:none;padding:4px;cursor:pointer;pointer-events:auto}.letter-view{width:min(420px,86vw);max-height:85vh;overflow:auto;margin:auto}.letter-close{margin-bottom:12px}.tb .handwritten{margin:10px 5px;font-size:14px}`; r.appendChild(letterStyle);
     this.card = h('div', 'card hidden'); r.appendChild(this.card);
     this.lb = h('div', 'lb'); r.appendChild(this.lb);
     const dock = h('div', 'dock'); dock.innerHTML = `<div class="grp"><span class="lbl">God powers</span><button data-g="gift">🎁<i>Drop gift</i><b class="s">Gift</b></button><button data-g="rain">🌧️<i>Rain</i><b class="s">Rain</b></button><button data-g="traveller">🧳<i>Traveller</i><b class="s">Visitor</b></button><button data-g="festival">🎪<i>Festival</i><b class="s">Fest</b></button></div>
@@ -90,7 +91,7 @@ export class UI {
     if (e.kind === 'weather') return 'weather'; // routine weather stays out of Drama; only in All
     if (this.isLie(e)) return 'drama'; // fabricated rumours are the heart of the drama
     return ['theft', 'burglary', 'fight', 'argue', 'accuse', 'god', 'traveller', 'festival', 'reconcile', 'ally', 'romance', 'rumour', 'snoop', 'sneaky', 'heartbreak', 'wedding', 'showdown', 'search', 'contest'].includes(e.kind) ? 'drama'
-      : ['talk', 'gift', 'gossip', 'invite', 'party', 'bond', 'reflect', 'generous', 'lunch', 'breakfast', 'evening', 'social', 'meeting', 'market', 'calendar', 'prank', 'mediate'].includes(e.kind) ? 'social' : 'work';
+      : ['letter', 'talk', 'gift', 'gossip', 'invite', 'party', 'bond', 'reflect', 'generous', 'lunch', 'breakfast', 'evening', 'social', 'meeting', 'market', 'calendar', 'prank', 'mediate'].includes(e.kind) ? 'social' : 'work';
   }
   addFeed(e: SimEvent) {
     if (e.kind === 'life') { this.addLife(e); return; }
@@ -106,6 +107,7 @@ export class UI {
     const el = h('div', `ev imp${Math.min(9, e.imp)} k-${e.kind} c-${cat}`); el.dataset.id = String(e.id); el.dataset.ids = JSON.stringify([e.id]); el.dataset.cat = cat; el.dataset.txt = e.text; if (minor) el.dataset.minor = '1';
     const txt = lie ? cleanLie(e.text) : e.text;
     el.innerHTML = `<span class="t">${fmtTime(e.t)}</span><span class="ic">${e.icon}</span><span class="tx">${this.linkify(txt)}${lie ? ' <span class="badge false" title="A fabricated rumour — not actually true">false rumour</span>' : ''}</span>`;
+    if (e.kind === 'letter') { el.style.cursor = 'pointer'; el.onclick = () => { const id = this.app.sim.letterEvents[e.id]; const l = this.app.sim.letterArchive.find(l => l.id === id); if (l) this.showLetter(l); }; }
     this.arcChip(el, e.id);
     this.applyFilter(el);
     this.feed.prepend(el); while (this.feed.children.length > 100) this.feed.lastChild!.remove();
@@ -179,6 +181,11 @@ export class UI {
     this.modal.querySelector('.x')?.addEventListener('click', () => this.closeModal());
   }
   captionTO: any; captionText(html: string) { this.caption.innerHTML = html; this.caption.classList.add('show'); clearTimeout(this.captionTO); this.captionTO = setTimeout(() => this.caption.classList.remove('show'), 6000); }
+  letterHTML(l: import('../sim/letters').Letter) { return `<article class="handwritten"><span aria-hidden="true">💮 ✉️</span><p>${esc(l.text).replace(/\n/g, '<br>')}</p></article>`; }
+  showLetter(l: import('../sim/letters').Letter, floating = false) {
+    if (floating) { if (this.quiet) return; const el = h('button', 'letter-float', this.letterHTML(l)); el.title = 'Dismiss letter'; el.onclick = () => el.remove(); this.toasts.appendChild(el); setTimeout(() => el.remove(), 6000); }
+    else { this.modal.innerHTML = `<div class="letter-view"><button class="letter-close">Close</button>${this.letterHTML(l)}</div>`; this.modal.classList.remove('hidden'); this.modal.querySelector<HTMLButtonElement>('.letter-close')!.onclick = () => this.closeModal(); }
+  }
   toastQ: [string, string][] = []; quiet = false;
   private toastTimers = new WeakMap<Element, ReturnType<typeof setTimeout>[]>();
   refreshToast(t: Element) {
@@ -353,6 +360,7 @@ export class UI {
     if (this.tab === 'rel') body = [...s.villagers].filter(u => u !== v).sort((a, b) => (v.opinion[b.id] ?? 0) - (v.opinion[a.id] ?? 0)).map(u => { const o = Math.round(v.opinion[u.id] ?? 0), back = Math.round(u.opinion[v.id] ?? 0), bel = v.mem.belief(u.id); return `<div class="rel" data-id="${u.id}"><span class="dot" style="background:${VCOLOR[u.id]}"></span><span class="n">${u.first}${v.family.includes(u.id) ? ' 👪' : ''}${u.alliance && u.alliance === v.alliance ? ' 🚩' : ''}</span><span class="ob"><i class="${o < 0 ? 'neg' : 'pos'}" style="${o < 0 ? 'right:50%' : 'left:50%'};width:${Math.abs(o) / 2}%"></i></span><span class="lab">${this.relLabel(o)}</span><span class="back" title="How ${u.first} feels about ${v.first}">${back >= 35 ? '💚' : back <= -35 ? '💢' : '·'}</span>${bel ? `<div class="bel">“${esc(bel.text)}”</div>` : ''}</div>`; }).join('');
     if (this.tab === 'plan') body = v.plan.filter(b => b.to > s.clock - 60).reduce((acc: PlanBlock[], b) => { const p = acc[acc.length - 1]; if (p && p.act === b.act && p.note === b.note && Math.abs(p.to - b.from) < 1) acc[acc.length - 1] = { ...p, to: b.to }; else acc.push(b); return acc; }, []).map(b => `<div class="pl ${s.clock >= b.from && s.clock < b.to ? 'now' : ''} ${b.act === 'event' ? 'evt' : ''}"><span class="t">${fmtTime(b.from)}–${fmtTime(b.to)}</span>${esc(b.note)}${dayOf(b.from) > s.day ? ' <i class="muted">(tomorrow)</i>' : ''}</div>`).join('') + (v.intent ? `<div class="intent">🎯 ${esc(v.intent)}</div>` : '');
     if (this.tab === 'mem') body = `${v.mem.beliefs.length ? `<div class="sub">Beliefs (from reflection)</div>${v.mem.beliefs.map(b => `<div class="mem refl">💭 ${esc(b.text)}</div>`).join('')}` : ''}<div class="sub">Most salient memories</div>` + v.mem.retrieve(s.clock, [], 10).map(m => `<div class="mem k-${m.kind}"><span class="t">${fmtTime(m.t)}</span><span class="imp" title="importance">${'●'.repeat(Math.ceil(m.imp / 2))}</span> ${esc(m.text)}</div>`).join('') + `<div class="sub">Knows ${v.mem.known.size} pieces of news · ${v.mem.items.length} memories</div>`;
+    if (this.tab === 'letters') body = s.letterArchive.filter(l => l.from === v.id || (l.to === v.id && l.read !== undefined) || l.readers.includes(v.id)).slice().reverse().map(l => `<div class="sub">${l.from === v.id ? 'Sent' : 'Received'} · ${l.delivered === undefined ? 'In transit' : l.read === undefined ? 'Delivered' : 'Read'}</div>${this.letterHTML(l)}`).join('') || '<div class="muted">No letters yet.</div>';
     if (this.tab === 'story') body = v.story.slice().reverse().slice(0, 30).map(x => `<div class="st"><span class="t">${fmtTime(x.t)}</span>${this.rich(x.text)}</div>`).join('') || '<div class="muted">Nothing yet.</div>';
     if (refresh) {
       const tb = this.card.querySelector<HTMLElement>('.tb')!, top = tb.scrollTop, left = tb.scrollLeft, cardTop = this.card.scrollTop;
@@ -363,7 +371,7 @@ export class UI {
       <div class="thought">💭 ${esc(v.thought)}</div><div class="doing">▶ ${esc(v.doing)}${v.inside ? ` <span class="muted">(inside ${s.place(v.inside).name})</span>` : ''}</div>
       ${bar('🍞 Fed', v.needs.food, '#e0a64a')}${bar('⚡ Energy', v.needs.energy, '#6cc36c')}${bar('💬 Social', v.needs.social, '#6aa6e8')}
       <div class="inv">${inv}</div><div class="traits">${traits}</div>
-      <div class="tabs">${[['rel', 'Relationships'], ['plan', 'Plan'], ['mem', 'Mind'], ['story', 'Story']].map(([k, l]) => `<button data-t="${k}" class="${this.tab === k ? 'on' : ''}">${l}</button>`).join('')}</div><div class="tb">${body}</div>`;
+      <div class="tabs">${[['rel', 'Relationships'], ['plan', 'Plan'], ['mem', 'Mind'], ['story', 'Story'], ['letters', 'Letters']].map(([k, l]) => `<button data-t="${k}" class="${this.tab === k ? 'on' : ''}">${l}</button>`).join('')}</div><div class="tb">${body}</div>`;
     const pt = this.card.querySelector('.pt')!; pt.appendChild(this.app.portrait(v.id));
     (this.card.querySelector('.x') as HTMLElement).onclick = () => this.app.select(null);
     this.card.querySelectorAll<HTMLElement>('[data-t]').forEach(b => b.onclick = () => { this.tab = b.dataset.t!; this.renderCard(); });

@@ -374,3 +374,21 @@ export function say(sim: Sim, sp: Villager, sit: string, vars: Record<string, st
 
 // A random piece of village small-talk, flavoured by the speaker.
 export function smalltalk(sim: Sim, sp: Villager): string { return say(sim, sp, sim.rng.pick(TOPIC_KEYS)); }
+
+/* Handwritten notes stay under fifty words, including greeting and signature. */
+export function letterText(sim: Sim, v: Villager, t: Villager, kind: import('./letters').LetterKind, context: string, unsigned: boolean) {
+  context = context.split(/\s+/).slice(0, 14).join(' ').replace(/[.!]+$/, '');
+  const R = sim.rng, bodies: Record<import('./letters').LetterKind, string[]> = {
+    love: ['I have a quiet crush on you. Writing it feels braver than saying it.', 'Someone in this village thinks you are rather wonderful. That someone is blushing over this paper.'],
+    apology: [`I keep thinking about this: ${context} I am sorry. Could we begin again?`, 'Our argument has stayed with me. I could not face you today. Could we begin again, gently?'],
+    thanks: [`Thank you. I keep remembering: ${context}.`, `Your kindness meant a lot: ${context}. I wanted you to know.`],
+    invite: [`You are invited to ${context}. I hope there will be a place beside you for me.`],
+    prank: [context + ' Please prepare a short quack of acceptance.'],
+    farewell: ['I understand that we cannot be sweethearts. It still aches a little. I wish you happy days.', 'My heart needs a quiet spell. Thank you for hearing it honestly. May things be gentle between us.'],
+    board: [context + ' Some kindness deserves to be written down.']
+  };
+  const greeting = kind === 'board' ? 'Dear Thistlebrook,' : R.pick([`Dear ${t.first},`, `${t.first},`, `To ${t.first},`]);
+  const signature = unsigned ? kind === 'love' ? '— a secret admirer' : '— a friend of the ducks' : `— ${v.first}`;
+  const body = R.pick(bodies[kind]).split(/\s+/).slice(0, 36).join(' ');
+  return `${greeting}\n\n${body}\n\n${R.pick(['Warmly,', 'With a small wave,', 'Yours,'])}\n${signature}`;
+}

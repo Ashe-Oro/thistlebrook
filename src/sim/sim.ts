@@ -8,6 +8,7 @@ import type { Brain } from './brain';
 import { resolveSocial, maybeOverhear, grievance, addGrievance } from './social';
 import { tickGatherings } from './gatherings';
 import { say } from './lines';
+import { tickLetters, type Letter } from './letters';
 
 export const MIN_PER_SEC = 2; // game minutes per world second (1x: one day = 12 real minutes)
 
@@ -161,12 +162,14 @@ export class Sim {
   }
 
   // ---- main step --------------------------------------------------------------------------------
+  letterArchive: Letter[] = []; letterEvents: Record<number, string> = {}; letterSerial = 1; nextLetterAt = 0;
   step(dt: number) {
     const gdt = dt * MIN_PER_SEC; this.clock += gdt;
     const d = this.day; if (d !== this.lastDay && this.hour >= 6) { if (this.lastDay) { this.emit('dawn', this.lastDay); } this.lastDay = d; for (const v of this.villagers) v.replan = true; this.snapshot(); }
     this.weather(gdt); this.world.simTick(gdt, this.clock); this.world.crowd = this.villagers;
     for (const p of this.parties) this.partyTick(p);
     tickGatherings(this);
+    tickLetters(this);
     for (const g of this.gifts) g.t += gdt;
     for (const v of this.villagers) this.tickVillager(v, dt, gdt);
     this.separate(dt);
