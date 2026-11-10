@@ -60,11 +60,16 @@ await run('terrarium.god("festival")'); await run('terrarium.setSpeed(4)'); awai
 await ffTo(48 + 16.5); await run("terrarium.setSpeed(1); terrarium.setMode('director'); terrarium.god('traveller')"); await wait(1200); await run('terrarium.ui().quiet = true; terrarium.fastForward(14); terrarium.ui().quiet = false; terrarium.beat()'); await wait(3500); await shot('18_storyteller_beat'); await run("terrarium.setMode('free')");
 // Golden hour over the plaza
 await ffTo(48 + 18.1); await run('terrarium.look(-9,4,30,.5,.42)'); await wait(2500); await shot('23_golden_hour');
+// Wodensday town meeting (seed 7: day 3 evening): the village votes on the festival theme
+await ffTo(48 + 19.4); await run("terrarium.setSpeed(1); const S=terrarium.sim; const e=[...S.events].reverse().find(e=>e.kind==='meeting'); if (e) terrarium.look(e.x,e.z,15,.55,.45)"); await wait(2500); await shot('29_town_meeting');
 await ffTo(72 + 10); await run('terrarium.god("rain"); terrarium.fastForward(45)'); await wait(3500); await run('terrarium.look(-9,0,30,.6,.6)'); await wait(2500); await shot('19_rain'); await run('terrarium.strike()'); await wait(120); await shot('19b_lightning');
 await run("const S=terrarium.sim; S.rain=0; S.rainUntil=S.clock; S.nextWeather=S.clock+600; terrarium.setSpeed(1); terrarium.setMode('director'); terrarium.look(-9,4,30,.5,.5); terrarium.setMode('director'); terrarium.rainbow()"); await wait(4500); await shot('26_rainbow'); await wait(4000);
 // Scuffle: two villagers who dislike each other, staged next to each other
 await ffTo(72 + 14); await run(`const S=terrarium.sim; let best=null; for (const a of S.villagers) for (const c of S.villagers) if (a!==c && !a.inside && !c.inside && (!best || (a.opinion[c.id]??0) < (best[0].opinion[best[1].id]??0))) best=[a,c]; const [a,c]=best; c.x=a.x+1.2; c.z=a.z; terrarium.look(a.x,a.z,14,.6,.5); terrarium.setMode('director'); S.startFight(a,c,a.first+' finally had it out with '+c.first); if(!terrarium.beatOn) terrarium.beat(); return [a.id,c.id]`);
 await wait(2600); await shot('20_brawl_beat'); await wait(9000); await run("terrarium.setMode('free'); const S=terrarium.sim; const e=[...S.events].reverse().find(e=>e.kind==='fight'); terrarium.look(e.x,e.z,11,.6,.45)"); await wait(1500); await shot('21_brawl_after');
+// Later in the week: the first wedding (seed 7: Sunday, day 7 afternoon), then a winter morning three weeks on
+await ffTo(144 + 15.15); await run("terrarium.setSpeed(1); terrarium.setMode('free'); const S=terrarium.sim; const e=[...S.events].reverse().find(e=>e.kind==='wedding'); if (e) terrarium.look(e.x,e.z,13,.5,.45)"); await wait(3000); await shot('30_wedding');
+await ffTo(21 * 24 + 10.5); await run("terrarium.setSpeed(1); terrarium.look(-6,2,40,.55,.6)"); await wait(4000); await shot('31_winter');
 await p.close(); // free the renderer before the next page
 // Establishing crane shot (plays on first load for real visitors)
 { const q = await b.newPage({ viewport: { width: 1600, height: 900 } }); watch(q); await q.goto('http://127.0.0.1:5183/?nopaper&fresh&nosave&capture&dynres=0&intro&seed=7'); await q.waitForFunction(() => window.terrarium && document.querySelector('.loading.done'), null, { timeout: 180000 }); await q.waitForTimeout(5000); await q.screenshot({ path: `${OUT}/00_intro.png`, timeout: 120000 }); console.log('shot 00_intro'); await q.close(); }

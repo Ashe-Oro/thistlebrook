@@ -432,7 +432,7 @@ export class Sim {
   }
   learnFact(v: Villager, f: Fact, from?: Villager) {
     const isNew = v.mem.learn(f); if (!isNew) return false;
-    if (f.kind === 'invite' && f.event) { const p = this.parties.find(x => x.id === f.id); if (p && !p.done) { p.invited.add(v.id); v.replan = false; } }
+    if (f.kind === 'invite' && f.event) { const p = this.parties.find(x => x.id === f.id); if (p && !p.done) { p.invited.add(v.id); if (v.planDay === this.day) v.replan = false; } /* not planned yet today: planDay slots the invite in */ }
     // jealousy: hearing that someone is courting *your* crush or sweetheart
     if ((f as any).romance && f.target && f.actor !== v.id && f.target !== v.id && (v.crush === f.target || v.partner === f.target)) {
       const rival = this.byId.get(f.actor)!, beloved = this.byId.get(f.target)!; v.opinion[rival.id] = Math.max(-100, (v.opinion[rival.id] ?? 0) - 22); v.emotions.anger = Math.min(1, v.emotions.anger + .6); v.emotions.sadness += .3;
