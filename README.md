@@ -32,6 +32,7 @@ shower (with an "After the Rain" shot when the director has the camera), and a s
 DAYS=4 SEED=7 node tools/verify.mjs   # headless multi-day soak with assertions -> verify-report.json
 node tools/gallery.mjs                # staged review screenshots -> shots/final/
 node tools/video.mjs                  # frame-exact director's cut (virtual clock, 24 fps) -> shots/terrarium.mp4
+SEEDS=7,3,11 DAYS=8 node tools/soak.mjs  # multi-seed event-count stats (fights, arguments, contests, weddings...)
 ```
 
 ## Performance

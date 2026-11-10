@@ -64,3 +64,47 @@ Tested build: 54eb4c4. These fixes landed on master in round 3.
 - **Fixes:** on day 1, the Moonday market invite cleared `replan` before the first plan, so everyone stayed asleep; this is fixed. Proposal readiness is re-checked at resolve time, so there are no double proposals or weddings.
 - **Gallery:** new shots 29_town_meeting, 30_wedding and 31_winter.
 - **Still open:** crowd performance during the market and plaza gatherings; fights and arguments are high (about 88 and 201 in 8 days); wedding crowds are small (3); the dog search doesn't find Biscuit on seed 7; full dark beards still read dark; the winter tint is subtle (the grass stays fairly green).
+
+## Round 6
+
+- **Drama balance (Fable, then tuned against soaks):**
+  - **Grievance ladder:** every slight adds to a per-pair grievance that fades with a half-life of about 27 h. An argument needs grievance of at least 16, a sour opinion, and at least 20 h since the last argument between the same pair. A fight needs an argument between the same pair in the last 4 days, grievance above 24, hot tempers, no shame on either side, and no village-wide fight lull (2.5 days).
+  - **Theft catches:** a caught thief usually gets a telling-off and hands the keepsake back. It becomes a scuffle only for a hot temper with an existing grudge.
+  - **Cooling off and apologies:** the pair cools off after an argument (a day or more after a fight), and post-spat apologies are common.
+  - **Mediators (`mediate`):** a kind, liked bystander can defuse a row.
+  - **Shame:** fighters lose standing with witnesses and feel shame, which blocks more confrontations and makes them more likely to apologise.
+  - **Cozy rivalry:** quick `contest`s (races, stone-skipping, pie-offs), harmless `prank`s (swapped hats, a frog in a bucket), a bit more flirting and a bit less pinching.
+  - **Calm zones:** `sim.calmAt(x, z)` vetoes arguments, fights and pranks near a wedding, meeting, festival or market in progress.
+- **8-day soak (`npm run soak`, SEEDS=7,3,11,5):**
+
+  | | Before | After |
+  |---|---|---|
+  | Fights | 44 / 52 / 59 (seeds 7 / 3 / 11) | 2 / 0 / 1 / 1 |
+  | Arguments | 201 / 181 / 182 | 5 / 6 / 14 / 11 |
+  | Reconciliations | | 23–41 |
+  | Mediations | | 2–14 |
+  | Contests | | 23–27 |
+  | Pranks | | 23–24 |
+  | Romance | 76 (seed 7) | 56–82 |
+
+- **Weddings (Opus):**
+  - **Guests:** the whole village is invited. Anyone feuding with the bride or groom (opinion below −40) stays away, with a chronicle line saying so.
+  - **Ceremony ground:** a procedural flower arch and two blocks of benches with an aisle, in a couple of merged draws. They go up on the morning of the wedding and come down after the party.
+  - **Sequence:** vows, then a kiss with a petal burst, a toast (🥂) and the first dance with dancing.
+  - **Beat:** a letterboxed "The Wedding" shot framed down the aisle, from the front.
+- **Lost dog:** the search now sometimes finds Biscuit (3 of 7 searches across the soak seeds). The finder cheers, a "Found!" beat plays, and Biscuit turns up in front of them. Otherwise he still trots home on his own.
+- **Crowd performance (Codex, two passes):**
+  - **Where the time goes:** a new `terrarium.perfStats()` breaks the frame into phases. It showed JS at only about 4–6 ms of a ~130 ms SwiftShader frame, so the cost is vertex and raster work, not the sim.
+  - **Characters:** the outline hull and character shadows are drawn only up close. Beyond that, the blob shadow takes over. In crowds, the single-draw far twin switches in at a shorter distance. Shadows refresh less often when a crowd is in view, and extras follow the same rules.
+  - **Animation and UI:** distant and off-screen poses update less often. Floating emoji are batched onto one canvas.
+  - **Result:** day-1 plaza crowd went from 469k triangles at 7.5 fps to 331k at 10.2 fps.
+- **Winter (Codex, then tuned):**
+  - **Snow cover:** patchy snow on the grass, caps on roofs and treetops (a shared uniform, so no shader recompiles), and cobbles only dusted.
+  - **Snowfall and breath:** gentle snowfall at all times, heavier when it would otherwise rain, plus breath puffs.
+  - **Season changes:** a multi-day fast-forward snaps to the new season instead of easing into it.
+- **Gallery:** new shots 30b_wedding_beat and 32_found_biscuit (seed 11). The wedding shots now find the first wedding after the staged scenes.
+- **Still open:**
+  - Gossip is about 30% of events.
+  - Thefts are still frequent (about 45–55 in 8 days); catches are now mostly telling-offs.
+  - The Found! framing crops the dog.
+  - The SwiftShader numbers are noisy when other jobs share the CPU.
