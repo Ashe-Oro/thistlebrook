@@ -3,23 +3,23 @@ import { SUNBEAM_RESIDENTS } from '../sunbeam-layout.js';
 /** @type {[string,string,string,string|null,import('./types').ActivityType][]} */
 const roster=[
  ['Mabel','Baker','Flour & Fern','bread','chess'],['Bram','Blacksmith','Bram’s Workshop','repairs','chess'],
- ['Rose','Innkeeper','The Copper Kettle','bread','picnic'],['Finn','Shopkeeper','Astra Provisions',null,'sit'],
- ['Hazel','Market trader','Astra Provisions','apples','picnic'],['Oswin','Miller','The Little Mill','flour','sit'],
+ ['Rose','Innkeeper','The Copper Kettle','bread','picnic'],['Finn','Shopkeeper','Thistlebrook Provisions',null,'sit'],
+ ['Hazel','Market trader','Thistlebrook Provisions','apples','picnic'],['Oswin','Miller','The Little Mill','flour','sit'],
  ['Clover','Farmer','Clover Farm','apples','picnic'],['Rowan','Carpenter','Bram’s Workshop','repairs','sit'],
- ['Pip','Student','Astra High School',null,'baseball'],['Ada','Story collector','The Reading Room',null,'chess'],
- ['Fern','Herbalist','Saint Willow’s','herbs','picnic'],['Hugh','Lamplighter','Astra Town Hall',null,'sit'],
+ ['Pip','Student','Thistlebrook High School',null,'baseball'],['Ada','Story collector','The Reading Room',null,'chess'],
+ ['Fern','Herbalist','Saint Willow’s','herbs','picnic'],['Hugh','Lamplighter','Thistlebrook Town Hall',null,'sit'],
  ['Wren','Beekeeper','Clover Farm','honey','chess'],['Tilly','Gardener','Petal & Stem','flowers','picnic'],
  ['Jasper','Postman','The Post Office',null,'sit'],['Olive','Flower seller','Petal & Stem','flowers','picnic'],
  ['Nico','Tennis coach','Common Tennis Club',null,'baseball'],['Bea','Barista','Corner Cup Café','bread','picnic'],
  ['Theo','Music lover','The Lantern Room',null,'sit'],['Iris','Gardener','Petal & Stem','flowers','chess'],
- ['Kit','Student','Astra High School',null,'baseball'],['Luca','Bartender','The Nightjar',null,'sit'],
+ ['Kit','Student','Thistlebrook High School',null,'baseball'],['Luca','Bartender','The Nightjar',null,'sit'],
  ['Alma','Librarian','The Reading Room',null,'chess'],['Jules','Basketball regular','The Neighbourhood Court',null,'baseball'],
- ['Elsie','Teacher','Astra High School',null,'chess'],['June','Principal','Astra High School',null,'picnic'],
+ ['Elsie','Teacher','Thistlebrook High School',null,'chess'],['June','Principal','Thistlebrook High School',null,'picnic'],
  ['Arthur','Coach','Owls Memorial Stadium',null,'baseball'],['Blythe','Bookseller','The Reading Room',null,'chess'],
  ['Milo','Cobbler','Sole & Stitch','repairs','sit'],['Daisy','Baker','Sunrise Bakehouse','bread','picnic'],
  ['Lily','Florist','Petal & Stem','flowers','picnic'],['Seth','Postal clerk','The Post Office',null,'sit']
 ];
-roster.push(...SUNBEAM_RESIDENTS.map(p=>[p.name,p.role,p.name==='Otis'?'Willow Community Clinic':p.name==='Rafi'?'Astra High School':p.name==='Emil'?'Civic Library & Story Garden':null,null,p.name==='Rafi'?'baseball':p.name==='Mae'?'chess':'sit']));
+roster.push(...SUNBEAM_RESIDENTS.map(p=>[p.name,p.role,p.name==='Otis'?'Willow Community Clinic':p.name==='Rafi'?'Thistlebrook High School':p.name==='Emil'?'Civic Library & Story Garden':null,null,p.name==='Rafi'?'baseball':p.name==='Mae'?'chess':'sit']));
 export const RESIDENT_NAMES=roster.map(r=>r[0]);
 /** @param {number} seed @param {string} id @param {number} [day] */
 export function variation(seed,id,day=0){let h=(seed+day*7919)>>>0;for(const c of id)h=Math.imul(h^c.charCodeAt(0),16777619)>>>0;return h/4294967296;}

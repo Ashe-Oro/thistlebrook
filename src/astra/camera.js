@@ -207,7 +207,7 @@ export function createMapCamera(camera, element, { bounds, onInteract = () => {}
   listen(window, 'pagehide', flushHash);
   element.style.cursor = 'grab';
   element.tabIndex = 0;
-  element.setAttribute('aria-label', 'Astra town map. Drag or use arrow keys to pan, plus and minus to zoom, Q and E to rotate. Use Meet a neighbour to explore residents.');
+  element.setAttribute('aria-label', 'Thistlebrook town map. Drag or use arrow keys to pan, plus and minus to zoom, Q and E to rotate. Use Meet a neighbour to explore residents.');
   orient();
   return { target, update, view, zoom, rotate, cancel, state, groundAt, flushHash,
     restore() { const saved = readCameraHash(location.hash); if (saved) view(saved, true); return Boolean(saved); },

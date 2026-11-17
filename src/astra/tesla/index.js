@@ -10,7 +10,7 @@ export { installTeslaTraffic } from './adapter.js';
 // One optional traffic adapter, one preview fallback, exactly one Roadster.
 // Absolute simulation time makes pause, speed and deterministic capture agree.
 export function createTeslaTown(scene,town,{traffic=null,residents=null}={}){
-  const root=new THREE.Group();root.name='Astra electric vehicles';scene.add(root);
+  const root=new THREE.Group();root.name='Thistlebrook electric vehicles';scene.add(root);
   const adapter=traffic?installTeslaTraffic(traffic):null;
   const simulation=adapter?null:createPreviewFleetSimulation();
   const fleet=simulation?simulation.vehicles.map((v,i)=>{

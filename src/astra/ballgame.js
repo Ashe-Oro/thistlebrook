@@ -1,4 +1,4 @@
-// Kids' pickup ballgame on the Astra Owls field (grok-merge).
+// Kids' pickup ballgame on the Thistlebrook Owls field (grok-merge).
 // Pure and clock-driven: positions come from (hour, t, weekday), so pause,
 // speed and tests all see the same game. civic.js renders it.
 // weekday: 0 = Monday .. 6 = Sunday (world.update passes (4 + life.day) % 7).

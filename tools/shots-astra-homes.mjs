@@ -42,7 +42,7 @@ try {
       }
       return {arrived:[...arrived],away:[...away]};
     });
-    for(const name of ['Nell’s Corner & upstairs flats','The Washhouse & upstairs flats','Astra High School','The Reading Room'])assert(visits.arrived.includes(name),'No arrival at '+name);
+    for(const name of ['Nell’s Corner & upstairs flats','The Washhouse & upstairs flats','Thistlebrook High School','The Reading Room'])assert(visits.arrived.includes(name),'No arrival at '+name);
     assert.equal(visits.away.length,8,'Every new resident reaches the wider town');
     const night=await page.evaluate(()=>{__astra.setHour(23);for(let i=0;i<9000;i++){__astra.setHour(23);__astra.step(.1,false);}return __astra.residents.people.filter(p=>p.local).map(p=>({name:p.name,home:p.node===p.home&&!p.route.length}));});
     assert(night.every(p=>p.home),'All new residents return to their own home');

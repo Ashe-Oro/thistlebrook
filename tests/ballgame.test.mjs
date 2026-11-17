@@ -1,4 +1,4 @@
-// grok-merge: kids' pickup ballgame on the Astra Owls field.
+// grok-merge: kids' pickup ballgame on the Thistlebrook Owls field.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';

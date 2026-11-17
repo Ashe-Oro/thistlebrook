@@ -129,7 +129,7 @@ try {
   await page.keyboard.press('Escape'); assert.equal(await page.locator('.card').isVisible(), false);
   check('resident pointer picking, live activity, follow, stop follow, manual override and Escape');
 
-  await page.getByRole('button', { name: 'Astra High', exact: true }).click(); await settle();
+  await page.getByRole('button', { name: 'Thistlebrook High', exact: true }).click(); await settle();
   near((await state()).x, 8); near((await state()).z, -70); near((await state()).zoom, 1.8);
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click(); await settle();
   near((await state()).zoom, 1.8 * 1.3);
@@ -197,8 +197,8 @@ try {
   await settle();assert.deepEqual(await page.evaluate(()=>({life:__astra.residents.life.audit(),traffic:__astra.traffic.audit(),works:__astra.world.works.audit()})),before);
   const bus=await page.evaluate(()=>{
    const a=__astra,v=a.traffic.simulation.vehicles.find(v=>v.route==='station'&&v.kind==='bus'),o=a.traffic.objects[v.id];a.view({x:o.position.x,z:o.position.z,zoom:5});a.step(0);
-   for(let r=0;r<4;r++){a.controls.view({x:o.position.x,z:o.position.z,zoom:5,rotation:r},true);a.step(0);const p=o.position.clone();p.y+=1;p.project(a.camera);const x=(p.x+1)*innerWidth/2,y=(1-p.y)*innerHeight/2;if(a.pick(x,y)?.name==='Astra West Loop')return {x,y,picked:a.pick(x,y).name};}return {picked:'Bus occluded in all four views'};
-  });assert.equal(bus.picked,'Astra West Loop');await page.mouse.click(bus.x,bus.y);await settle();assert.equal(await page.locator('.card h2').textContent(),'Astra West Loop');await page.keyboard.press('Escape');
+   for(let r=0;r<4;r++){a.controls.view({x:o.position.x,z:o.position.z,zoom:5,rotation:r},true);a.step(0);const p=o.position.clone();p.y+=1;p.project(a.camera);const x=(p.x+1)*innerWidth/2,y=(1-p.y)*innerHeight/2;if(a.pick(x,y)?.name==='Thistlebrook West Loop')return {x,y,picked:a.pick(x,y).name};}return {picked:'Bus occluded in all four views'};
+  });assert.equal(bus.picked,'Thistlebrook West Loop');await page.mouse.click(bus.x,bus.y);await settle();assert.equal(await page.locator('.card h2').textContent(),'Thistlebrook West Loop');await page.keyboard.press('Escape');
   check('traffic inspection has moving world bounds; pause freezes routines, vehicles and production');
   await page.evaluate(()=>__astra.controls.view({...__astra.controls.state(),rotation:0},true));
   const phases=[];

@@ -1,8 +1,8 @@
-# Astra — a little place to linger
+# Thistlebrook — a little place to linger
 
 The default page opens Downtown: a bakery, shoe shop, café, bookshop and other
 local shops around a flowing fountain. The wider cel-shaded town includes
-Willowbank’s homes, Astra High’s schoolyard, baseball and football stadium,
+Willowbank’s homes, Thistlebrook High’s schoolyard, baseball and football stadium,
 Lantern Quay’s evening music, Civic Green’s services and park, West Works’
 railway and workplaces, Sunbeam Terrace’s homes, and the orchard across the river. Pan, zoom, click a neighbour to follow
 their day, or watch the lights come on.
@@ -16,7 +16,7 @@ the camera and input controls. Progress is in
 See [the four-branch merge and review notes](docs/ASTRA-MERGED.md).
 Use `npm run film:astra:merged` to capture the tour.
 
-See [Astra's layout rules, controls and private asset setup](docs/ASTRA.md).
+See [Thistlebrook's layout rules, controls and private asset setup](docs/ASTRA.md).
 Licensed models remain local and ignored; builds do not copy them.
 
 The documentation below describes the earlier Cel Town experiments, available

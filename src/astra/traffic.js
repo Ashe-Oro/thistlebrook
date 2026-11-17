@@ -9,7 +9,7 @@ import { REGIONAL } from '../roads/regional.js';
 
 // Self-contained integration: the compiler and resident routines stay untouched.
 export async function createTraffic(scene,town,residents,world){
- const simulation=createTrafficSimulation(town),root=new THREE.Group();root.name='Astra town traffic';scene.add(root);
+ const simulation=createTrafficSimulation(town),root=new THREE.Group();root.name='Thistlebrook town traffic';scene.add(root);
  const materials=new Map(),cube=new THREE.BoxGeometry(1,1,1),wheelGeo=new THREE.CylinderGeometry(.22,.22,.12,10);
  const material=color=>{if(!materials.has(color))materials.set(color,toonMaterial(color));return materials.get(color);};
  const box=(parent,x,y,z,w,h,d,color)=>{const m=new THREE.Mesh(cube,material(color));m.position.set(x,y,z);m.scale.set(w,h,d);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;};
@@ -95,7 +95,7 @@ export async function createTraffic(scene,town,residents,world){
   for(const [i,g] of objects.entries()){
    pickBounds.setFromObject(g);const hit=ray.intersectBox(pickBounds,hitPoint);if(!hit)continue;
    const distance=ray.origin.distanceTo(hit);if(distance>=best)continue;best=distance;
-   const v=simulation.vehicles[i],name=v.kind==='bus'?(v.route==='station'?'Astra West Loop':'Astra Town Loop'):v.kind==='van'?'Astra Post':v.kind==='cycle'?'Cycling through town':'Around-town drive';
+   const v=simulation.vehicles[i],name=v.kind==='bus'?(v.route==='station'?'Thistlebrook West Loop':'Thistlebrook Town Loop'):v.kind==='van'?'Thistlebrook Post':v.kind==='cycle'?'Cycling through town':'Around-town drive';
    const detail=v.kind==='bus'?(v.route==='station'?'Route 2 · ':'Route 1 · ')+v.stops.map(s=>s.name).join(' → '):v.kind==='van'?'Local delivery round':v.kind==='cycle'?'A ride through the neighbourhood':'Local traffic';
    const story=v.kind==='bus'?'The town bus connects the shops, campus, quay and market. It pauses at each gold stop and gives people crossing the street time to pass.':v.kind==='van'?'Parcels travel by road to the shops and quay. The van pulls up for a short unloading stop before continuing its round.':'Following the streets, slowing for the neighbours and waiting a turn at the junctions.';
    closest={type:'traffic',name,distance,bounds:pickBounds.clone(),object:g,data:{name,detail,story:story+' '+v.status+'.'}};

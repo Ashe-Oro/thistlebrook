@@ -4,7 +4,7 @@ import {execFileSync} from 'node:child_process';
 import assert from 'node:assert/strict';
 const dir=new URL('../shots/astra/',import.meta.url).pathname,frames=dir+'.frames/round3/';mkdirSync(frames,{recursive:true});
 const stops=[
- ['village',10.4,'Astra, a connected world','18 districts. Follow the roads and see where they lead.'],
+ ['village',10.4,'Thistlebrook, a connected world','18 districts. Follow the roads and see where they lead.'],
  ['works',10.4,'West Works','The morning shift, the station and the electric fleet.'],
  ['roadster',14,'Roadster Proving Ground','A white Roadster, a curved ramp and a crowd for the show.'],
  ['fair',16,'Merrymead Park','The rides are turning beside the picnic lawn.'],
@@ -20,10 +20,10 @@ const stops=[
  ['starbase',17.2,'Starbase Texas','The Starfactory, launch tower and offshore recovery.'],
  ['themepark',17.4,'Beyond the mountain pass','Pinecrest coasters climb above the pines.'],
  ['skatepark',17.4,'Switchyard Skate & Bike','Taking turns in the bowl and on the pump track.'],
- ['airport',17.5,'Astra Municipal Airport','An airliner arrives; club planes head out.'],
+ ['airport',17.5,'Thistlebrook Municipal Airport','An airliner arrives; club planes head out.'],
  ['campus',18,'Home of the Owls','After-school practice under a honey-coloured sky.'],
  ['quay',20.5,'Lantern Quay','Music, warm windows and an evening by the river.'],
- ['village',21,'Astra, under the stars','One connected world. A little place to linger.'],
+ ['village',21,'Thistlebrook, under the stars','One connected world. A little place to linger.'],
 ];
 const rangeArg=process.argv.find(a=>a.startsWith('--range='));
 const [start,end]=(rangeArg?.slice(8)||'0:20').split(':').map(Number);

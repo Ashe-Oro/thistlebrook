@@ -20,7 +20,7 @@ jobs:
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      PROD_URL: https://cel-village.vercel.app
+      PROD_URL: https://thistlebrook.vercel.app
     steps:
       - uses: actions/checkout@v4
 
@@ -55,7 +55,7 @@ jobs:
         run: |
           # Deploy from a copy outside the git checkout so Vercel doesn't attach the
           # commit author (snapshot commits aren't by a Vercel team member).
-          out="$RUNNER_TEMP/cel-village-dist"
+          out="$RUNNER_TEMP/thistlebrook-dist"
           rm -rf "$out" && cp -r dist "$out"
           url=$(cd "$out" && npx --yes vercel@65.17.0 deploy . --prod --yes --token "$VERCEL_TOKEN")
           echo "Deployed: $url"

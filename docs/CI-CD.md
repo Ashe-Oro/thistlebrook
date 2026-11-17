@@ -1,10 +1,11 @@
 # CI/CD: merge to `main` → Vercel production
 
-Every push to `main` on the private GitHub repo `Ashe-Oro/cel-village` runs
+Every push to `main` on the private GitHub repo `Ashe-Oro/thistlebrook` runs
 `.github/workflows/deploy.yml`, which tests the code, builds the deploy `dist`
 with the licensed models, and deploys it to Vercel production
-(<https://cel-village.vercel.app>, project `cel-village`, team
-`ashe-oros-projects`). Pull requests run the tests only. The workflow can also be
+(<https://thistlebrook.vercel.app>, project `thistlebrook`, team
+`ashe-oros-projects`). The previous URL <https://cel-village.vercel.app> stays
+on as an extra production domain. Pull requests run the tests only. The workflow can also be
 started by hand (Actions → "Test and deploy" → Run workflow).
 
 The site is **public** (Vercel Authentication is off, by Ashe's decision on
@@ -25,7 +26,7 @@ The site is **public** (Vercel Authentication is off, by Ashe's decision on
    missing model (404).
 5. `vercel deploy dist --prod` with `VERCEL_TOKEN`; `VERCEL_ORG_ID` and
    `VERCEL_PROJECT_ID` select the project.
-6. Post-deploy check: `https://cel-village.vercel.app/` must return **200** to an
+6. Post-deploy check: `https://thistlebrook.vercel.app/` must return **200** to an
    unauthenticated request and serve the new `index.html`, and
    `/draco/draco_decoder.wasm` must return 200.
 
@@ -38,7 +39,7 @@ The ThreeJS Assets models are licensed. They are never committed to git (not eve
 to the private repo): `public/licensed`, `dist/`, `.licensed-cache/` and
 `.models-pack/` are gitignored. CI gets them from the **private** Vercel Blob
 store `cel-village-models` (store_79QhDyrDhPJu5gB4, iad1, connected to
-`cel-village`):
+`thistlebrook`):
 
 - `models/cel-village-models-<sha16>.tar.gz`: `licensed/` and `owned-assets/`
   exactly as compressed in `dist/` (Draco/meshopt), about 26 MB, 427 files.
@@ -67,7 +68,7 @@ BLOB_READ_WRITE_TOKEN=... npm run models:upload -- --prune   # token from `verce
 | --- | --- |
 | `VERCEL_TOKEN` | Vercel access token for ashe-oro (deploys) |
 | `VERCEL_ORG_ID` | Team id of `ashe-oros-projects` |
-| `VERCEL_PROJECT_ID` | Project id of `cel-village` |
+| `VERCEL_PROJECT_ID` | Project id of `thistlebrook` (id unchanged after the rename from `cel-village`) |
 | `BLOB_READ_WRITE_TOKEN` | Read-write token of the `cel-village-models` Blob store |
 
 `tools/ci-bootstrap.sh` does the one-time GitHub setup: create the private repo,

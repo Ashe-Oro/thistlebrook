@@ -73,7 +73,7 @@ export function createLife(town,options={}){
   if(tool==='payBill'){
    const bill=c.bills.find(b=>b.id===action.args.bill);
    if(!bill||bill.paidDay===day||bill.dueDay>day||bill.amount>c.money)return fail(a,action,'Bill is not due or cannot be paid');
-   if(p.name!=='Astra Town Hall'&&p.id!==c.job.workplace)return fail(a,action,'Bills are paid at town hall or the workplace');
+   if(p.name!=='Thistlebrook Town Hall'&&p.id!==c.job.workplace)return fail(a,action,'Bills are paid at town hall or the workplace');
   }
   if(tool==='eat'&&!c.assets.inventory.meal&&p.id!==c.assets.home)return fail(a,action,'Bring a packed meal');
   const slot=p.interaction?.slots.find(s=>s.id===c.location.slot);

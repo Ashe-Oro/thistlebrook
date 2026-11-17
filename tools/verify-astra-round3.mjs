@@ -20,7 +20,7 @@ try{
  check('district menu reaches all new regions and updates location copy without stale cards');
  const names=await page.evaluate(()=>__astra.world.selectables.filter(s=>s.data?.name).map(s=>s.data.name));
  const selected=[];
- for(const wanted of ['Corner Cup Café','Sole & Stitch','Astra High School',names.find(n=>/Starfactory/i.test(n)),names.find(n=>/Airport|Terminal/i.test(n))].filter(Boolean)){
+ for(const wanted of ['Corner Cup Café','Sole & Stitch','Thistlebrook High School',names.find(n=>/Starfactory/i.test(n)),names.find(n=>/Airport|Terminal/i.test(n))].filter(Boolean)){
   const hit=await page.evaluate(name=>{const a=__astra,b=a.world.selectables.find(s=>s.data.name===name);if(!b)return null;const c=b.bounds.getCenter(a.controls.target.clone());for(let r=0;r<4;r++){a.controls.view({x:c.x,z:c.z,zoom:3,rotation:r},true);a.step(0);const p=c.clone().project(a.camera),x=(p.x+1)*innerWidth/2,y=(1-p.y)*innerHeight/2;if(a.pick(x,y)?.name===name)return {x,y,name};}return null;},wanted);
   if(!hit)continue;await page.mouse.click(hit.x,hit.y);assert.equal(await page.locator('.card h2').textContent(),wanted);selected.push({name:wanted,story:await page.locator('.card p').textContent()});await page.evaluate(()=>{__astra.view('harbor');__astra.step(0);});assert.equal(await page.locator('.card').isVisible(),false);
  }

@@ -4,7 +4,7 @@ import {execFileSync} from 'node:child_process';
 import assert from 'node:assert/strict';
 const dir=new URL('../shots/astra/',import.meta.url).pathname,frames=dir+'.frames/round2/';mkdirSync(frames,{recursive:true});
 const stops=[
- ['village',10.4,'Astra, together','Nine districts. Forty neighbours. One living town.',16],
+ ['village',10.4,'Thistlebrook, together','Nine districts. Forty neighbours. One living town.',16],
  ['works',10.4,'The western branch','The morning shift, the station and the West Loop bus.',16],
  ['sunbeam',10.4,'Sunbeam Terrace','Homes above the shops. A courtyard for neighbours.',16],
  ['civic',10.4,'Civic Green','The library, the clinic and a little room to play.',16],
@@ -15,7 +15,7 @@ const stops=[
  ['campus',17.4,'Home of the Owls','Practice after class, under a honey-coloured sky.',16],
  ['village',18.4,'The golden hour','The town slows down as the lanterns come on.',16],
  ['quay',21,'One more song','Warm windows, music and an evening by the river.',16],
- ['village',21,'Astra, under the stars','A little place to linger.',16],
+ ['village',21,'Thistlebrook, under the stars','A little place to linger.',16],
 ];
 const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',args:['--no-sandbox','--disable-dev-shm-usage','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
 try {

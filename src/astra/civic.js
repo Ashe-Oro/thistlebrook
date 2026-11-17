@@ -19,7 +19,7 @@ export async function buildCivic(scene,town){
  const polygon=(points,y,c)=>{const vertices=points.map(p=>new THREE.Vector2(...p)),indices=THREE.ShapeUtils.triangulateShape(vertices,[]).flat(),g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(points.flatMap(([x,z])=>[x,y,z]),3));g.setIndex(indices);g.computeVertexNormals();const mat=toonMaterial(c).clone();mat.side=THREE.DoubleSide;const m=new THREE.Mesh(g,mat);m.receiveShadow=true;root.add(m);tagObject(m,assembly);return m;};
  const player=async(role,x,z,scale=1,parent=dynamic)=>{const id=assembly,o=await place('townsfolk-'+role,{x,z,scale});tagObject(o,id);o.position.y=.18;parent.add(o);return o;};
  const ring=(x,y,z,r,t,c)=>{const m=new THREE.Mesh(new THREE.TorusGeometry(r,t,6,40),toonMaterial(c));m.rotation.x=Math.PI/2;m.position.set(x,y,z);root.add(m);tagObject(m,assembly);return m;};
- // Astra High: brick classroom wings, a clock tower, lockers, flag and bus bay.
+ // Thistlebrook High: brick classroom wings, a clock tower, lockers, flag and bus bay.
  box(-2,.05,-61,28,.1,12,'#c6b99e');
  for(const x of [-10,6]){
   box(x,2.8,-62,10,5.6,8,'#bc9078');box(x,.4,-62,10.25,.65,8.2,'#d8c6a5');
@@ -84,8 +84,8 @@ export async function buildCivic(scene,town){
   const o=new THREE.Group();o.position.set(...[b.pos[0],0,b.pos[1]]);o.rotation.y=b.rot;root.add(o);
   const colors=['#bd826c','#587f79','#a38e6d','#7d9c8b'],n=town.buildings.indexOf(b)%4,color=colors[n];
   const localFront=b.id==='cv-store'?3.85:b.id==='cv-bakery'?3.35:3;
-  const shopLabel={'Sunrise Bakehouse':'BAKERY','Sole & Stitch':'SOLE & STITCH','The Reading Room':'BOOKS','Corner Cup Café':'CORNER CAFÉ','Petal & Stem':'FLOWERS','Astra Town Hall':'TOWN HALL','The Post Office':'POST OFFICE'}[b.name];label(shopLabel,0,3.55,localFront+.05,4.6,.65,color,o);
-  if(b.name!=='Astra Town Hall')for(let k=0;k<8;k++){assembly=`built:${b.key}-awning`;const awning=box(-2.2+k*.62,2.52,localFront+.38,.62,.1,1.2,k%2?'#efe0bd':color,o);awning.rotation.x=.13;}
+  const shopLabel={'Sunrise Bakehouse':'BAKERY','Sole & Stitch':'SOLE & STITCH','The Reading Room':'BOOKS','Corner Cup Café':'CORNER CAFÉ','Petal & Stem':'FLOWERS','Thistlebrook Town Hall':'TOWN HALL','The Post Office':'POST OFFICE'}[b.name];label(shopLabel,0,3.55,localFront+.05,4.6,.65,color,o);
+  if(b.name!=='Thistlebrook Town Hall')for(let k=0;k<8;k++){assembly=`built:${b.key}-awning`;const awning=box(-2.2+k*.62,2.52,localFront+.38,.62,.1,1.2,k%2?'#efe0bd':color,o);awning.rotation.x=.13;}
   if(b.name==='Sole & Stitch'){assembly=`built:${b.key}-display`;box(1.7,.7,localFront+.55,1.2,.14,.7,'#9f8661',o);for(const x of [1.4,1.9]){box(x,.88,localFront+.65,.22,.24,.45,'#926b4d',o);box(x,1.05,localFront+.52,.22,.4,.19,'#926b4d',o);}}
   if(b.name==='Sunrise Bakehouse'){assembly=`built:${b.key}-display`;box(-1.65,.75,localFront+.5,1.25,.18,.7,'#b1986c',o);for(let k=0;k<4;k++){const loaf=orb(-2+k*.24,.96,localFront+.5,.16,'#dab374',o);loaf.scale.z=.28;}}
   if(b.name==='The Post Office')tagObject(box(1.6,.8,localFront+.5,.65,1.3,.65,'#658694',o),`built:${b.key}-display`);

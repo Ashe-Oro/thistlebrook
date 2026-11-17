@@ -15,7 +15,7 @@ const stops=[
  ['campus',15.5,'School’s out','The Owls have practice after class.',30],
  ['stadium',20.5,'Friday-night lights','A whole town cheering from the stands.',30],
  ['quay',20.5,'One more song','Lanterns, friends and the riverside band.',30],
- ['village',20.5,'Astra, after dark','A little place to linger.',30],
+ ['village',20.5,'Thistlebrook, after dark','A little place to linger.',30],
 ];
 const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',args:['--no-sandbox','--disable-dev-shm-usage','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
 try {

@@ -7,7 +7,7 @@ import { makeAircraft, makeHelicopter } from './aircraft.js';
 export { AIRPORT } from './traffic.js';
 
 export async function buildAirport(scene,town) {
- const root=new THREE.Group(),staticRoot=new THREE.Group(),dynamic=new THREE.Group();root.name='Astra Municipal Airport';root.add(dynamic);scene.add(root);
+ const root=new THREE.Group(),staticRoot=new THREE.Group(),dynamic=new THREE.Group();root.name='Thistlebrook Municipal Airport';root.add(dynamic);scene.add(root);
  const cube=new THREE.BoxGeometry(1,1,1),bulbs=[],passengers=[],jobs=[];
  const box=(x,y,z,w,h,d,c,parent=staticRoot)=>{const m=new THREE.Mesh(cube,toonMaterial(c));m.position.set(x,y,z);m.scale.set(w,h,d);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;};
  const label=(text,x,y,z,w,h,c='#355b60',flat=false,parent=staticRoot)=>{const canvas=document.createElement('canvas');canvas.width=Math.max(256,Math.round(256*w/h));canvas.height=256;const ctx=canvas.getContext('2d');ctx.fillStyle=c;ctx.fillRect(0,0,canvas.width,256);ctx.fillStyle='#fff0d2';ctx.font='bold 155px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,canvas.width/2,132,canvas.width-24);const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({map:texture,side:THREE.DoubleSide}));m.position.set(x,y,z);if(flat)m.rotation.x=-Math.PI/2;parent.add(m);return m;};
@@ -71,5 +71,5 @@ export async function buildAirport(scene,town) {
  };
  update(0);
  return {root,aircraft,helicopter:heli,view:AIRPORT.view,update,audit:()=>states.map(s=>({...s,position:s.position.toArray()})),
-  selectables:[{type:'airport',data:{name:'Astra Municipal Airport'},bounds:new THREE.Box3(new THREE.Vector3(69,0,-74),new THREE.Vector3(86,5,-49))}]};
+  selectables:[{type:'airport',data:{name:'Thistlebrook Municipal Airport'},bounds:new THREE.Box3(new THREE.Vector3(69,0,-74),new THREE.Vector3(86,5,-49))}]};
 }

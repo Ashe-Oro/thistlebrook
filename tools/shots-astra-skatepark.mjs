@@ -31,7 +31,7 @@ try {
  await page.getByRole('button',{name:'Change simulation speed',exact:true}).click();
  await page.getByRole('button',{name:'Change simulation speed',exact:true}).click();
  // Real navigation button and a pointer click on the visible bowl surface.
- await page.getByRole('button',{name:'Astra High',exact:true}).click();await step(2);
+ await page.getByRole('button',{name:'Thistlebrook High',exact:true}).click();await step(2);
  await page.getByRole('button',{name:'Skate & Bike',exact:true}).click();await step(2);
  const hit=await page.evaluate(()=>{__astra.view('skatepark');__astra.step(0);const p=__astra.world.skatepark.root.position.clone();p.x-=5.3;p.y=.5;p.z-=8;p.project(__astra.camera);return {x:(p.x+1)/2*innerWidth,y:(1-p.y)/2*innerHeight};});
  await page.mouse.click(hit.x,hit.y);

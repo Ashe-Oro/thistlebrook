@@ -5,7 +5,7 @@ import * as THREE from 'three';
 export const PERIOD = 210;
 export const AIRPORT = { x: 105, z: -49, view: { x: 104, z: -48, zoom: 1.55 }, bounds: { minX: 65, maxX: 146, minZ: -113, maxZ: 14 } };
 export const FLEET = [
-  { id: 'AT201', name: 'Astra Air · AT201', kind: 'commercial', gate: -65, offset: 0, color: '#3a8185' },
+  { id: 'AT201', name: 'Thistlebrook Air · AT201', kind: 'commercial', gate: -65, offset: 0, color: '#3a8185' },
   { id: 'CL104', name: 'Clover Flying Club · CL104', kind: 'light', gate: -43, offset: 70, color: '#d48b48' },
   { id: 'CL108', name: 'Clover Flying Club · CL108', kind: 'light', gate: -20, offset: 140, color: '#b76055' },
 ];

@@ -9,7 +9,7 @@ const point=p=>Array.isArray(p)&&p.length===2&&p.every(Number.isFinite);
 export const isOpen=(hours,h)=>hours[0]===0&&hours[1]===24||hours[0]<hours[1]&&h>=hours[0]&&h<hours[1]||hours[0]>hours[1]&&(h>=hours[0]||h<hours[1]);
 const title=s=>s.replace(/^(cv|farm)-/,'').replaceAll('-',' ').replace(/\b\w/g,c=>c.toUpperCase());
 const names=['Mabel','Bram','Rose','Finn','Hazel','Oswin','Clover','Rowan','Pip','Ada','Fern','Hugh','Wren','Tilly','Jasper','Olive','Nico','Bea','Theo','Iris','Kit','Luca','Alma','Jules','Elsie','June','Arthur','Blythe','Milo','Daisy','Lily','Seth','Nell','Otis','Cleo','Rafi','Mae','Sol','Zara','Emil'];
-const proprietors={'The Little Mill':'Oswin','Flour & Fern':'Mabel','Bram’s Workshop':'Bram','The Copper Kettle':'Rose','Astra Provisions':'Finn','Clover Farm':'Clover','The Nightjar':'Luca','The Reading Room':'Blythe','Sole & Stitch':'Milo','Sunrise Bakehouse':'Daisy','Petal & Stem':'Lily','The Post Office':'Seth','Astra High School':'June'};
+const proprietors={'The Little Mill':'Oswin','Flour & Fern':'Mabel','Bram’s Workshop':'Bram','The Copper Kettle':'Rose','Thistlebrook Provisions':'Finn','Clover Farm':'Clover','The Nightjar':'Luca','The Reading Room':'Blythe','Sole & Stitch':'Milo','Sunrise Bakehouse':'Daisy','Petal & Stem':'Lily','The Post Office':'Seth','Thistlebrook High School':'June'};
 function service(name,kind){
  if(kind==='home')return {capabilities:['walkTo','visit','rest'],hours:[0,24]};
  if(/Nightjar|Lantern Room/.test(name))return {capabilities:['walkTo','visit','work','buy','eat','rest'],hours:[17,1]};
@@ -61,14 +61,14 @@ export function buildRegistry(town,catalog){
  const add=(source,id,type,name,pos,options={})=>{
   if(byId.has(id))throw Error(`Duplicate registry id: ${id}`);
   const node=options.node??null;
-  const record={id,type,kind:type,name,district:options.district||byId.get(options.owner)?.district||districtAt(pos),owner:options.owner||'Astra town',occupants:options.occupants||[],hours:[0,24],capabilities:node===null?[]:['walkTo','visit'],pos:[...pos],node,entryPoints:node===null?[]:[{node,position:[...town.nodes[node]],approach:[]}],interactionPoints:[],...options};
+  const record={id,type,kind:type,name,district:options.district||byId.get(options.owner)?.district||districtAt(pos),owner:options.owner||'Thistlebrook town',occupants:options.occupants||[],hours:[0,24],capabilities:node===null?[]:['walkTo','visit'],pos:[...pos],node,entryPoints:node===null?[]:[{node,position:[...town.nodes[node]],approach:[]}],interactionPoints:[],...options};
   places.push(record);byId.set(id,record);if(source)source.registryId=id;return record;
  };
  for(const b of town.buildings){
   const occupants=names.filter((_,n)=>n%town.buildings.length===town.buildings.indexOf(b));
-  add(b,b.key,'building',b.name,b.pos,{...service(b.name,b.kind),kind:b.kind,asset:b.id,node:b.node,district:b.district,owner:proprietors[b.name]||occupants[0]||'Astra town',occupants});
+  add(b,b.key,'building',b.name,b.pos,{...service(b.name,b.kind),kind:b.kind,asset:b.id,node:b.node,district:b.district,owner:proprietors[b.name]||occupants[0]||'Thistlebrook town',occupants});
  }
- for(const v of town.venues)add(v,v.id,v.type==='school'?'building':'area',v.name,v.pos,{node:v.node,district:v.district||(['tennis','basketball','playground','baseball','football','school'].includes(v.type)?'common':'quay'),kind:v.type,capabilities:['walkTo','visit','rest',...(v.type==='school'?['work']:[])],hours:v.type==='music'?[17,1]:v.district==='fair'&&!['fair-pond','fair-picnic'].includes(v.type)?[15,22]:[6,22],owner:proprietors[v.name]||'Astra town'});
+ for(const v of town.venues)add(v,v.id,v.type==='school'?'building':'area',v.name,v.pos,{node:v.node,district:v.district||(['tennis','basketball','playground','baseball','football','school'].includes(v.type)?'common':'quay'),kind:v.type,capabilities:['walkTo','visit','rest',...(v.type==='school'?['work']:[])],hours:v.type==='music'?[17,1]:v.district==='fair'&&!['fair-pond','fair-picnic'].includes(v.type)?[15,22]:[6,22],owner:proprietors[v.name]||'Thistlebrook town'});
  const field=town.venues.find(v=>v.type==='baseball');
  if(field){const r=byId.get(field.id),interaction=baseballInteraction(field);r.interaction=interaction;r.hours=[...interaction.hours];r.interactionPoints=interaction.slots;r.activity={enabled:true,activity:'baseball',animation:'field',slots:interaction.slots};}
  for(const d of town.districts)add(d,byId.has(d.id)?'district:'+d.id:d.id,'district',d.name,d.center,{node:nearestNode(d.center),district:d.id});
@@ -77,7 +77,7 @@ export function buildRegistry(town,catalog){
  const physical=[...town.props,...town.trees,...town.supplemental];
  for(const [i,p] of physical.entries()){
   const id=p.key||(i<town.props.length?`prop-${i}`:`tree-${i-town.props.length}`),asset=p.asset||p.id;
-  const r=add(p,id,/duck|chicken$/.test(asset)?'animal':town.trees.includes(p)?'vegetation':'prop',`${title(asset)} (${id})`,p.pos,{asset,rot:p.rot||0,scale:p.scale||1,owner:p.owner||'Astra town'});
+  const r=add(p,id,/duck|chicken$/.test(asset)?'animal':town.trees.includes(p)?'vegetation':'prop',`${title(asset)} (${id})`,p.pos,{asset,rot:p.rot||0,scale:p.scale||1,owner:p.owner||'Thistlebrook town'});
   const activity=activityFor(asset);
   const seats=asset==='cv-bench'?cozyBenchSeats(p):[];
   r.interactionPoints=seats;
@@ -87,7 +87,7 @@ export function buildRegistry(town,catalog){
  town.procedural=proceduralPlacements(town);
  town.roads.forEach((r,i)=>r.registryId=`built:road-${i}`);
  town.courtyards.forEach((r,i)=>r.registryId=`built:terrace-${i}`);
- for(const p of town.procedural){const r=add(p,p.key,p.kind,p.name,p.pos,{owner:p.owner||'Astra town',rendering:p.rendering});const seats=proceduralSeatCandidates(p,town);r.activity={enabled:false,activity:seats.length?'sit':activityFor(p.name.toLowerCase()),animation:seats.length?'sit':'idle',slots:seats,reason:'Assembly component; no authored activity access'};if(p.key.startsWith('built:chair-'))r.activity={enabled:false,activity:'sit',animation:'sit',slots:[{id:'seat',kind:'seat',position:[...p.pos],facing:p.key.endsWith('--1')?0:Math.PI,seatHeight:.48,animation:'sit',approach:[]}],reason:'Seat measured from procedural furniture; circulation approach not yet verified'};}
+ for(const p of town.procedural){const r=add(p,p.key,p.kind,p.name,p.pos,{owner:p.owner||'Thistlebrook town',rendering:p.rendering});const seats=proceduralSeatCandidates(p,town);r.activity={enabled:false,activity:seats.length?'sit':activityFor(p.name.toLowerCase()),animation:seats.length?'sit':'idle',slots:seats,reason:'Assembly component; no authored activity access'};if(p.key.startsWith('built:chair-'))r.activity={enabled:false,activity:'sit',animation:'sit',slots:[{id:'seat',kind:'seat',position:[...p.pos],facing:p.key.endsWith('--1')?0:Math.PI,seatHeight:.48,animation:'sit',approach:[]}],reason:'Seat measured from procedural furniture; circulation approach not yet verified'};}
  // Scene members use their compiler-authored graph connectors, never nearest-node spurs.
  for(const scene of town.catalogScenes){
   const first=scene.slots[0];

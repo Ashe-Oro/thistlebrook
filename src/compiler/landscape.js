@@ -60,10 +60,10 @@ export function registerLandscape(town) {
  const records=[];
  const add=(item,id,name,type,pos,extra={})=>{
   item.registryId=id;const district=town.districts.reduce((a,b)=>Math.hypot(...b.center.map((v,k)=>v-pos[k]))<Math.hypot(...a.center.map((v,k)=>v-pos[k]))?b:a).id;
-  records.push({id,name,type,kind:type,pos:[...pos],district,owner:'Astra town',occupants:[],hours:[0,24],capabilities:[],node:null,entryPoints:[],interactionPoints:[],...extra});
+  records.push({id,name,type,kind:type,pos:[...pos],district,owner:'Thistlebrook town',occupants:[],hours:[0,24],capabilities:[],node:null,entryPoints:[],interactionPoints:[],...extra});
  };
- add(town.landscape,'landscape:mainland','Astra continuous mainland','area',[0,0]);
- add({},'landscape:ocean','Astra Gulf · shared ocean','area',[330,180]);
+ add(town.landscape,'landscape:mainland','Thistlebrook continuous mainland','area',[0,0]);
+ add({},'landscape:ocean','Thistlebrook Gulf · shared ocean','area',[330,180]);
  town.landscape.hills.forEach((h,i)=>add(h,`landscape:hill-${i}`,h.mountain?'Pine ridge':'Rolling meadow hill','landmark',h.pos));
  town.landscape.models.forEach((p,i)=>add(p,`landscape:model-${i}`,p.asset.replaceAll('-',' '),'vegetation',p.pos,{asset:p.asset,scale:p.scale,rot:p.rot}));
  for(const [id,name,pos] of [['ferry','Saltwind coastal ferry',[195,85]],['sail-0','Ocean Drive sailboat',[330,105]],['sail-1','Gulf sailboat',[353,160]]])add({},`landscape:${id}`,name,'vehicle',pos);

@@ -43,7 +43,7 @@ export function scriptedPlanner({self,clock,places,passing}){
  }
  const bill=self.bills.find(b=>b.dueDay<=day&&b.paidDay!==day&&b.amount<=self.money);
  const billHour=9+variation(day+731,self.id)*3;
- if(bill&&(here?.name==='Astra Town Hall'||hour>=billHour&&hour<billHour+.2)){const hall=places.find(p=>p.name==='Astra Town Hall')||work;if(hall&&self.location.place===hall.id)return call('payBill',hall.id,'Take care of the household contribution',{bill:bill.id});return go(hall,'payBill','A morning errand at town hall');}
+ if(bill&&(here?.name==='Thistlebrook Town Hall'||hour>=billHour&&hour<billHour+.2)){const hall=places.find(p=>p.name==='Thistlebrook Town Hall')||work;if(hall&&self.location.place===hall.id)return call('payBill',hall.id,'Take care of the household contribution',{bill:bill.id});return go(hall,'payBill','A morning errand at town hall');}
  if(hour>=self.job.shift[0]&&hour<self.job.shift[1]&&self.memory.worked<(self.job.workplace.startsWith('workspot:')?720:360)&&work&&available(work))return go(work,'work',self.job.title==='Student'?'Attend class':'Keep the day’s work moving');
  if(self.job.product&&(self.assets.inventory[self.job.product]||0)>2&&elapsed-self.memory.lastSale>400){const shop=nearest(p=>p.capabilities.includes('sell'));if(shop)return self.location.place===shop.id?call('sell',shop.id,'Deliver something made at work',{item:self.job.product}):go(shop,'sell','Deliver today’s work');}
  const restockHour=8+variation(day+193,self.id)*3;

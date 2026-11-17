@@ -11,7 +11,7 @@ const SHOPS = {
   'Corner Cup Café': {title:'CORNER CUP • CAFÉ',color:'#356c62',icon:'cup'},
   'Petal & Stem': {title:'PETAL & STEM',color:'#a55574',icon:'flower'},
   'The Post Office': {title:'ASTRA POST',color:'#3e6c94',icon:'mail'},
-  'Astra Town Hall': {title:'TOWN HALL',color:'#6c7967',icon:'civic'},
+  'Thistlebrook Town Hall': {title:'TOWN HALL',color:'#6c7967',icon:'civic'},
 };
 const roles=['merchant','herbalist','shopkeeper','carpenter','farmhand','elder'];
 

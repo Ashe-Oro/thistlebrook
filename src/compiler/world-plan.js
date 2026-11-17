@@ -77,9 +77,9 @@ export function compileWorld(catalog,seed=831,{capture=false}={}){
  extendOutskirts(town,catalog);town.expansionLocal.outskirts=town.outskirts;
  town.venues.push(...town.outskirts.destinations.map(v=>({...v,box:{min:[v.pos[0]-2,v.pos[1]-2],max:[v.pos[0]+2,v.pos[1]+2]}})));rebuildWorldGraph(town);
  town.regions.push({id:'airport',offset:[0,-140],bounds:{minX:65,maxX:146,minZ:-253,maxZ:-126}});
- town.districts.push({id:'airport',name:'Astra Municipal Airport',type:'transport',center:[104,-188]});
+ town.districts.push({id:'airport',name:'Thistlebrook Municipal Airport',type:'transport',center:[104,-188]});
  connectWorld(town,[[64,-69],[64,-184],[77,-184]]);connectFootpath(town,[[60,-69],[64,-69]]);
- const airportNode=rebuildWorldGraph(town)([77,-184]);town.venues.push({id:'airport-terminal',district:'airport',name:'Astra Municipal Airport',type:'airport',pos:[77,-202],entry:[77,-184],node:airportNode,box:{min:[69,-214],max:[86,-189]},height:5,story:'Airliners, club planes and a helicopter share a busy municipal airfield. Follow the public approach to the terminal; boarding and service traffic stay on the apron.'});
+ const airportNode=rebuildWorldGraph(town)([77,-184]);town.venues.push({id:'airport-terminal',district:'airport',name:'Thistlebrook Municipal Airport',type:'airport',pos:[77,-202],entry:[77,-184],node:airportNode,box:{min:[69,-214],max:[86,-189]},height:5,story:'Airliners, club planes and a helicopter share a busy municipal airfield. Follow the public approach to the terminal; boarding and service traffic stay on the apron.'});
  adoptExtension(town,'skatepark',draft=>{draft.venues.push({...structuredClone(SKATEPARK),district:'skatepark',story:'Helmeted skaters take turns in the bowl while BMX riders circle the pump track. The entrance path leads to spectator benches, a water tap and the bike rack.'});draft.districts.push({id:'skatepark',name:'Switchyard Skate & Bike Park',type:'recreation',center:[52,-51]});},{offset:WORLD_OFFSETS.skatepark,bounds:[40.5,-67,63.5,-25.5],ground:true,links:[[[64,-91],[81,-91]]]});
  town.regions.push({id:'themepark',offset:[0,0],bounds:THEMEPARK_BOUNDS});town.districts.push({id:'themepark',name:'Pinecrest Adventure Park',type:'recreation',center:PARK_ORIGIN});
  const approach=new THREE.CatmullRomCurve3(APPROACH.map(([x,z])=>new THREE.Vector3(x,0,z))).getPoints(100).map(p=>[p.x,p.z]);

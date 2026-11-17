@@ -11,8 +11,8 @@ export function createAstraLighting({ scene, camera, controls, renderer, town })
  let colors = KEYS.map(k => k.slice(1, 7).map(c => new THREE.Color(c)));
  const fill = new THREE.HemisphereLight();
  const key = new THREE.DirectionalLight();
- fill.name = 'Astra • sky and reflected light';
- key.name = 'Astra • sun / moon';
+ fill.name = 'Thistlebrook • sky and reflected light';
+ key.name = 'Thistlebrook • sun / moon';
  key.castShadow = true;
  key.shadow.mapSize.set(2048, 2048);
  key.shadow.normalBias = .055;
@@ -94,7 +94,7 @@ export function createAstraLighting({ scene, camera, controls, renderer, town })
     #include <colorspace_fragment>
    }`,
  }));
- backdrop.name = 'Astra • evening sky';
+ backdrop.name = 'Thistlebrook • evening sky';
  backdrop.frustumCulled = false;backdrop.userData.registryExempt=true;
  backdrop.renderOrder = -1000;
  scene.add(backdrop);
@@ -102,7 +102,7 @@ export function createAstraLighting({ scene, camera, controls, renderer, town })
  // Soft pools remain cheap decals; these small lantern halos make their
  // sources readable without adding a point light for every street fixture.
  const lanterns = new THREE.Group();
- lanterns.name = 'Astra • lantern halos';
+ lanterns.name = 'Thistlebrook • lantern halos';
  const haloMaterial = new THREE.ShaderMaterial({
   uniforms: { night: uniforms.uAstraNight, haloColor: { value: new THREE.Vector3(1, .63, .24) } }, transparent: true,
   depthWrite: false, blending: THREE.AdditiveBlending,

@@ -13,7 +13,7 @@ try{
  await shot('01-downtown-progress','downtown');await shot('02-high-street-bus',{x:-55,z:-15,zoom:5});await shot('03-town-roads','village');
  await page.evaluate(()=>{__astra.view({x:-55,z:-15,zoom:5});__astra.step(0);});
  const busPoint=await page.evaluate(()=>{const p=__astra.traffic.objects[0].position.clone();p.y+=1;p.project(__astra.camera);return {x:(p.x+1)*innerWidth/2,y:(1-p.y)*innerHeight/2};});
- await page.mouse.click(busPoint.x,busPoint.y);assert.equal(await page.locator('.card h2').textContent(),'Astra Town Loop');
+ await page.mouse.click(busPoint.x,busPoint.y);assert.equal(await page.locator('.card h2').textContent(),'Thistlebrook Town Loop');
  await page.screenshot({path:dir+'08-route-details.png'});await page.getByRole('button',{name:'Close details',exact:true}).click();
  // Speed is shared with the town clock and residents.
  await page.locator('#speed').click();await page.locator('#speed').click();

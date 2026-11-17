@@ -22,7 +22,7 @@ export function compileAstra(catalog, seed=831) {
  town.districts=[
   {id:'willowbank',name:'Willowbank',type:'neighbourhood',center:[-12,-13]},
   {id:'market',name:'Market Square',type:'civic',center:[1,3]},
-  {id:'common',name:'Astra High Campus',type:'education',center:[8,-66]},
+  {id:'common',name:'Thistlebrook High Campus',type:'education',center:[8,-66]},
   {id:'quay',name:'Lantern Quay',type:'nightlife',center:[52,-4]},
   {id:'orchard',name:'Clover Fields',type:'agriculture',center:[-7,25]},
   {id:'downtown',name:'Old Town Centre',type:'commercial',center:[-57,-6]}
@@ -31,8 +31,8 @@ export function compileAstra(catalog, seed=831) {
   {id:'tennis',name:'Common Tennis Club',type:'tennis',pos:[1,-44],box:{min:[-12,-53],max:[14,-35]},entry:[1,-33]},
   {id:'basketball',name:'The Neighbourhood Court',type:'basketball',pos:[28,-44],box:{min:[18,-53],max:[38,-35]},entry:[28,-33]},
   {id:'playground',name:'Little Oak Playground',type:'playground',pos:[-26,-44],box:{min:[-35,-53],max:[-17,-35]},entry:[-26,-33]},
-  {id:'school',name:'Astra High School',type:'school',district:'common',height:12,pos:[-2,-61],box:{min:[-16,-67],max:[14,-55]},entry:[-2,-54.5],access:[16,-54.5]},
-  {id:'baseball',name:'Astra Owls Baseball',type:'baseball',district:'common',pos:[-22,-84],box:{min:[-40,-101],max:[-4,-71]},entry:[-22,-69],access:[-22,-71]},
+  {id:'school',name:'Thistlebrook High School',type:'school',district:'common',height:12,pos:[-2,-61],box:{min:[-16,-67],max:[14,-55]},entry:[-2,-54.5],access:[16,-54.5]},
+  {id:'baseball',name:'Thistlebrook Owls Baseball',type:'baseball',district:'common',pos:[-22,-84],box:{min:[-40,-101],max:[-4,-71]},entry:[-22,-69],access:[-22,-71]},
   {id:'football',name:'Owls Memorial Stadium',type:'football',district:'common',pos:[30,-84],box:{min:[0,-101],max:[61,-70]},entry:[30,-69],access:[30,-71]},
   {id:'fountain',name:'Founders Fountain',type:'fountain',district:'downtown',pos:[-57,-6],box:{min:[-64,-13],max:[-50,1]},entry:[-57,-1],access:[-57,4]},
   {id:'bandstand',name:'The Riverside Sessions',type:'music',pos:[55,26],box:{min:[49,21],max:[62,32]},entry:[46,26]}
@@ -70,10 +70,10 @@ export function compileAstra(catalog, seed=831) {
  const homes=['cv-home-cottage','cv-home-thatched','cv-home-timber','cv-home-townhouse'];
  const slots=[
  [-28,-24,'cv-windmill','The Little Mill'],[-17,-24,null,'Clover Cottage'],[-7,-24,null,'Honeycomb House'],[4,-24,null,'Bluebell House'],[15,-24,'cv-chapel','Saint Willow’s'],[27,-24,null,'Foxglove Cottage'],
- [-29,-5,'cv-bakery','Flour & Fern'],[-15,-5,null,'Rosemary Cottage'],[0,-6,'cv-tavern','The Copper Kettle'],[13,-5,'cv-store','Astra Provisions'],[29,-5,null,'Juniper House'],
+ [-29,-5,'cv-bakery','Flour & Fern'],[-15,-5,null,'Rosemary Cottage'],[0,-6,'cv-tavern','The Copper Kettle'],[13,-5,'cv-store','Thistlebrook Provisions'],[29,-5,null,'Juniper House'],
  [-30,9,null,'Riverside Cottage'],[30,9,'cv-blacksmith','Bram’s Workshop'],[-29,25,'farm-farmhand-cottage','Orchard House'],[12,25,'farm-hay-barn','Clover Farm'],[30,25,'farm-farmhouse','The Farmhouse'],[55,-23,'cv-tavern','The Nightjar'],[55,-7,'cv-market-hall','The Lantern Room'],[55,4,'cv-store','Moonrise Gelateria'],
  [-71,-24,'cv-bakery','Sunrise Bakehouse'],[-59,-24,'cv-store','Sole & Stitch'],[-47,-24,'cv-home-townhouse','The Reading Room'],
- [-73,-6,'cv-tavern','Corner Cup Café'],[-42,-6,'cv-store','Petal & Stem'],[-57,9.5,'cv-home-timber','Astra Town Hall'],[-73,6,'cv-home-cottage','The Post Office']
+ [-73,-6,'cv-tavern','Corner Cup Café'],[-42,-6,'cv-store','Petal & Stem'],[-57,9.5,'cv-home-timber','Thistlebrook Town Hall'],[-73,6,'cv-home-cottage','The Post Office']
  ];
  for(const [i,s] of slots.entries()) {
   const [sx,sz,fixed,name]=s,id=fixed||pick(homes),x=sx+(random()-.5)*.7,z=sz+(random()-.5)*.6;

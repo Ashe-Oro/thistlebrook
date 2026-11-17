@@ -21,7 +21,7 @@ export function proceduralPlacements(town) {
  const out=[];
  const add=(id,name,pos,owner,kind='prop')=>out.push({key:`built:${id}`,name,pos,owner,kind,rendering:id.startsWith('terrace-')?'reservation':'geometry'});
  for(const [id,name,pos] of [
-  ['island','Astra island',[-7,-34]],['river','Willow River',[0,15]],['market-paving','Market paving',[1,3.5]],
+  ['island','Thistlebrook island',[-7,-34]],['river','Willow River',[0,15]],['market-paving','Market paving',[1,3.5]],
   ['market-bunting','Market bunting',[1,3]],['river-reeds','Riverbank reeds',[0,18]],['wildflowers','Wildflowers and pebbles',[0,-20]],
   ['mill-sails','Mill sails',town.buildings[0].pos]
  ])add(id,name,pos,id==='mill-sails'?'parcel-0':null,'landmark');
@@ -52,7 +52,7 @@ export function proceduralPlacements(town) {
  }
  for(const b of town.buildings.filter(b=>b.district==='downtown')){
   add(`${b.key}-sign`,`${b.name} sign`,b.pos,b.key);
-  if(b.name!=='Astra Town Hall')add(`${b.key}-awning`,`${b.name} awning`,b.pos,b.key);
+  if(b.name!=='Thistlebrook Town Hall')add(`${b.key}-awning`,`${b.name} awning`,b.pos,b.key);
   if(['Sole & Stitch','Sunrise Bakehouse','The Post Office'].includes(b.name))add(`${b.key}-display`,`${b.name} display`,b.pos,b.key);
  }
  for(const b of town.buildings.filter((b,i)=>i%3===0&&b.pos[1]<0))add(`${b.key}-smoke`,`${b.name} chimney smoke`,b.pos,b.key,'effect');

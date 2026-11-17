@@ -69,7 +69,7 @@ export async function verifyMerged(page) {
   return {civic:[...civic],away:[...away],places:[...places]};
  });
  assert.equal(result.visits.civic.length,5);assert.equal(result.visits.away.length,8);
- for(const name of ['Nell’s Corner & upstairs flats','The Washhouse & upstairs flats','Astra High School','The Reading Room'])assert(result.visits.places.includes(name),name);
+ for(const name of ['Nell’s Corner & upstairs flats','The Washhouse & upstairs flats','Thistlebrook High School','The Reading Room'])assert(result.visits.places.includes(name),name);
  stage('all civic destinations visited; all eight terrace residents reach shops and school');
  result.home=await page.evaluate(()=>{
   const a=__astra;for(let n=0;n<9000;n++){a.setHour(23);a.step(.1,false);}

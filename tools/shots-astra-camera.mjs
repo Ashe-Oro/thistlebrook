@@ -129,7 +129,7 @@ try {
   await page.keyboard.press('Escape'); assert.equal(await page.locator('.card').isVisible(), false);
   check('resident pointer picking, live activity, follow, stop follow, manual override and Escape');
 
-  await page.getByRole('button', { name: 'Astra High', exact: true }).click(); await settle();
+  await page.getByRole('button', { name: 'Thistlebrook High', exact: true }).click(); await settle();
   near((await state()).x, 8); near((await state()).z, -70); near((await state()).zoom, 1.8);
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click(); await settle();
   near((await state()).zoom, 1.8 * 1.3);

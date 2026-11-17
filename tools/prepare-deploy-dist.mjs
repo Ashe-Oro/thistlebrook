@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Build a Vercel-ready dist that contains only the licensed / owned-asset
-// models the Astra town actually requests. Vite never copies public/licensed;
+// models the Thistlebrook town actually requests. Vite never copies public/licensed;
 // this script compiles the default world, walks catalog/registry placements,
 // copies those files (dereferenced) to the URL paths the loaders use, then
 // optionally confirms the set with a headless run against a static server.
