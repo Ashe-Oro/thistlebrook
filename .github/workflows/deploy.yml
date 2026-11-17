@@ -53,7 +53,11 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          url=$(npx --yes vercel@65.17.0 deploy dist --prod --yes --token "$VERCEL_TOKEN")
+          # Deploy from a copy outside the git checkout so Vercel doesn't attach the
+          # commit author (snapshot commits aren't by a Vercel team member).
+          out="$RUNNER_TEMP/cel-village-dist"
+          rm -rf "$out" && cp -r dist "$out"
+          url=$(cd "$out" && npx --yes vercel@65.17.0 deploy . --prod --yes --token "$VERCEL_TOKEN")
           echo "Deployed: $url"
           echo "DEPLOY_URL=$url" >> "$GITHUB_ENV"
 
