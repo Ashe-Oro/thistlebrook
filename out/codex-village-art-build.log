@@ -1,0 +1,25 @@
+
+> cel-town@0.1.0 build
+> vite build
+
+vite v5.4.21 building for production...
+transforming...
+✓ 61 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                       1.41 kB │ gzip:   0.75 kB
+dist/kit.html                         1.54 kB │ gzip:   0.77 kB
+dist/compile.html                     2.40 kB │ gzip:   0.97 kB
+dist/assets/debug-DzINuMgs.js         1.62 kB │ gzip:   0.79 kB
+dist/assets/main-DVHcg-2j.js          3.68 kB │ gzip:   1.80 kB
+dist/assets/compile-CEDQFX1G.js       4.08 kB │ gzip:   2.04 kB
+dist/assets/atmosphere-RzVDDyw7.js    4.61 kB │ gzip:   2.18 kB
+dist/assets/kit-Cia34HTc.js           5.48 kB │ gzip:   2.57 kB
+dist/assets/large-dPOYbAI_.js        84.82 kB │ gzip:  33.18 kB
+dist/assets/ui-DLnBpgAo.js          861.27 kB │ gzip: 231.59 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.77s

@@ -1,0 +1,85 @@
+{
+  "name": "Willowmere \u2014 Medium village",
+  "seed": 1234,
+  "area": {
+    "shape": "circle",
+    "radius": 125
+  },
+  "districts": {
+    "plazaHouses": [
+      4,
+      4
+    ],
+    "plazaLandmarks": [
+      2,
+      2
+    ]
+  },
+  "houses": {
+    "count": [
+      30,
+      32
+    ],
+    "pick": {
+      "category": "house",
+      "style": "cozy-village"
+    },
+    "ring": [
+      14,
+      24
+    ]
+  },
+  "landmarks": {
+    "count": [
+      10,
+      10
+    ],
+    "pick": {
+      "category": "landmark",
+      "style": "v3-kit"
+    },
+    "ring": [
+      14,
+      21
+    ]
+  },
+  "trees": {
+    "count": [
+      65,
+      85
+    ],
+    "pick": {
+      "category": "tree",
+      "style": "cozy-village"
+    }
+  },
+  "bushes": {
+    "count": [
+      40,
+      55
+    ],
+    "pick": {
+      "category": "bush",
+      "style": "cozy-village"
+    },
+    "maxRadius": 100
+  },
+  "props": {
+    "count": [
+      130,
+      160
+    ],
+    "pick": {
+      "category": "prop",
+      "style": "town-dressing"
+    }
+  },
+  "fences": {
+    "probability": 0.65
+  },
+  "retries": {
+    "placement": 100,
+    "town": 18
+  },
+  "medium": true
+}

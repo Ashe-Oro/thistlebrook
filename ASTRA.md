@@ -1,0 +1,1 @@
+Build a charming, living cel-shaded village that's fun to watch, in the spirit of https://tinylasvegas.com (isometric pan/zoom diorama). Start with the map compiler and placement rules; redesign them however you see fit. Use the owned 3D assets in /workspace/threejs-assets (licensed, never commit them). This repo is yours. Show progress as screenshots in shots/astra/.

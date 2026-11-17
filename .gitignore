@@ -1,0 +1,31 @@
+node_modules/
+dist/
+# Compiler output (town JSON + sweep reports) — regenerated on demand.
+out/
+# Licensed assets (ThreeJS Assets commercial license) — never commit or publish.
+public/licensed/
+*.glb
+.licensed-cache/
+# Build output can contain copied licensed files
+shots/*.tmp
+
+# Also ignore local library/dependency symlinks.
+/public/licensed
+/node_modules
+
+# Intermediate movie frames; final captures are kept.
+shots/astra/.frames/
+
+shots/astra-skatepark/.frames/
+
+# Reproducible terrain-tour intermediate frames; keep only the final MP4.
+shots/sol-terrain/.frames/
+shots/grok-skins/.frames/
+
+# CI model pack (licensed-derived; fetched from private Blob)
+/.models-pack/
+.vercel/
+.env*
+
+# GitHub snapshot (tools/publish-main.sh): kept local only
+/shots/

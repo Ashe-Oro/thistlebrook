@@ -1,0 +1,982 @@
+[
+  {
+    "id": "outskirts-trailhead",
+    "name": "Stillwater Trailhead",
+    "district": "outskirts",
+    "pos": [
+      -24,
+      43
+    ],
+    "size": [
+      4,
+      2,
+      4
+    ]
+  },
+  {
+    "id": "outskirts-dock",
+    "name": "Stillwater Landing",
+    "district": "outskirts",
+    "pos": [
+      -10,
+      55
+    ],
+    "size": [
+      4,
+      2,
+      4
+    ]
+  },
+  {
+    "id": "outskirts-cabin-1",
+    "name": "Pinecone Cabin",
+    "district": "outskirts",
+    "pos": [
+      -43,
+      64
+    ],
+    "size": [
+      4,
+      4,
+      4
+    ]
+  },
+  {
+    "id": "outskirts-cabin-2",
+    "name": "Heron Cabin",
+    "district": "outskirts",
+    "pos": [
+      -43,
+      82
+    ],
+    "size": [
+      4,
+      4,
+      4
+    ]
+  },
+  {
+    "id": "outskirts-tent-0",
+    "name": "Birch Pitch",
+    "district": "outskirts",
+    "pos": [
+      -24,
+      104
+    ],
+    "size": [
+      4,
+      2,
+      4
+    ]
+  },
+  {
+    "id": "outskirts-tent-1",
+    "name": "Foxglove Pitch",
+    "district": "outskirts",
+    "pos": [
+      -13,
+      104
+    ],
+    "size": [
+      4,
+      2,
+      4
+    ]
+  },
+  {
+    "id": "outskirts-tent-2",
+    "name": "Heron Pitch",
+    "district": "outskirts",
+    "pos": [
+      -2,
+      104
+    ],
+    "size": [
+      4,
+      2,
+      4
+    ]
+  },
+  {
+    "id": "outskirts-fire",
+    "name": "The Campfire",
+    "district": "outskirts",
+    "pos": [
+      -12,
+      97
+    ],
+    "size": [
+      4,
+      2,
+      4
+    ]
+  },
+  {
+    "id": "outskirts-lookout",
+    "name": "Birch Hollow",
+    "district": "outskirts",
+    "pos": [
+      -65,
+      79
+    ],
+    "size": [
+      4,
+      2,
+      4
+    ]
+  },
+  {
+    "id": "outskirts-ranger",
+    "name": "Stillwater Ranger Hut",
+    "district": "outskirts",
+    "pos": [
+      20,
+      49
+    ],
+    "size": [
+      4,
+      4,
+      4
+    ]
+  },
+  {
+    "id": "outskirts-farm",
+    "name": "Hinterland Farm",
+    "district": "outskirts",
+    "pos": [
+      46.7,
+      83
+    ],
+    "size": [
+      4,
+      5,
+      4
+    ]
+  },
+  {
+    "id": "outskirts-field",
+    "name": "The Kitchen Fields",
+    "district": "outskirts",
+    "pos": [
+      48,
+      63
+    ],
+    "size": [
+      4,
+      2,
+      4
+    ]
+  },
+  {
+    "id": "outskirts-orchard",
+    "name": "South Orchard",
+    "district": "outskirts",
+    "pos": [
+      12,
+      110
+    ],
+    "size": [
+      4,
+      2,
+      4
+    ]
+  },
+  {
+    "id": "outskirts-cabin-1",
+    "name": "Pinecone Cabin",
+    "district": "outskirts",
+    "pos": [
+      -43,
+      60
+    ],
+    "size": [
+      6.599999999999994,
+      5.4,
+      5.799999999999997
+    ]
+  },
+  {
+    "id": "outskirts-cabin-2",
+    "name": "Heron Cabin",
+    "district": "outskirts",
+    "pos": [
+      -43,
+      78
+    ],
+    "size": [
+      6.599999999999994,
+      5.4,
+      5.800000000000011
+    ]
+  },
+  {
+    "id": "outskirts-farm",
+    "name": "Hinterland Farm",
+    "district": "outskirts",
+    "pos": [
+      52,
+      83
+    ],
+    "size": [
+      9,
+      5.4,
+      9
+    ]
+  },
+  {
+    "id": "outskirts-ranger",
+    "name": "Stillwater Ranger Hut",
+    "district": "outskirts",
+    "pos": [
+      20,
+      45
+    ],
+    "size": [
+      4,
+      4,
+      4
+    ]
+  },
+  {
+    "id": "pinecrest",
+    "name": "Pinecrest Adventure Park",
+    "district": "themepark",
+    "pos": [
+      220,
+      -3
+    ],
+    "size": [
+      20,
+      8,
+      8
+    ]
+  },
+  {
+    "id": "copperhead",
+    "name": "Copperhead",
+    "district": "themepark",
+    "pos": [
+      218,
+      -81
+    ],
+    "size": [
+      90,
+      24,
+      36
+    ]
+  },
+  {
+    "id": "skyline-wheel",
+    "name": "Skyline Wheel",
+    "district": "themepark",
+    "pos": [
+      184,
+      -40
+    ],
+    "size": [
+      22,
+      24,
+      9
+    ]
+  },
+  {
+    "id": "pine-bumpers",
+    "name": "Pine Bumpers",
+    "district": "themepark",
+    "pos": [
+      200,
+      -40
+    ],
+    "size": [
+      10,
+      5.2,
+      10
+    ]
+  },
+  {
+    "id": "swinging-pines",
+    "name": "Swingin’ Pines",
+    "district": "themepark",
+    "pos": [
+      240,
+      -40
+    ],
+    "size": [
+      10,
+      8,
+      10
+    ]
+  },
+  {
+    "id": "pinefall",
+    "name": "Pinefall",
+    "district": "themepark",
+    "pos": [
+      256,
+      -40
+    ],
+    "size": [
+      7,
+      28.5,
+      7
+    ]
+  },
+  {
+    "id": "carousel",
+    "name": "Woodland Carousel",
+    "district": "themepark",
+    "pos": [
+      184,
+      -12
+    ],
+    "size": [
+      11,
+      7.2,
+      11
+    ]
+  },
+  {
+    "id": "teacup-twirl",
+    "name": "Teacup Twirl",
+    "district": "themepark",
+    "pos": [
+      256,
+      -12
+    ],
+    "size": [
+      9,
+      4.6,
+      9
+    ]
+  },
+  {
+    "id": "little-racers",
+    "name": "Little Racers",
+    "district": "themepark",
+    "pos": [
+      198,
+      -6
+    ],
+    "size": [
+      7,
+      2,
+      7
+    ]
+  },
+  {
+    "id": "pinecrest-express",
+    "name": "Pinecrest Express",
+    "district": "themepark",
+    "pos": [
+      220,
+      -48.5
+    ],
+    "size": [
+      64,
+      3,
+      4
+    ]
+  },
+  {
+    "id": "big-top",
+    "name": "Pinecrest Big Top",
+    "district": "themepark",
+    "pos": [
+      260,
+      -54
+    ],
+    "size": [
+      12,
+      12,
+      12
+    ]
+  },
+  {
+    "id": "coast-front-0",
+    "name": "Palm House · rooftop supper club",
+    "district": "coral-coast",
+    "pos": [
+      250,
+      56
+    ],
+    "size": [
+      16,
+      15,
+      10.400000000000006
+    ]
+  },
+  {
+    "id": "coast-front-1",
+    "name": "Sol Mar · seafood & sunset tables",
+    "district": "coral-coast",
+    "pos": [
+      250,
+      70
+    ],
+    "size": [
+      16,
+      10,
+      10.400000000000006
+    ]
+  },
+  {
+    "id": "coast-front-2",
+    "name": "The Flamingo · cocktail garden",
+    "district": "coral-coast",
+    "pos": [
+      250,
+      84
+    ],
+    "size": [
+      16,
+      18,
+      10.400000000000006
+    ]
+  },
+  {
+    "id": "coast-front-3",
+    "name": "Café Cubano · coffee & dominoes",
+    "district": "coral-coast",
+    "pos": [
+      250,
+      98
+    ],
+    "size": [
+      16,
+      11,
+      10.400000000000006
+    ]
+  },
+  {
+    "id": "coast-front-4",
+    "name": "Blue Hour · listening bar",
+    "district": "coral-coast",
+    "pos": [
+      250,
+      112
+    ],
+    "size": [
+      16,
+      14,
+      10.400000000000006
+    ]
+  },
+  {
+    "id": "coast-front-5",
+    "name": "Mango Club · dance terrace",
+    "district": "coral-coast",
+    "pos": [
+      250,
+      126
+    ],
+    "size": [
+      16,
+      12,
+      10.399999999999991
+    ]
+  },
+  {
+    "id": "coast-front-6",
+    "name": "Salt & Lime · beachside cantina",
+    "district": "coral-coast",
+    "pos": [
+      250,
+      140
+    ],
+    "size": [
+      16,
+      9,
+      10.399999999999977
+    ]
+  },
+  {
+    "id": "coast-rear-0",
+    "name": "BISCAYNE · Ocean Lane",
+    "district": "coral-coast",
+    "pos": [
+      234,
+      56
+    ],
+    "size": [
+      8,
+      16,
+      10.400000000000006
+    ]
+  },
+  {
+    "id": "coast-rear-1",
+    "name": "GELATO · Ocean Lane",
+    "district": "coral-coast",
+    "pos": [
+      234,
+      70
+    ],
+    "size": [
+      8,
+      19,
+      10.400000000000006
+    ]
+  },
+  {
+    "id": "coast-rear-2",
+    "name": "CASA ROSA · Ocean Lane",
+    "district": "coral-coast",
+    "pos": [
+      234,
+      84
+    ],
+    "size": [
+      8,
+      22,
+      10.400000000000006
+    ]
+  },
+  {
+    "id": "coast-rear-3",
+    "name": "VINYL · Ocean Lane",
+    "district": "coral-coast",
+    "pos": [
+      234,
+      98
+    ],
+    "size": [
+      8,
+      16,
+      10.400000000000006
+    ]
+  },
+  {
+    "id": "coast-rear-4",
+    "name": "LA PERLA · Ocean Lane",
+    "district": "coral-coast",
+    "pos": [
+      234,
+      112
+    ],
+    "size": [
+      8,
+      19,
+      10.400000000000006
+    ]
+  },
+  {
+    "id": "coast-rear-5",
+    "name": "NIGHT SWIM · Ocean Lane",
+    "district": "coral-coast",
+    "pos": [
+      234,
+      126
+    ],
+    "size": [
+      8,
+      22,
+      10.399999999999991
+    ]
+  },
+  {
+    "id": "coast-rear-6",
+    "name": "ORANGE BLOSSOM · Ocean Lane",
+    "district": "coral-coast",
+    "pos": [
+      234,
+      140
+    ],
+    "size": [
+      8,
+      16,
+      10.399999999999977
+    ]
+  },
+  {
+    "id": "coast-beach",
+    "name": "Coral Beach · sand, shade & surf",
+    "district": "coral-coast",
+    "pos": [
+      283,
+      67.5
+    ],
+    "size": [
+      18,
+      4,
+      13
+    ]
+  },
+  {
+    "id": "coast-volley-0",
+    "name": "Coral Beach · volleyball 1",
+    "district": "coral-coast",
+    "pos": [
+      283,
+      96
+    ],
+    "size": [
+      14,
+      3.2,
+      18
+    ]
+  },
+  {
+    "id": "coast-volley-1",
+    "name": "Coral Beach · volleyball 2",
+    "district": "coral-coast",
+    "pos": [
+      283,
+      138
+    ],
+    "size": [
+      14,
+      3.2,
+      18
+    ]
+  },
+  {
+    "id": "MEGABAY 01",
+    "name": "MEGABAY 01",
+    "district": "starbase",
+    "pos": [
+      186,
+      253
+    ],
+    "size": [
+      19,
+      22,
+      23
+    ]
+  },
+  {
+    "id": "HIGH BAY",
+    "name": "HIGH BAY",
+    "district": "starbase",
+    "pos": [
+      212,
+      246
+    ],
+    "size": [
+      16,
+      17,
+      19
+    ]
+  },
+  {
+    "id": "STARFACTORY",
+    "name": "STARFACTORY",
+    "district": "starbase",
+    "pos": [
+      187,
+      300
+    ],
+    "size": [
+      22,
+      6,
+      14
+    ]
+  },
+  {
+    "id": "starship-pad",
+    "name": "Starship & Mechazilla",
+    "district": "starbase",
+    "pos": [
+      242,
+      256
+    ],
+    "size": [
+      22,
+      38,
+      24
+    ]
+  },
+  {
+    "id": "tank-farm",
+    "name": "Cryogenic tank farm",
+    "district": "starbase",
+    "pos": [
+      260,
+      270
+    ],
+    "size": [
+      22,
+      7,
+      22
+    ]
+  },
+  {
+    "id": "falcon-pad",
+    "name": "Falcon launch complex",
+    "district": "starbase",
+    "pos": [
+      273,
+      292
+    ],
+    "size": [
+      22,
+      23,
+      24
+    ]
+  },
+  {
+    "id": "LZ-1",
+    "name": "LZ-1 · Falcon recovery",
+    "district": "starbase",
+    "pos": [
+      217,
+      323
+    ],
+    "size": [
+      23,
+      16,
+      23
+    ]
+  },
+  {
+    "id": "LZ-2",
+    "name": "LZ-2 · Falcon recovery",
+    "district": "starbase",
+    "pos": [
+      252,
+      335
+    ],
+    "size": [
+      23,
+      16,
+      23
+    ]
+  },
+  {
+    "id": "drone-ship",
+    "name": "Autonomous drone ship",
+    "district": "starbase",
+    "pos": [
+      321,
+      315
+    ],
+    "size": [
+      13,
+      17,
+      22
+    ]
+  },
+  {
+    "id": "outskirts-trailhead",
+    "name": "Stillwater Trailhead",
+    "district": "outskirts",
+    "pos": [
+      -24,
+      43
+    ],
+    "size": [
+      4,
+      2,
+      4
+    ]
+  },
+  {
+    "id": "outskirts-dock",
+    "name": "Stillwater Landing",
+    "district": "outskirts",
+    "pos": [
+      -10,
+      55
+    ],
+    "size": [
+      4,
+      2,
+      4
+    ]
+  },
+  {
+    "id": "outskirts-cabin-1",
+    "name": "Pinecone Cabin",
+    "district": "outskirts",
+    "pos": [
+      -43,
+      64
+    ],
+    "size": [
+      4,
+      4,
+      4
+    ]
+  },
+  {
+    "id": "outskirts-cabin-2",
+    "name": "Heron Cabin",
+    "district": "outskirts",
+    "pos": [
+      -43,
+      82
+    ],
+    "size": [
+      4,
+      4,
+      4
+    ]
+  },
+  {
+    "id": "outskirts-tent-0",
+    "name": "Birch Pitch",
+    "district": "outskirts",
+    "pos": [
+      -24,
+      104
+    ],
+    "size": [
+      4,
+      2,
+      4
+    ]
+  },
+  {
+    "id": "outskirts-tent-1",
+    "name": "Foxglove Pitch",
+    "district": "outskirts",
+    "pos": [
+      -13,
+      104
+    ],
+    "size": [
+      4,
+      2,
+      4
+    ]
+  },
+  {
+    "id": "outskirts-tent-2",
+    "name": "Heron Pitch",
+    "district": "outskirts",
+    "pos": [
+      -2,
+      104
+    ],
+    "size": [
+      4,
+      2,
+      4
+    ]
+  },
+  {
+    "id": "outskirts-fire",
+    "name": "The Campfire",
+    "district": "outskirts",
+    "pos": [
+      -12,
+      97
+    ],
+    "size": [
+      4,
+      2,
+      4
+    ]
+  },
+  {
+    "id": "outskirts-lookout",
+    "name": "Birch Hollow",
+    "district": "outskirts",
+    "pos": [
+      -65,
+      79
+    ],
+    "size": [
+      4,
+      2,
+      4
+    ]
+  },
+  {
+    "id": "outskirts-ranger",
+    "name": "Stillwater Ranger Hut",
+    "district": "outskirts",
+    "pos": [
+      20,
+      49
+    ],
+    "size": [
+      4,
+      4,
+      4
+    ]
+  },
+  {
+    "id": "outskirts-farm",
+    "name": "Hinterland Farm",
+    "district": "outskirts",
+    "pos": [
+      46.7,
+      83
+    ],
+    "size": [
+      4,
+      5,
+      4
+    ]
+  },
+  {
+    "id": "outskirts-field",
+    "name": "The Kitchen Fields",
+    "district": "outskirts",
+    "pos": [
+      48,
+      63
+    ],
+    "size": [
+      4,
+      2,
+      4
+    ]
+  },
+  {
+    "id": "outskirts-orchard",
+    "name": "South Orchard",
+    "district": "outskirts",
+    "pos": [
+      12,
+      110
+    ],
+    "size": [
+      4,
+      2,
+      4
+    ]
+  },
+  {
+    "id": "airport-terminal",
+    "name": "Astra Municipal Airport",
+    "district": "airport",
+    "pos": [
+      77.5,
+      -201.5
+    ],
+    "size": [
+      17,
+      5,
+      25
+    ]
+  },
+  {
+    "id": "roadster-arena",
+    "name": "Roadster Proving Ground",
+    "district": "roadster",
+    "pos": [
+      -205,
+      -172
+    ],
+    "size": [
+      46,
+      16,
+      42
+    ]
+  },
+  {
+    "id": "starbase-garden",
+    "name": "Starbase Visitor Garden",
+    "district": "starbase",
+    "pos": [
+      183,
+      319
+    ],
+    "size": [
+      24,
+      5,
+      14
+    ]
+  }
+]

@@ -1,0 +1,12 @@
+✔ life-playtest: scenery blocks labels before they occupy overlap space (3.050836ms)
+✔ life-playtest: head hidden by a low wall also hides floating text (0.542134ms)
+✔ life-playtest: residents do not occlude their own text; nearby names win overlap order (1.299296ms)
+✔ life-playtest: isometric occlusion follows parallel view rays (0.972215ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 95.398601

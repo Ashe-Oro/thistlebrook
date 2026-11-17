@@ -1,0 +1,53 @@
+import {chromium} from 'playwright-core';
+import {mkdirSync,writeFileSync} from 'node:fs';
+import assert from 'node:assert/strict';
+const dir=process.env.ASTRA_SHOTS||new URL('../shots/astra/regression/',import.meta.url).pathname;mkdirSync(dir,{recursive:true});
+const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',args:['--no-sandbox','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
+try{
+ const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];
+ page.on('pageerror',e=>errors.push(e.stack));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});page.on('response',r=>{if(r.status()>=400&&!r.url().endsWith('favicon.ico'))errors.push(`${r.status()} ${r.url()}`)});
+ await page.route('**/favicon.ico',r=>r.fulfill({status:204}));
+ await page.addInitScript(()=>window.requestAnimationFrame=()=>0);
+ const captureURL=new URL(process.env.ASTRA_URL||'http://localhost:5173/');captureURL.searchParams.set('capture','1');await page.goto(captureURL.href,{waitUntil:'domcontentloaded'});
+ await page.waitForFunction(()=>window.__ready||window.__astraError,null,{timeout:120000,polling:200});
+ assert.equal(await page.evaluate(()=>window.__astraError),undefined);
+ await page.evaluate(()=>{document.querySelector('.loading').remove();for(let i=0;i<90;i++)__astra.step(.1,false);__astra.step(0);});
+ await page.screenshot({path:dir+'09-town.png',timeout:60000});
+ const initial=await page.evaluate(()=>__astra.audit());assert(initial.report.ok);assert.equal(initial.people,40);
+ // Exercise real pointer, wheel and keyboard paths in addition to view helpers.
+ await page.mouse.move(800,500);await page.mouse.wheel(0,-150);await page.waitForTimeout(80);await page.evaluate(()=>__astra.step(.1));assert((await page.evaluate(()=>__astra.camera.zoom))>initial.zoom);
+ const panBefore=await page.evaluate(()=>__astra.controls.target.toArray());await page.mouse.move(800,550);await page.mouse.down({button:'right'});await page.mouse.move(880,580,{steps:6});await page.mouse.up({button:'right'});await page.evaluate(()=>__astra.step(.1,false));assert.notDeepEqual(await page.evaluate(()=>__astra.controls.target.toArray()),panBefore);
+ const cameraBefore=await page.evaluate(()=>__astra.camera.position.toArray());await page.keyboard.press('e');assert.notDeepEqual(await page.evaluate(()=>__astra.camera.position.toArray()),cameraBefore);await page.keyboard.press('q');
+ await page.evaluate(()=>{__astra.view('common');__astra.step(0)});
+ const courtPoint=await page.evaluate(()=>{const p=__astra.camera.position.clone().set(1,.4,-44).project(__astra.camera);return {x:(p.x+1)*innerWidth/2,y:(1-p.y)*innerHeight/2};});await page.mouse.click(courtPoint.x,courtPoint.y);assert.equal(await page.locator('.card h2').textContent(),'Common Tennis Club');await page.getByRole('button',{name:'Close details'}).click();
+ const npc=await page.evaluate(()=>{for(const person of __astra.residents.people){__astra.view({x:person.object.position.x,z:person.object.position.z,zoom:3});__astra.step(0,false);const p=person.object.position.clone();p.y+=.9;p.project(__astra.camera);const x=(p.x+1)*innerWidth/2,y=(1-p.y)*innerHeight/2;if(__astra.pick(x,y)?.person===person)return {x,y,name:person.name};}return null;});assert(npc);await page.mouse.click(npc.x,npc.y);assert.equal(await page.locator('.card h2').textContent(),npc.name);await page.getByRole('button',{name:'Close details'}).click();
+ await page.evaluate(()=>{__astra.view('village');__astra.step(0)});
+ const cdp=await page.context().newCDPSession(page),touchZoom=await page.evaluate(()=>__astra.camera.zoom);
+ await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:600,y:500},{x:800,y:500}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:560,y:500},{x:840,y:500}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await page.evaluate(()=>__astra.step(.1));assert((await page.evaluate(()=>__astra.camera.zoom))>touchZoom);
+ 
+ await page.evaluate(()=>{__astra.view('market');__astra.step(0);});
+ await page.screenshot({path:dir+'10-market.png',timeout:60000});
+ await page.evaluate(()=>{__astra.view('orchard');__astra.step(0);});
+ await page.screenshot({path:dir+'11-orchard.png',timeout:60000});
+ await page.evaluate(()=>{__astra.view('common');__astra.step(0)});await page.screenshot({path:dir+'13-north-common.png',timeout:60000});
+ await page.getByRole('button',{name:'Pause village',exact:true}).click();
+ const before=await page.evaluate(()=>__astra.audit().positions);
+ await page.evaluate(()=>{for(let i=0;i<20;i++)__astra.step(.1,false)});
+ assert.deepEqual(await page.evaluate(()=>__astra.audit().positions),before);
+ await page.getByRole('button',{name:'Resume village',exact:true}).click();
+ await page.evaluate(()=>{for(let i=0;i<200;i++)__astra.step(.1,false)});
+ assert.notDeepEqual(await page.evaluate(()=>__astra.audit().positions),before);
+ await page.getByRole('button',{name:'Meet a neighbour',exact:true}).click();assert(await page.locator('.card').isVisible());
+ await page.getByRole('button',{name:'Follow their day'}).click();await page.evaluate(()=>{for(let i=0;i<60;i++)__astra.step(.1,false);__astra.step(0)});assert.equal(await page.evaluate(()=>__astra.following),'Mabel');
+ await page.screenshot({path:dir+'12-neighbour.png',timeout:60000});
+ await page.getByRole('button',{name:'Close details',exact:true}).click();
+ await page.evaluate(()=>{__astra.view('village');__astra.setHour(20.5);for(let i=0;i<150;i++)__astra.step(0,false);__astra.step(0)});
+ await page.screenshot({path:dir+'15-town-evening.png',timeout:60000});
+ await page.evaluate(()=>{__astra.view('quay');__astra.step(0)});await page.screenshot({path:dir+'14-lantern-quay.png',timeout:60000});
+ await page.evaluate(()=>{__astra.view({x:54,z:25,zoom:3.2});__astra.step(0)});await page.screenshot({path:dir+'17-riverside-sessions.png',timeout:60000});
+ await page.evaluate(()=>{__astra.view('village');__astra.step(0)});
+ const z=await page.evaluate(()=>__astra.camera.zoom);await page.getByRole('button',{name:'Zoom in',exact:true}).click();await page.evaluate(()=>__astra.step(.1));assert((await page.evaluate(()=>__astra.camera.zoom))>z);
+ await page.evaluate(()=>{__astra.view('village');__astra.setHour(10.4);for(let i=0;i<150;i++)__astra.step(0,false);});
+ await page.setViewportSize({width:390,height:844});await page.waitForTimeout(200);await page.evaluate(()=>{__astra.view('village');__astra.step(0)});await page.screenshot({path:dir+'16-mobile.png',timeout:60000});
+ assert.deepEqual(errors,[]);writeFileSync(dir+'city-evidence.json',JSON.stringify({initial,final:await page.evaluate(()=>__astra.audit()),errors,checks:['startup','connected layout','40 residents','pause freezes residents','residents travel','follow resident','day/night','zoom button','mobile viewport','wheel zoom','right-drag pan','keyboard rotation','court click','resident click','touch pinch']},null,2));console.log('Astra screenshots and interaction checks passed.');
+}finally{await browser.close();}

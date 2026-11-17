@@ -1,0 +1,5 @@
+shot street
+shot townsfolk-lineup
+shot interior
+wave1 shots ok street,townsfolk-lineup,interior
+EXIT=0

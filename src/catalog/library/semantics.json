@@ -1,0 +1,756 @@
+{
+  "version": 1,
+  "packScale": {
+    "cozy-village": 1.6,
+    "farm": 1.6,
+    "autumn": 1.1,
+    "edo-village": 1.25,
+    "nature": 1,
+    "character-model-basic": 1,
+    "character-model-basic-wardrobe": 1,
+    "free": 1,
+    "fairground": 1
+  },
+  "categories": [
+    {
+      "category": "actor",
+      "match": "character-|kaykit-knight",
+      "group": "residents",
+      "activity": "idle"
+    },
+    {
+      "category": "atmosphere",
+      "match": "sky_|_sky|dome|cloud|smoke|mist_layer|spray|fireflies|falling_leaves",
+      "group": "weather"
+    },
+    {
+      "category": "accessibility",
+      "match": "wheelchair|aid[-_]",
+      "group": "accessible-square"
+    },
+    {
+      "category": "costume-prop",
+      "match": "weapon-|shield-|item-",
+      "group": "costume-workshop"
+    },
+    {
+      "category": "seat",
+      "match": "bench|chair|stool|sofa",
+      "group": "rest-garden",
+      "activity": "sit"
+    },
+    {
+      "category": "table",
+      "match": "(?:^|_)(?:table|picnic_table|tea_table)(?:_|$)|^int_.*table",
+      "group": "tea-court",
+      "activity": "eat"
+    },
+    {
+      "category": "bed",
+      "match": "int_bed",
+      "group": "cottage-interior",
+      "activity": "sleep"
+    },
+    {
+      "category": "kitchen",
+      "match": "stove|counter_sink|fireplace",
+      "group": "cottage-interior",
+      "activity": "prepare-food"
+    },
+    {
+      "category": "interior",
+      "match": "^int_",
+      "group": "cottage-interior"
+    },
+    {
+      "category": "sign",
+      "match": "sign|notice_board|directional|info_board|marker_post|chalkboard",
+      "group": "trailhead",
+      "activity": "read"
+    },
+    {
+      "category": "market",
+      "match": "stall|stand$|farm_stand$|flower_cart|yaoya|cornucopia",
+      "group": "harvest-market",
+      "activity": "browse"
+    },
+    {
+      "category": "fire",
+      "match": "campfire|bonfire|fire_pit|brazier",
+      "group": "woodland-camp",
+      "activity": "warm-hands"
+    },
+    {
+      "category": "water-service",
+      "match": "well|pump$|basin|shishi_odoshi|trough",
+      "group": "farmyard",
+      "activity": "collect-water"
+    },
+    {
+      "category": "instrument",
+      "match": "taiko_drum|bell",
+      "group": "lantern-festival",
+      "activity": "play-music"
+    },
+    {
+      "category": "animal",
+      "match": "^(goat|cow|duck|pig|chicken|horse|sheep|deer|mallard_duck|grey_heron|rabbit|fox)$",
+      "group": "pasture",
+      "activity": "graze"
+    },
+    {
+      "category": "building",
+      "match": "^bld_|^home_|barn|cottage|farmhouse|shed|cellar|greenhouse|outhouse|coop|stable|silo|teahouse|shop$|shrine$|hall$|storehouse|rowhouse|townhouse|pagoda|pavilion|ranger_hut|privy|log_cabin|lookout_tower|lean_to|camp_tent",
+      "group": "neighbourhood"
+    },
+    {
+      "category": "tree",
+      "match": "tree|oak|pine$|birch|maple|willow|sakura|bamboo|silver_snag|orchard_row|pine_sapling",
+      "group": "woodland"
+    },
+    {
+      "category": "crop",
+      "match": "crop|ploughed|wheat|corn_stalk|pumpkin_patch|sunflower|rice_paddy|stubble|garden_plot|tilled_field|corn_shock|gourd",
+      "group": "allotment",
+      "activity": "tend"
+    },
+    {
+      "category": "plant",
+      "match": "bush(?:_|$)|grass$|tall_grass|ornamental_grass|hedge|flower|fern|bracken|mushroom|cattails|lily_pad|hydrangea|iris|moss_mound|plant|bonsai|mums|wisteria",
+      "group": "rest-garden"
+    },
+    {
+      "category": "bridge",
+      "match": "bridge|dock_jetty|stepping_stones",
+      "group": "waterside"
+    },
+    {
+      "category": "water",
+      "match": "water_|pond|lake_|river_stream|stream_tile|waterfall|irrigation|puddle",
+      "group": "waterside"
+    },
+    {
+      "category": "terrain",
+      "match": "terrain_|tile|floor|track_|road_|farm_lane|footpath|dirt_trail|farmyard_dirt|pasture$|packed_earth|raked_gravel",
+      "group": "paths"
+    },
+    {
+      "category": "boundary",
+      "match": "fence|wall|gate|torii",
+      "group": "garden-boundary"
+    },
+    {
+      "category": "vehicle",
+      "match": "tractor|truck|pickup|harvester|trailer|cart|wagon|bicycle|canoe|kayak|rowboat|palanquin",
+      "group": "transport",
+      "activity": "inspect"
+    },
+    {
+      "category": "light",
+      "match": "lantern|lamp|lights|candle",
+      "group": "lantern-festival"
+    },
+    {
+      "category": "rock",
+      "match": "rock|stone|boulder|scree|cliff|mountain|pebble|karesansui",
+      "group": "rock-garden"
+    },
+    {
+      "category": "storage",
+      "match": "barrel|crate|basket|sack|hay|firewood|locker|corn_crib|churn",
+      "group": "farmyard",
+      "activity": "sort"
+    },
+    {
+      "category": "tool",
+      "match": "wheelbarrow|rake|axe_|kettle|paddle_rack|windmill_fan|windmill_sail",
+      "group": "workshop",
+      "activity": "work"
+    },
+    {
+      "category": "decoration",
+      "match": ".*",
+      "group": "porch"
+    }
+  ],
+  "activityProfiles": {
+    "sit": {
+      "duration": [
+        12,
+        35
+      ],
+      "animation": "procedural-seated",
+      "pose": "seated",
+      "exclusive": true
+    },
+    "eat": {
+      "duration": [
+        10,
+        25
+      ],
+      "animation": "procedural-eat",
+      "pose": "standing",
+      "exclusive": true
+    },
+    "sleep": {
+      "duration": [
+        45,
+        90
+      ],
+      "animation": "procedural-rest",
+      "pose": "lying",
+      "exclusive": true
+    },
+    "prepare-food": {
+      "duration": [
+        8,
+        18
+      ],
+      "animation": "procedural-reach",
+      "pose": "standing",
+      "exclusive": true
+    },
+    "browse": {
+      "duration": [
+        5,
+        15
+      ],
+      "animation": "procedural-reach",
+      "pose": "standing",
+      "exclusive": true
+    },
+    "read": {
+      "duration": [
+        5,
+        12
+      ],
+      "animation": "procedural-inspect",
+      "pose": "standing",
+      "exclusive": true
+    },
+    "warm-hands": {
+      "duration": [
+        8,
+        22
+      ],
+      "animation": "procedural-warm",
+      "pose": "standing",
+      "exclusive": true
+    },
+    "collect-water": {
+      "duration": [
+        6,
+        12
+      ],
+      "animation": "procedural-reach",
+      "pose": "standing",
+      "exclusive": true
+    },
+    "play-music": {
+      "duration": [
+        15,
+        40
+      ],
+      "animation": "procedural-drum",
+      "pose": "standing",
+      "exclusive": true
+    },
+    "tend": {
+      "duration": [
+        8,
+        20
+      ],
+      "animation": "procedural-tend",
+      "pose": "standing",
+      "exclusive": true
+    },
+    "inspect": {
+      "duration": [
+        4,
+        10
+      ],
+      "animation": "procedural-inspect",
+      "pose": "standing",
+      "exclusive": true
+    },
+    "sort": {
+      "duration": [
+        5,
+        15
+      ],
+      "animation": "procedural-reach",
+      "pose": "standing",
+      "exclusive": true
+    },
+    "work": {
+      "duration": [
+        6,
+        18
+      ],
+      "animation": "procedural-reach",
+      "pose": "standing",
+      "exclusive": true
+    },
+    "idle": {
+      "duration": [
+        3,
+        8
+      ],
+      "animation": "procedural-idle",
+      "pose": "standing",
+      "exclusive": false
+    },
+    "graze": {
+      "duration": [
+        4,
+        10
+      ],
+      "animation": "procedural-graze",
+      "pose": "standing",
+      "exclusive": false
+    }
+  },
+  "clearance": {
+    "building": 1.2,
+    "seat": 0.7,
+    "table": 0.7,
+    "fire": 1.5,
+    "vehicle": 1,
+    "tree": 0.5,
+    "water": 0.8,
+    "default": 0.25
+  },
+  "overrides": {
+    "cozy-village/bench_01": {
+      "seatHeight": 0.475,
+      "seatDepth": 0.03,
+      "slots": 2,
+      "confidence": "geometry-sampled"
+    },
+    "nature/log_bench": {
+      "seatHeight": 0.5,
+      "seatDepth": 0,
+      "slots": 1,
+      "confidence": "geometry-sampled"
+    },
+    "edo-village/tea_table": {
+      "activity": "eat",
+      "group": "tea-court",
+      "confidence": "authored"
+    },
+    "nature/campsite_picnic_table": {
+      "activity": "eat",
+      "group": "woodland-camp"
+    },
+    "nature/axe_chopping_stump": {
+      "category": "tool",
+      "group": "workshop",
+      "activity": "work"
+    },
+    "nature/camp_tripod_kettle": {
+      "category": "tool",
+      "group": "woodland-camp",
+      "activity": "prepare-food"
+    },
+    "farm/wheelbarrow": {
+      "category": "tool",
+      "group": "allotment",
+      "activity": "work"
+    },
+    "autumn/autumn_wheelbarrow": {
+      "category": "tool",
+      "group": "allotment",
+      "activity": "work"
+    },
+    "cozy-village/veh_wheelbarrow_01": {
+      "category": "tool",
+      "group": "allotment",
+      "activity": "work"
+    },
+    "autumn/farm_stand": {
+      "confidence": "authored"
+    },
+    "autumn/apple_crate": {
+      "confidence": "authored"
+    },
+    "nature/stone_ring_campfire": {
+      "confidence": "authored"
+    },
+    "edo-village/taiko_drum": {
+      "confidence": "authored"
+    },
+    "edo-village/yatai_food_stall": {
+      "confidence": "authored"
+    },
+    "autumn/harvest_bunting": {
+      "group": "lantern-festival"
+    },
+    "edo-village/festival_garland": {
+      "group": "lantern-festival"
+    },
+    "edo-village/nobori_banner": {
+      "group": "lantern-festival"
+    },
+    "nature/fallen_log_mossy": {
+      "group": "woodland"
+    },
+    "farm/weathervane": {
+      "group": "porch"
+    },
+    "cozy-village/int_table_lamp_01": {
+      "category": "light",
+      "group": "cottage-interior",
+      "activity": null
+    },
+    "cozy-village/int_bookshelf_01": {
+      "group": "cottage-interior",
+      "activity": "read"
+    },
+    "cozy-village/int_dresser_01": {
+      "group": "cottage-interior",
+      "activity": "sort"
+    },
+    "cozy-village/int_cabinet_01": {
+      "group": "cottage-interior",
+      "activity": "sort"
+    },
+    "fairground/balloon_cart": {
+      "category": "market",
+      "group": "fairground-midway",
+      "activity": "browse"
+    },
+    "fairground/big_top_tent": {
+      "category": "building",
+      "group": "fairground-midway",
+      "activity": null
+    },
+    "fairground/bumper_car": {
+      "category": "ride",
+      "group": "fairground-rides",
+      "activity": null
+    },
+    "fairground/bumper_car_pavilion": {
+      "category": "ride",
+      "group": "fairground-rides",
+      "activity": null
+    },
+    "fairground/bunting_strand": {
+      "category": "light",
+      "group": "fairground-midway",
+      "activity": null
+    },
+    "fairground/carnival_night_dome": {
+      "category": "atmosphere",
+      "group": "weather",
+      "activity": null
+    },
+    "fairground/carnival_sunset_dome": {
+      "category": "atmosphere",
+      "group": "weather",
+      "activity": null
+    },
+    "fairground/chair_o_plane": {
+      "category": "ride",
+      "group": "fairground-rides",
+      "activity": null
+    },
+    "fairground/clipped_hedge": {
+      "category": "plant",
+      "group": "fairground-landscape",
+      "activity": null
+    },
+    "fairground/coaster_station": {
+      "category": "ride",
+      "group": "fairground-rides",
+      "activity": null
+    },
+    "fairground/coaster_support": {
+      "category": "ride",
+      "group": "fairground-rides",
+      "activity": null
+    },
+    "fairground/coaster_track": {
+      "category": "ride",
+      "group": "fairground-rides",
+      "activity": null
+    },
+    "fairground/coaster_track_curve": {
+      "category": "ride",
+      "group": "fairground-rides",
+      "activity": null
+    },
+    "fairground/coaster_track_lift": {
+      "category": "ride",
+      "group": "fairground-rides",
+      "activity": null
+    },
+    "fairground/coaster_track_slope": {
+      "category": "ride",
+      "group": "fairground-rides",
+      "activity": null
+    },
+    "fairground/coaster_track_slope_end": {
+      "category": "ride",
+      "group": "fairground-rides",
+      "activity": null
+    },
+    "fairground/coaster_track_slope_start": {
+      "category": "ride",
+      "group": "fairground-rides",
+      "activity": null
+    },
+    "fairground/cotton_candy_stall": {
+      "category": "market",
+      "group": "fairground-midway",
+      "activity": "browse"
+    },
+    "fairground/cumulus_cloud_set": {
+      "category": "atmosphere",
+      "group": "weather",
+      "activity": null
+    },
+    "fairground/directional_signpost": {
+      "category": "sign",
+      "group": "fairground-midway",
+      "activity": null
+    },
+    "fairground/drop_tower": {
+      "category": "ride",
+      "group": "fairground-rides",
+      "activity": null
+    },
+    "fairground/entrance_arch": {
+      "category": "decoration",
+      "group": "fairground-midway",
+      "activity": null
+    },
+    "fairground/entrance_banner": {
+      "category": "decoration",
+      "group": "fairground-midway",
+      "activity": null
+    },
+    "fairground/fairground_grass_tile": {
+      "category": "terrain",
+      "group": "fairground-landscape",
+      "activity": null
+    },
+    "fairground/ferris_wheel": {
+      "category": "ride",
+      "group": "fairground-rides",
+      "activity": null
+    },
+    "fairground/festival_day_dome": {
+      "category": "atmosphere",
+      "group": "weather",
+      "activity": null
+    },
+    "fairground/flower_bed_edge_tile": {
+      "category": "terrain",
+      "group": "fairground-landscape",
+      "activity": null
+    },
+    "fairground/flower_planter_box": {
+      "category": "plant",
+      "group": "fairground-landscape",
+      "activity": null
+    },
+    "fairground/fountain_pool": {
+      "category": "water",
+      "group": "fairground-landscape",
+      "activity": null
+    },
+    "fairground/gallopers_carousel": {
+      "category": "ride",
+      "group": "fairground-rides",
+      "activity": null
+    },
+    "fairground/globe_lamppost": {
+      "category": "light",
+      "group": "fairground-midway",
+      "activity": null
+    },
+    "fairground/hanging_flower_basket": {
+      "category": "plant",
+      "group": "fairground-landscape",
+      "activity": null
+    },
+    "fairground/hoopla_booth": {
+      "category": "game-booth",
+      "group": "fairground-midway",
+      "activity": null
+    },
+    "fairground/hot_dog_cart": {
+      "category": "market",
+      "group": "fairground-midway",
+      "activity": "browse"
+    },
+    "fairground/ice_cream_stand": {
+      "category": "market",
+      "group": "fairground-midway",
+      "activity": "browse"
+    },
+    "fairground/kiddie_ride_car": {
+      "category": "ride",
+      "group": "fairground-rides",
+      "activity": null
+    },
+    "fairground/landscaping_boulder": {
+      "category": "rock",
+      "group": "fairground-landscape",
+      "activity": null
+    },
+    "fairground/litter_bin": {
+      "category": "decoration",
+      "group": "fairground-midway",
+      "activity": null
+    },
+    "fairground/low_picket_fence": {
+      "category": "boundary",
+      "group": "fairground-landscape",
+      "activity": null
+    },
+    "fairground/neon_marquee_sign": {
+      "category": "light",
+      "group": "fairground-midway",
+      "activity": null
+    },
+    "fairground/packed_dirt_tile": {
+      "category": "terrain",
+      "group": "fairground-landscape",
+      "activity": null
+    },
+    "fairground/park_bench": {
+      "category": "seat",
+      "group": "fairground-midway",
+      "activity": "sit",
+      "slots": 2,
+      "seatHeight": 0.46,
+      "seatDepth": 0.02
+    },
+    "fairground/park_map_board": {
+      "category": "sign",
+      "group": "fairground-midway",
+      "activity": null
+    },
+    "fairground/park_tram": {
+      "category": "ride",
+      "group": "fairground-rides",
+      "activity": null
+    },
+    "fairground/paved_midway_tile": {
+      "category": "terrain",
+      "group": "fairground-landscape",
+      "activity": null
+    },
+    "fairground/picnic_table": {
+      "category": "table",
+      "group": "fairground-midway",
+      "activity": "eat"
+    },
+    "fairground/planter_urn": {
+      "category": "plant",
+      "group": "fairground-landscape",
+      "activity": null
+    },
+    "fairground/popcorn_stall": {
+      "category": "market",
+      "group": "fairground-midway",
+      "activity": "browse"
+    },
+    "fairground/potted_shrub": {
+      "category": "plant",
+      "group": "fairground-landscape",
+      "activity": null
+    },
+    "fairground/prize_shelf": {
+      "category": "game-booth",
+      "group": "fairground-midway",
+      "activity": null
+    },
+    "fairground/queue_stanchion": {
+      "category": "decoration",
+      "group": "fairground-midway",
+      "activity": null
+    },
+    "fairground/reflecting_pool": {
+      "category": "water",
+      "group": "fairground-landscape",
+      "activity": null
+    },
+    "fairground/ride_name_sign": {
+      "category": "sign",
+      "group": "fairground-midway",
+      "activity": null
+    },
+    "fairground/ring_toss_booth": {
+      "category": "game-booth",
+      "group": "fairground-midway",
+      "activity": null
+    },
+    "fairground/road_midway_4way": {
+      "category": "terrain",
+      "group": "fairground-landscape",
+      "activity": null
+    },
+    "fairground/road_midway_corner": {
+      "category": "terrain",
+      "group": "fairground-landscape",
+      "activity": null
+    },
+    "fairground/road_midway_straight": {
+      "category": "terrain",
+      "group": "fairground-landscape",
+      "activity": null
+    },
+    "fairground/road_midway_t": {
+      "category": "terrain",
+      "group": "fairground-landscape",
+      "activity": null
+    },
+    "fairground/road_plaza_tile": {
+      "category": "terrain",
+      "group": "fairground-landscape",
+      "activity": null
+    },
+    "fairground/road_queue_lane": {
+      "category": "terrain",
+      "group": "fairground-landscape",
+      "activity": null
+    },
+    "fairground/rockery_cluster": {
+      "category": "rock",
+      "group": "fairground-landscape",
+      "activity": null
+    },
+    "fairground/roller_coaster_car": {
+      "category": "ride",
+      "group": "fairground-rides",
+      "activity": null
+    },
+    "fairground/shooting_gallery_booth": {
+      "category": "game-booth",
+      "group": "fairground-midway",
+      "activity": null
+    },
+    "fairground/string_light_strand": {
+      "category": "light",
+      "group": "fairground-midway",
+      "activity": null
+    },
+    "fairground/teacups": {
+      "category": "ride",
+      "group": "fairground-rides",
+      "activity": null
+    },
+    "fairground/ticket_booth": {
+      "category": "building",
+      "group": "fairground-midway",
+      "activity": null
+    },
+    "fairground/topiary_tree_in_planter": {
+      "category": "plant",
+      "group": "fairground-landscape",
+      "activity": null
+    }
+  }
+}

@@ -1,0 +1,8 @@
+Fixed large-town dressing: removed wall props and orphan farm fence bits, confined market stock and yard details to appropriate locations, and kept furniture/signage beside streets.
+
+- Seed 1234 recompiles successfully on attempt 0 with 320 props.
+- Hamlet seed 1234 is byte-identical to baseline via `cmp`.
+- Checks, parity, and build pass; hard checks remain intact.
+- Large sweep: 50/50 pass after retries, 41/50 first attempt.
+
+Updated [out/codex-large.md](/workspace/cel-town/out/codex-large.md) with changes and counts. No screenshots, push, or deployment.

@@ -1,0 +1,91 @@
+
+> cel-town@0.1.0 test:checks
+> node tools/check-negatives.mjs && node tools/check-batches.mjs
+
+seed 1234: 4 gates
+ok   house on house -> footprint-overlap:2 roof-overlap:1 setback:1 door-reachable:1 fence-continuity:3 gate-at-door:1 house-facing:2
+ok   tree on path -> trees-off-paths:1
+ok   drop a path -> door-reachable:1
+ok   tree outside area -> within-area:1
+ok   tree in lot -> footprint-overlap:1 trees-outside-lots:1
+ok   path dead-ends off ring -> door-reachable:1
+ok   fence across a door path -> fences-not-on-paths:1 fence-continuity:1
+ok   landmark on a house -> footprint-overlap:2 roof-overlap:1 setback:2 door-reachable:1 house-facing:1
+ok   delete a gate -> gate-at-door:1
+ok   shift gate along fence -> gate-at-door:2
+ok   orphan gate -> gate-at-door:1
+ok   house side-on -> door-reachable:1 house-facing:2
+ok   house back to plaza -> door-reachable:1 house-facing:2
+large dressing: facade anchors, scoped scatter, sparse smoke and Nature budget; furniture beside streets
+ok   prop blocks street -> props-off-paths
+ok   livestock in plaza -> animal-zones
+ok   wildlife on farm -> animal-zones
+ok   detached wreath -> facade-placement
+ok   street house faces away -> street-facing
+ok   street lot invents a street -> street-facing
+ok   sever farm track -> door-reachable
+ok   remove market district street -> district-streets
+ok   move street through a lot -> paths-clear-lots
+ok   drop civic building -> landmark-count-in-range
+ok   delete street lot gate -> gate-at-door
+ok   farm animal overlaps barn -> footprint-overlap
+ok   drop one Edo villager -> edo-villagers
+ok   duplicate Edo identity -> edo-villagers
+ok   villager claims wrong district -> edo-villagers
+ok   villager inside building -> edo-villagers
+ok   villager without Edo -> edo-villagers
+ok   sever Edo connector -> edo-connected-streets
+ok   Edo doors disconnected from plaza -> door-reachable
+ok   remove shrine approach -> edo-connected-streets
+ok   remove shrine -> edo-required-features
+ok   torii post obstructs walking -> props-off-paths
+ok   torii misses approach -> edo-required-features
+ok   tree blocks teahouse camera -> edo-camera-pocket
+ok   Cozy lamp in Edo -> edo-required-features
+ok   paving cannot replace road -> edo-connected-streets
+ok   paving must sit on road -> edo-street-paving
+ok   extra Edo houses do not mask missing core -> landmark-count-in-range
+ok   bridge sits on grass -> edo-bridge-over-water
+ok   shop set back ten metres -> edo-shopfront-setback
+ok   remove paved skin -> edo-street-paving
+ok   unsupported lantern orb -> edo-required-features
+ok   bridge runs along water instead of spanning banks -> edo-bridge-over-water
+ok   invalid bridge layering remains a solid collision -> footprint-overlap
+ok   wide tea-court paving -> edo-street-paving
+ok   four-way tile on straight run -> edo-street-paving
+ok   noren on open lawn -> edo-noren-at-door
+ok   noren claims wrong facade -> edo-noren-at-door
+hills: old layout negative caught; new layout clears every occupied bound +10m; untouched hills stay identical
+ok   hall leaves shrine axis -> edo-placement-pass2
+ok   rope loses hall attachment -> edo-placement-pass2
+ok   guardian pair sits on one side -> edo-placement-pass2
+ok   duplicate authored dog pair -> edo-placement-pass2
+ok   south frontage removed -> edo-placement-pass2
+ok   remove bridge loop crossing -> edo-connected-streets
+ok   drop resident -> life-townsfolk
+ok   missing schedule -> life-townsfolk
+ok   missing home -> life-townsfolk
+ok   missing workplace -> life-townsfolk
+ok   resident off graph -> life-townsfolk
+ok   resident inside wall -> life-townsfolk
+ok   unreachable workplace -> life-townsfolk
+ok   resident elevated onto roof -> life-townsfolk
+ok   resident below ground -> life-townsfolk
+ok   connected workplace inside house -> life-townsfolk
+ok   connected workplace inside landmark -> life-townsfolk
+ok   connected home inside footprint -> life-townsfolk
+ok   connected idle inside footprint -> life-townsfolk
+ok   townsfolk with life off -> life-townsfolk
+ok   missing greet reservation -> life-townsfolk
+ok   missing chat reservation -> life-townsfolk
+ok   missing shop reservation -> life-townsfolk
+ok   missing eat reservation -> life-townsfolk
+ok   missing play reservation -> life-townsfolk
+ok   missing play schedule slot -> life-townsfolk
+ok   meal inside inn -> life-townsfolk
+ok   conflicting reservations -> life-townsfolk
+ok   chat without a partner -> life-townsfolk
+all breaks caught
+life-interiors: four rooms; missing bakery and wall trigger negatives caught; life-off untouched
+batches: tree and gate geometry, ink, bounds, shared resources and per-instance metadata pass
+runtime geometry: water opening exposes channel, nearby grass remains, default hills retain original geometry

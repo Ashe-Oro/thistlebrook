@@ -1,0 +1,23 @@
+
+> cel-town@0.1.0 test:world-registry
+> node --test tests/world-registry.test.mjs
+
+✔ world-registry: large seed 1, explicit registry and life (2060.078736ms)
+✔ world-registry: large seed 7, explicit registry and life (1628.793835ms)
+✔ world-registry: large seed 1234, explicit registry and life (1894.106214ms)
+✔ world-registry: large seed 19, explicit registry and life (9973.250046ms)
+✔ world-registry: queries, civic names and tool resolution (21.483546ms)
+✔ world-registry: JSON round trip and rebuilding navigation (343.105758ms)
+✔ world-registry: negative validation for missing metadata, coverage and reachability (189.402533ms)
+✔ world-registry: automatic new assets, transformed anchors, repeated homes, sealed entry negative (1.052906ms)
+✔ world-registry: opt-in hamlet, input purity, default JSON unchanged (67.128869ms)
+✔ world-registry: compiler reports invalid generated metadata only on opt-in paths (2723.657761ms)
+✔ world-registry: write compact compile evidence when requested (0.295873ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 19123.153426

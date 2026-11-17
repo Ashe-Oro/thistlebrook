@@ -1,0 +1,5 @@
+Implemented large-town dressing, animal placement, Edo district, and autumn flags, including composition. Added 102 catalog entries and preserved the hamlet’s frozen compiled JSON.
+
+Bounds, checks, and parity pass. All six requested seed/variant compiles pass all 21 checks.
+
+Details, stats, and known limitations: [out/codex-dress.md](/workspace/cel-town/out/codex-dress.md).

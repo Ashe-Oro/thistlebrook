@@ -1,0 +1,10 @@
+
+> cel-town@0.1.0 shots:village-art
+> node tools/shots-village-art.mjs --video-only
+
+video frame 0 /96
+video frame 16 /96
+video frame 32 /96
+video frame 48 /96
+video frame 64 /96
+video frame 80 /96

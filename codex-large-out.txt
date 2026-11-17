@@ -1,0 +1,7 @@
+Implemented `?size=large` with 95 new catalog entries, multiple districts, farm outskirts and instanced rendering.
+
+Seed 1234 produces 27 building lots—4.5× the default—and 337 props. Default hamlet JSON remains byte-identical.
+
+Checks, parity and build pass. The large sweep passed 50/50 seeds after retries.
+
+[Full report](/workspace/cel-town/out/codex-large.md). Browser rendering remains unverified because the environment blocked server binding and Chrome launch.

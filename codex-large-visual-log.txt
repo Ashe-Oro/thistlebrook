@@ -1,0 +1,1991 @@
+OpenAI Codex v0.165.0
+--------
+workdir: /workspace/cel-town
+model: gpt-6.1-sol
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: medium
+reasoning summaries: none
+session id: 01a1cfde-b614-7030-a2c1-11d0fc166024
+--------
+user
+# Visual fix pass for the large town (seed 1234)
+
+I rendered `/?size=large&seed=1234` (overview persp/iso plus close market and farm shots). The town structure is good: plaza, residential grid, market (blacksmith / market hall / windmill), farm outskirts (barn, farmhouse, silo, animals, crops). No obvious floating buildings. Default hamlet must stay byte-identical for seed 1234 (cmp against out/baseline/town-1234.json). Do not weaken hard checks.
+
+Please fix these obvious dressing problems in the large preset only:
+
+1. **Wrong ground props.** `cv-window-box`, `cv-shop-hanging-sign`, and `cv-birdhouse` are scattered on open grass (14/14/12 instances, almost all district `dressing`). They look like they belong on building walls, not as lawn ornaments. Remove them from the generic ground-dressing pick pool. If you still place them, snap them to house/landmark walls; otherwise just don't place them in the large town.
+
+2. **Orphan fence bits.** `farm-rail-fence` (6) and `farm-drystone-wall` (4) are being placed as short isolated prop segments in the farm field (visible in the farm close-up). Do not scatter fence modules as props. Either omit them from dressing, or place them as real continuous fence runs.
+
+3. **Random field clutter.** The plaza/market approaches are over-scattered with notice boards, directional posts, laundry lines, benches sitting in open grass not along a street, and hanging signs. Keep dense dressing, but place it with intent: lamps and benches along streets, stalls/crates/barrels/carts in the market, farm props in the farm district, flowers/rocks in woodland/yards. Reduce unscoped `dressing` field scatter, especially civic signage in the middle of lawns.
+
+4. Do not retune hamlet. Keep `npm run test:checks` and `npm run test:parity` green. Recompile `--size large --seed 1234`. If placement rules change, rerun a large sweep (20 seeds is enough if 50 is slow) and keep after-retry pass rate high. Update `out/codex-large.md` with what changed and new seed-1234 counts.
+
+No screenshots needed (I will rerender). No git push, no deploy, no buying, no licensed files outside public/licensed/.
+
+codex
+I’ll inspect the large-preset dressing rules, adjust placement, then run the checks, parity comparison, and a large-seed sweep. I’ll leave hamlet tuning unchanged and update `out/codex-large.md` with the results.
+
+exec
+/bin/bash -lc "pwd && rg --files -g 'AGENTS.md' -g 'package.json' -g '*large*' -g '*dress*' -g '*town*' -g '*parity*' -g '*check*'" in /workspace/cel-town
+ succeeded in 0ms:
+/workspace/cel-town
+large-town-visual-prompt.md
+codex-large-out.txt
+tools/parity.mjs
+tools/shots-large.mjs
+tools/check-batches.mjs
+tools/check-negatives.mjs
+shots/large-market-persp.png
+shots/large-farm-persp.png
+shots/large-overview-iso.png
+shots/large-overview-persp.png
+shots/large-plaza-iso.png
+specs/large.json
+codex-large-visual-log.txt
+package.json
+large-town-prompt.md
+src/compiler/checks.js
+codex-large-log.txt
+
+exec
+/bin/bash -lc "ls -la; rg --files -g AGENTS.md /workspace 2>/dev/null; cat package.json; rg -n 'dressing|farm-rail-fence|cv-window-box|cv-shop-hanging-sign|cv-birdhouse|drystone' src tools specs; cat out/codex-large.md" in /workspace/cel-town
+ succeeded in 0ms:
+total 944
+drwxr-xr-x  14 box box   4096 Nov 12 08:07 .
+drwxr-xr-x. 67 box box  28672 Nov 12 06:23 ..
+dr-xr-xr-x   2 box box     40 Nov 12 08:07 .agents
+dr-xr-xr-x   2 box box     40 Nov 12 08:07 .aws
+dr-xr-xr-x   2 box box     40 Nov 12 08:07 .codex
+dr-xr-xr-x   2 box box     40 Nov 12 08:07 .git
+-rw-r--r--   1 box box    282 Nov 11 17:10 .gitignore
+-rw-r--r--   1 box box   3256 Nov 11 17:10 CEL_TOWN_SUMMARY.md
+-rw-r--r--   1 box box   8611 Nov 12 07:56 README.md
+-rw-r--r--   1 box box 349647 Nov 12 08:02 codex-large-log.txt
+-rw-r--r--   1 box box    473 Nov 12 08:02 codex-large-out.txt
+-rw-r--r--   1 box box   3237 Nov 12 08:07 codex-large-visual-log.txt
+-rw-r--r--   1 box box   2160 Nov 11 17:10 compile.html
+drwxr-xr-x   3 box box   4096 Nov 12 08:00 dist
+-rw-r--r--   1 box box   1239 Nov 11 17:10 index.html
+-rw-r--r--   1 box box   1376 Nov 11 17:10 kit.html
+-rw-r--r--   1 box box  11441 Nov 12 07:43 large-town-prompt.md
+-rw-r--r--   1 box box   2136 Nov 12 08:07 large-town-visual-prompt.md
+drwxr-xr-x  20 box box   4096 Nov 11 19:04 node_modules
+drwxr-xr-x   5 box box   4096 Nov 12 07:57 out
+-rw-r--r--   1 box box  34618 Nov 11 17:10 package-lock.json
+-rw-r--r--   1 box box    800 Nov 12 07:55 package.json
+drwxr-xr-x   4 box box   4096 Nov 11 17:09 public
+drwxr-xr-x   2 box box   4096 Nov 12 08:06 shots
+drwxr-xr-x   2 box box   4096 Nov 12 07:46 specs
+drwxr-xr-x   5 box box   4096 Nov 11 18:58 src
+-rw-r--r--   1 box box 442792 Nov 11 17:10 style-ref.jpg
+drwxr-xr-x   3 box box   4096 Nov 12 08:03 tools
+-rw-r--r--   1 box box   1521 Nov 12 07:56 vite.config.js
+{
+  "name": "cel-town",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "catalog:bounds": "node tools/compute-bounds.mjs",
+    "inspect:glb": "node tools/inspect-glb.mjs",
+    "compile": "node tools/compile.mjs",
+    "shots": "node tools/shots.mjs",
+    "shots:post": "node tools/shots.mjs --post",
+    "test:checks": "node tools/check-negatives.mjs && node tools/check-batches.mjs",
+    "test:parity": "node tools/parity.mjs"
+  },
+  "dependencies": {
+    "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "@gltf-transform/core": "^4.5.1",
+    "@gltf-transform/extensions": "^4.5.1",
+    "draco3dgltf": "^1.5.9",
+    "playwright-core": "^1.65.0",
+    "vite": "^5.4.0"
+  }
+}
+tools/check-negatives.mjs:13:// Seed 1234 has buildings, dressing, fences and gates under the explicit
+specs/large.json:10:  "props": { "count": [130, 160], "pick": { "category": "prop", "style": "town-dressing" } },
+src/main.js:104:  // A few imported props/dressing mixed with builder trees.
+src/compiler/compile.js:31:// Instance kinds the camera must keep fully framed (dressing may crop).
+src/compiler/compile.js:463:        if (cfg.maxRadius && Math.hypot(pos[0], pos[1]) > cfg.maxRadius) continue; // keep dressing near the town
+src/compiler/districts.js:92:  // All dressing uses full mesh bounds for rejection, including roof/canopy
+src/compiler/districts.js:131:    dress('farm-rail-fence', [94, z], Math.PI / 2, 'prop', 'farm');
+src/compiler/districts.js:132:    dress('farm-drystone-wall', [63, z], Math.PI / 2, 'prop', 'farm');
+src/compiler/districts.js:158:  scatter(spec.props, 'prop', spec.density.props, () => rng.chance(0.5) ? market() : residential(), 'dressing');
+src/compiler/districts.js:159:  scatter({ count: [35, 45], pick: { style: 'farm-dressing' } }, 'prop', spec.density.props, farmyard, 'farm');
+src/compiler/spec.js:42://           dressing within that distance of the plaza centre (optional).
+src/catalog/additions.js:29:  ...cv('bench crate campfire firewood_stack directional_post notice_board laundry_line birdhouse plant_potted window_box hay_bale water_pump water_trough village_entrance_sign flower_bed pumpkin_patch shop_hanging_sign', 'prop', ['dressing']),
+src/catalog/additions.js:40:  ...farm('wheelbarrow rain_barrel milk_churns produce_crates grain_sacks scarecrow water_trough feed_trough hay_bale_round hay_bale_square haystack weathervane', 'prop', ['farm-dressing']),
+src/catalog/additions.js:44:  ...farm('rail_fence drystone_wall', 'fence', ['rail']),
+src/catalog/additions.js:47:  ...'wildflower tall_grass cattails granite_rock_cluster lichen_granite_boulder moss_cushion_rock fallen_log_mossy log_bench lantern mushroom_cluster river_stones creek_stepping_stones'.split(' ').map(f => mesh('nature', f, 'prop', ['sparse', f.includes('rock') || f.includes('stone') || f.includes('boulder') ? 'rock' : 'dressing'])),
+src/catalog/additions.js:50:const fenceLengths = { 'cv-rail-fence': [-1.269, 1.283], 'farm-rail-fence': [-2.015, 2.015], 'farm-drystone-wall': [-2, 2], 'farm-farm-gate': [-1.31, 1.31] };
+src/catalog/additions.js:53:  if (entry.tags.style.includes('cozy-village') && entry.tags.style.includes('dressing')) entry.tags.style.push('town-dressing');
+src/catalog/bounds.json:1267: "cv-birdhouse": {
+src/catalog/bounds.json:1315: "cv-window-box": {
+src/catalog/bounds.json:1483: "cv-shop-hanging-sign": {
+src/catalog/bounds.json:2611: "farm-rail-fence": {
+src/catalog/bounds.json:2635: "farm-drystone-wall": {
+# Large town compiler
+
+Open `/?size=large&seed=1234` or `/compile.html?size=large&seed=1234`. Without a seed, the preset uses seed 1. `?size=large` selects bundled `specs/large.json`; CLI equivalents are `--size large` and `--spec specs/large.json`. The compiler page also accepts `?spec=specs/large.json`.
+
+The original default view and seeded hamlet remain unchanged. Original catalog pools now carry `v3-kit`; seed 1234 is byte-identical to the saved pre-change JSON. Its frozen SHA-256 regression is checked by `test:parity`. No hamlet counts changed.
+
+## Seed 1234 counts
+
+| Measure | Default hamlet | Large |
+|---|---:|---:|
+| Building lots | 6 | 27 |
+| houses | 5 | 20 |
+| landmarks | 1 | 7 |
+| paths | 6 | 34 |
+| fences | 41 | 109 |
+| trees | 15 | 91 |
+| bushes | 7 | 44 |
+| props | 3 | 337 |
+| instances | 85 | 656 |
+
+Large has 4.5× as many building lots, including two farm dwellings. Farm outbuildings, market stalls, crops and animals are counted as props, not dwelling lots. Default seed 1234 passes on attempt 0; large passes on attempt 1. Neither has framing warnings. Large ground radius is 125 for area radius 110; hills expand with it.
+
+## Layout and rendering
+
+Retains a camera/plaza-facing core, then adds two rear residential streets, a west lane, a market street, an approach from the green and a farm track. Density can add further residential rows; checks at house density 0.7, 1.25 and 1.5 pass for seed 1234 (13, 28 and 27 houses). Door reachability follows the connected path graph to the plaza. Street buildings must face their assigned street within 20 degrees; plaza buildings retain the original 45-degree camera / 50-degree plaza caps and compiler path-bend cap. Fenced dwellings retain gates, clearance and continuity checks. New hard checks cover streets crossing lots, district streets and civic counts.
+
+Repeated trees, bushes, fences, lamps, crops, props and gates use InstancedMesh batches with shared geometry/materials, including ink hulls. Per-instance pivots retain `userData.inst` and anchors for debug/camera fitting; raycasts use `userData.instances[hit.instanceId]`. Nature is sparse (7 instances at seed 1234: two oaks, two wildflowers, two rocks and a fallen log). The bulk dressing query explicitly selects Cozy assets; Nature cannot enter that pool.
+
+Cozy remains scale 1.6. Farm and Nature remain scale 1.0. Detailed farmhouse vertex inspection found its door at z≈3.13 behind a porch ending at z≈4.40; the path snap is z=4.70. The market hall uses its +Z public awning as the front. Market stalls have a -Z counter, normalised with yawOffset=π. Inspection evidence is in `out/door-inspection.txt` and `out/mesh-inspection.txt`; all bounds were recomputed by `npm run catalog:bounds`.
+
+## Verification
+
+- `npm run test:checks`: all 13 original breaks and 8 large-town breaks caught, plus batch geometry/ink/bounds/shared-resource/metadata checks.
+- `npm run test:parity`: 31 hamlet seeds and 4 large seeds, forward/reverse, through Vite SSR and simulated one-ulp engine rounding; full town JSON identical. Frozen original-hamlet checksum also passes.
+- `npm run compile -- --spec specs/large.json --sweep 50 --out out/large/`: 42/50 first attempt (84%), 50/50 after retries (100%). No remaining failing hard checks. Maximum retry index 4. Full seed rows: `out/large/sweep.json`.
+- `npm run build`: passes; existing large-bundle warning remains. No public assets are copied into dist. Private Vite preview serves them directly from public.
+- Five local seed-1234 compilations averaged ~26 ms for hamlet and ~529 ms for large, excluding GLB loading/rendering. Samples: `out/compile-timings.json`. Logs: `out/checks.log`, `out/parity.log`, `out/build.log`.
+
+## Known limits
+
+No screenshots or frame-time claims. Browser verification was blocked by this environment: Vite listen returned EPERM and Chrome could not launch. Rendering and `?perf=1` measurements remain for the later pass. Farm outbuildings without verified doors are collision-checked props and do not claim door navigation. Newly catalogued road tiles/water/bridge pieces are available in kit.html; town roads use the existing procedural strips. Build previews require public assets alongside dist (handled by npm run preview); a standalone dist directory does not contain licensed GLBs.
+
+## New catalog ids (95)
+
+### cozy-village (43)
+
+- landmark: `cv-blacksmith`, `cv-market-hall`, `cv-windmill`.
+- prop: `cv-market-stall`, `cv-flower-cart`, `cv-hand-cart`, `cv-horse-cart`, `cv-wheelbarrow`, `cv-bicycle`, `cv-bench`, `cv-crate`, `cv-campfire`, `cv-firewood-stack`, `cv-directional-post`, `cv-notice-board`, `cv-laundry-line`, `cv-birdhouse`, `cv-plant-potted`, `cv-window-box`, `cv-hay-bale`, `cv-water-pump`, `cv-water-trough`, `cv-village-entrance-sign`, `cv-flower-bed`, `cv-pumpkin-patch`, `cv-shop-hanging-sign`, `cv-streetlamp`, `cv-garden-plot`, `cv-tilled-field`, `cv-water-pond`, `cv-water-stream`, `cv-rock-boulder`, `cv-rock-stepping-stones`, `cv-rock-stone-pile`.
+- tree: `cv-tree-fruit`, `cv-tree-pine`.
+- bush: `cv-hedge-straight`.
+- fence: `cv-rail-fence`.
+- path: `cv-road-cobble-corner`, `cv-road-cobble-crossing`, `cv-road-cobble-tee`, `cv-road-dirt-road`, `cv-road-stone-footbridge`.
+
+### farm (38)
+
+- house: `farm-farmhouse`, `farm-farmhand-cottage`.
+- landmark: `farm-produce-stand`.
+- prop: `farm-hay-barn`, `farm-chicken-coop`, `farm-stable`, `farm-greenhouse`, `farm-outhouse`, `farm-windmill-pump`, `farm-root-cellar`, `farm-grain-silo`, `farm-big-red-barn`, `farm-wheelbarrow`, `farm-rain-barrel`, `farm-milk-churns`, `farm-produce-crates`, `farm-grain-sacks`, `farm-scarecrow`, `farm-water-trough`, `farm-feed-trough`, `farm-hay-bale-round`, `farm-hay-bale-square`, `farm-haystack`, `farm-weathervane`, `farm-crop-row-field`, `farm-sunflower-row`, `farm-pumpkin-patch`, `farm-orchard-row`, `farm-wheat-cluster`, `farm-corn-stalk-cluster`, `farm-chicken`, `farm-sheep`, `farm-duck`, `farm-goat`.
+- gate: `farm-farm-gate`.
+- tree: `farm-apple-tree`.
+- fence: `farm-rail-fence`, `farm-drystone-wall`.
+
+### nature (14)
+
+- tree: `nat-oak`, `nat-pine-sapling-staked`.
+- prop: `nat-wildflower`, `nat-tall-grass`, `nat-cattails`, `nat-granite-rock-cluster`, `nat-lichen-granite-boulder`, `nat-moss-cushion-rock`, `nat-fallen-log-mossy`, `nat-log-bench`, `nat-lantern`, `nat-mushroom-cluster`, `nat-river-stones`, `nat-creek-stepping-stones`.
+
+exec
+/bin/bash -lc 'cat src/compiler/districts.js; cat specs/large.json; cat src/catalog/additions.js; cat tools/compile.mjs; cat tools/parity.mjs' in /workspace/cel-town
+ succeeded in 0ms:
+// Connected street districts. Slot order and all arithmetic are shared by Node
+// and the browser; the original plaza compiler stays on its v3 random stream.
+import { math as Math } from './math.js';
+import { scaleCount } from './spec.js';
+import { queryCatalog, rectForInst } from './compile.js';
+import { obbFromRect, obbOverlap, obbCorners, obbPointDistance, rectXZ, pointInArea, toWorldXZ, rotDir, strutEnds, segPointDistance, dist, TAU } from './geometry.js';
+
+const place = i => ({ x: i.pos[0], z: i.pos[1], rotY: i.rotY });
+export function extendDistricts({ spec, catalog, rng, instances, buildings, lots, paths, area }) {
+  const streets = [];
+  const strip = (a, b, width, extra) => ({
+    id: spec.paths.id, kind: 'path', pos: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2],
+    rotY: Math.atan2(b[0] - a[0], b[1] - a[1]), scale: 1,
+    params: { length: dist(a, b), width }, ...extra,
+  });
+  function street(name, a, b, district, width = 3.2) {
+    const p = strip(a, b, width, { streetId: name, district });
+    streets.push(p); paths.push(p);
+    return p;
+  }
+  street('green-approach', [0, 5.7], [0, 18], 'plaza');
+  street('south-lane', [-50, 18], [58, 18], 'residential');
+  street('west-lane', [-50, 18], [-50, -58], 'residential');
+  street('upper-street', [-50, -36], [46, -36], 'residential');
+  street('orchard-street', [-50, -58], [46, -58], 'residential');
+  street('market-street', [30, 18], [30, -58], 'market', 4);
+  street('farm-track', [58, 18], [58, -38], 'farm', 2.8);
+  const pathObb = p => obbFromRect(rectForInst(p, catalog), place(p));
+  function clear(entry, pos, rotY, scale = 1, lot = false) {
+    const pl = { x: pos[0], z: pos[1], rotY };
+    const o = obbFromRect(lot ? entry.lot || rectXZ(entry.bounds) : rectXZ(entry.bounds), pl, scale);
+    if (obbCorners(o).some(c => !pointInArea(area, c, 1))) return false;
+    if (obbPointDistance(o, [0, 0]) < spec.plaza.ring.radius + spec.plaza.ring.width / 2 + 1) return false;
+    if (lots.some(l => obbOverlap(o, l, 0.7))) return false;
+    if (paths.some(p => obbOverlap(o, pathObb(p), 0.4))) return false;
+    return true;
+  }
+  function addBuilding(id, pos, rotY, road, kind, district) {
+    const entry = catalog.get(id);
+    const snap = entry.pathSnaps[0];
+    const a = toWorldXZ([snap.pos[0], snap.pos[2]], { x: pos[0], z: pos[1], rotY });
+    const [A, B] = strutEnds(road);
+    const end = A[0] === B[0] ? [A[0], a[1]] : [a[0], A[1]];
+    const dir = rotDir([snap.dir[0], snap.dir[2]], rotY);
+    const p = strip(a, end, spec.paths.width, { lot: buildings.length, district });
+    if (!clear(entry, pos, rotY, 1, true)) return false;
+    if (lots.some(l => obbOverlap(pathObb(p), l, 0.2))) return false;
+    const lot = obbFromRect(entry.lot || entry.footprint, { x: pos[0], z: pos[1], rotY });
+    const inst = { id, kind, pos, rotY, scale: 1, lot: buildings.length, district, street: road.streetId };
+    const b = { entry, pos, rotY, index: buildings.length, kind, lot, inst, dp: { a, end, dir, bend: 0 } };
+    buildings.push(b); lots.push(lot); instances.push(inst); paths.push(p);
+    return true;
+  }
+  const road = id => streets.find(p => p.streetId === id);
+  const cozyHomes = queryCatalog(catalog, spec.houses.pick);
+  const [lo, hi] = scaleCount(spec.houses.count, spec.density.houses);
+  const target = rng.int(lo, hi);
+  const current = buildings.filter(b => b.kind === 'house').length;
+  const streetCount = Math.max(0, target - current - 2);
+  const slots = [];
+  // Interleave rows so every seed populates both residential neighbourhoods.
+  for (const x of [-40, -26, -12, 2, 16, 42]) {
+    slots.push([[x, -46], 'upper-street', 0], [[x, -68], 'orchard-street', 0]);
+  }
+  for (const z of [-6, -22, -42, -58]) slots.push([[-61, z], 'west-lane', Math.PI / 2]);
+  const extraRows = Math.max(0, Math.ceil((streetCount - slots.length) / 6));
+  if (extraRows) {
+    const end = -58 - extraRows * 22;
+    street('west-extension', [-50, -58], [-50, end], 'residential');
+    street('east-extension', [30, -58], [30, end], 'residential');
+    for (let row = 0; row < extraRows; row++) {
+      const z = -80 - row * 22, name = `north-street-${row}`;
+      street(name, [-50, z], [46, z], 'residential');
+      for (const x of [-40, -26, -12, 2, 16, 42]) slots.push([[x, z - 10], name, 0]);
+    }
+  }
+  for (const [pos, name, yaw] of slots.slice(0, streetCount)) {
+    addBuilding(rng.pick(cozyHomes).id, pos, yaw, road(name), 'house', 'residential');
+  }
+  // The farm stays at source scale, with a track-facing farmhouse and cottage.
+  addBuilding('farm-farmhouse', [71, -30], -Math.PI / 2, road('farm-track'), 'house', 'farm');
+  addBuilding('farm-farmhand-cottage', [69, -12], -Math.PI / 2, road('farm-track'), 'house', 'farm');
+  const civics = ['cv-blacksmith', 'cv-market-hall', 'cv-windmill', 'cv-store'];
+  for (let i = 0; i < civics.length; i++) addBuilding(civics[i], [42, -27 + i * 13], -Math.PI / 2, road('market-street'), 'landmark', 'market');
+  addBuilding('farm-produce-stand', [66, 4], -Math.PI / 2, road('farm-track'), 'landmark', 'farm');
+  const civicTarget = rng.int(...spec.landmarks.count);
+  for (const [i, id] of ['cv-bakery', 'cv-tavern', 'cv-chapel', 'cv-store'].entries()) {
+    if (buildings.filter(b => b.kind === 'landmark').length >= civicTarget) break;
+    addBuilding(id, [-37 + i * 16, 31], Math.PI, road('south-lane'), 'landmark', 'civic');
+  }
+
+  // All dressing uses full mesh bounds for rejection, including roof/canopy
+  // overhangs. Keep collisions conservative rather than hiding them in checks.
+  const occupied = instances.filter(i => catalog.has(i.id) && !['path', 'ring'].includes(i.kind))
+    .map(i => obbFromRect(rectXZ(catalog.get(i.id).bounds), place(i), i.scale));
+  function dress(id, pos, rotY = 0, kind = 'prop', district = 'residential', scale = 1) {
+    const e = catalog.get(id);
+    if (!clear(e, pos, rotY, scale)) return false;
+    const o = obbFromRect(rectXZ(e.bounds), { x: pos[0], z: pos[1], rotY }, scale);
+    if (occupied.some(b => obbOverlap(o, b, 0.35))) return false;
+    if (kind === 'tree' || kind === 'bush') {
+      const rad = Math.max(e.footprint.max[0] - e.footprint.min[0], e.footprint.max[1] - e.footprint.min[1]) / 2 * scale;
+      if (paths.some(p => { const [a, b] = strutEnds(p); return segPointDistance(a, b, pos) < p.params.width / 2 + rad + 0.4; })) return false;
+    }
+    occupied.push(o);
+    instances.push({ id, kind, pos, rotY, scale, district });
+    return true;
+  }
+  // Market counters face the street (+X after canonicalising their -Z front).
+  for (let z = -24; z <= 12; z += 6) {
+    dress('cv-market-stall', [24, z], Math.PI / 2, 'prop', 'market');
+    dress('cv-barrel', [20, z + 2], 0, 'prop', 'market');
+    dress('cv-crate', [21, z - 2], 0, 'prop', 'market');
+  }
+  for (const [id, pos] of [
+    ['cv-flower-cart', [24, 24]], ['cv-hand-cart', [35, 24]], ['cv-horse-cart', [46, 24]],
+    ['cv-notice-board', [10, 12]], ['cv-directional-post', [-5, 12]], ['cv-village-entrance-sign', [-48, 24]],
+    ['farm-big-red-barn', [84, -27]], ['farm-stable', [84, -12]],
+    ['farm-chicken-coop', [68, 25]], ['farm-greenhouse', [78, 22]],
+    ['farm-grain-silo', [91, 7]], ['farm-hay-barn', [86, 20]],
+    ['farm-windmill-pump', [64, -43]], ['farm-root-cellar', [82, -42]],
+    ['farm-scarecrow', [68, -48]], ['farm-water-trough', [72, 15]],
+    ['nat-log-bench', [-38, 25]], ['nat-granite-rock-cluster', [-45, 29]],
+    ['nat-fallen-log-mossy', [-38, -81]],
+  ]) dress(id, pos, 0, 'prop', pos[0] > 58 ? 'farm' : 'market');
+  for (let x = 65; x <= 85; x += 6) for (let z = -65; z <= -49; z += 6) {
+    dress(rng.pick(['farm-crop-row-field', 'farm-pumpkin-patch', 'farm-sunflower-row', 'farm-corn-stalk-cluster', 'farm-wheat-cluster']), [x, z], 0, 'prop', 'farm');
+  }
+  for (let x = 65; x <= 85; x += 7) dress('farm-orchard-row', [x, -73], 0, 'prop', 'farm');
+  for (let z = -10; z <= 32; z += 4.1) {
+    dress('farm-rail-fence', [94, z], Math.PI / 2, 'prop', 'farm');
+    dress('farm-drystone-wall', [63, z], Math.PI / 2, 'prop', 'farm');
+  }
+  for (const p of streets) {
+    const [a, b] = strutEnds(p), length = dist(a, b), d = [(b[0] - a[0]) / length, (b[1] - a[1]) / length];
+    for (let t = 5; t < length - 2; t += 12) {
+      const pos = [a[0] + d[0] * t + d[1] * 3, a[1] + d[1] * t - d[0] * 3];
+      dress('cv-streetlamp', pos, 0, 'prop', p.district);
+      dress('cv-bench', [pos[0] + d[0] * 4, pos[1] + d[1] * 4], p.rotY + Math.PI / 2, 'prop', p.district);
+    }
+  }
+  function scatter(cfg, kind, mult, sample, district) {
+    const list = queryCatalog(catalog, cfg.pick);
+    const n = rng.int(...scaleCount(cfg.count, mult));
+    for (let i = 0; i < n; i++) for (let t = 0; t < spec.retries.placement; t++) {
+      const e = rng.pick(list), pos = sample();
+      if (dress(e.id, pos, rng.float(0, TAU), kind, district, kind === 'prop' ? 1 : rng.float(0.9, 1.1))) break;
+    }
+  }
+  const forest = () => { const a = rng.float(0, TAU), r = rng.float(35, 101); return [Math.cos(a) * r, Math.sin(a) * r]; };
+  // Keep tall foreground trees away from the camera-facing open green.
+  const trees = () => { const p = forest(); return p[0] + p[1] > 45 ? [-p[0], -p[1]] : p; };
+  scatter(spec.trees, 'tree', spec.density.trees, trees, 'woodland');
+  scatter(spec.bushes, 'bush', spec.density.bushes, forest, 'woodland');
+  const market = () => [rng.float(17, 48), rng.float(-30, 29)];
+  const residential = () => [rng.float(-70, 20), rng.float(-76, 26)];
+  const farmyard = () => [rng.float(64, 93), rng.float(-44, 33)];
+  scatter(spec.props, 'prop', spec.density.props, () => rng.chance(0.5) ? market() : residential(), 'dressing');
+  scatter({ count: [35, 45], pick: { style: 'farm-dressing' } }, 'prop', spec.density.props, farmyard, 'farm');
+  scatter({ count: [12, 18], pick: { style: 'animal' } }, 'prop', 1, farmyard, 'farm');
+  scatter({ count: [5, 7], pick: { style: 'orchard', category: 'tree' } }, 'tree', 1, () => [rng.float(65, 90), rng.float(-85, -78)], 'farm');
+  // Nature is deliberately sparse: its uncompressed meshes cost far more.
+  for (const id of ['nat-oak', 'nat-oak', 'nat-wildflower', 'nat-wildflower', 'nat-lichen-granite-boulder']) {
+    for (let t = 0; t < spec.retries.placement; t++) if (dress(id, trees(), 0, id === 'nat-oak' ? 'tree' : 'prop', 'woodland')) break;
+  }
+}
+{
+  "name": "Large town",
+  "seed": 1,
+  "area": { "shape": "circle", "radius": 110 },
+  "districts": { "plazaHouses": [4, 4], "plazaLandmarks": [2, 2] },
+  "houses": { "count": [18, 22], "pick": { "category": "house", "style": "cozy-village" }, "ring": [14, 24] },
+  "landmarks": { "count": [7, 7], "pick": { "category": "landmark", "style": "v3-kit" }, "ring": [14, 21] },
+  "trees": { "count": [65, 85], "pick": { "category": "tree", "style": "cozy-village" } },
+  "bushes": { "count": [40, 55], "pick": { "category": "bush", "style": "cozy-village" }, "maxRadius": 100 },
+  "props": { "count": [130, 160], "pick": { "category": "prop", "style": "town-dressing" } },
+  "fences": { "probability": 0.65 },
+  "retries": { "placement": 100, "town": 18 }
+}
+// Source metres. Farm and Nature retain their native door / vegetation scale.
+const mesh = (pack, file, category, styles = []) => ({
+  id: `${pack === 'cozy-village' ? 'cv' : pack === 'nature' ? 'nat' : 'farm'}-${file.replace(/_01$/, '').replaceAll('_', '-').replace(/^bld-/, '').replace(/^veh-/, '').replace(/^terrain-/, '')}`,
+  name: file.replaceAll('_', ' '), tags: { category, style: [pack, ...styles] },
+  source: 'mesh', path: `licensed/${pack}/${file}.glb`, license: 'tja-commercial',
+  scale: pack === 'cozy-village' ? 1.6 : 1, groundY: 100, eaveY: null, door: null,
+});
+function building(pack, file, category, wall, step, eave) {
+  const e = mesh(pack, file, category, [category === 'house' ? 'dwelling' : 'civic']);
+  return { ...e, groundY: 0.4, eaveY: eave, lotMargin: 1,
+    door: { pos: [0, 0.3, wall], facing: [0, 0, 1] },
+    pathSnaps: [{ pos: [0, 0, step + 0.3], dir: [0, 0, 1] }] };
+}
+const cv = (files, category, styles) => files.split(' ').map(f => mesh('cozy-village', `${f}_01`, category, styles));
+const farm = (files, category, styles) => files.split(' ').map(f => mesh('farm', f, category, styles));
+export const ADDITIONS = [
+  building('cozy-village', 'bld_blacksmith_01', 'landmark', 1.798, 1.798, 2.1),
+  // Both awnings are public: choose +Z, with the snap beyond its canopy edge.
+  building('cozy-village', 'bld_market_hall_01', 'landmark', 0.884, 1.74, 2.1),
+  building('cozy-village', 'bld_windmill_01', 'landmark', 1.4, 1.75, 2.4),
+  building('farm', 'farmhouse', 'house', 3.13, 4.4, 3.7),
+  building('farm', 'farmhand_cottage', 'house', 2.29, 2.55, 2.8),
+  building('farm', 'produce_stand', 'landmark', 0.635, 0.635, 1.8),
+  { ...mesh('cozy-village', 'market_stall_01', 'prop', ['stall', 'market']),
+    yawOffset: 3.141592653589793,
+    door: { pos: [0, 0, -0.418], facing: [0, 0, -1] },
+    pathSnaps: [{ pos: [0, 0, -0.72], dir: [0, 0, -1] }] },
+  ...cv('flower_cart veh_hand_cart veh_horse_cart veh_wheelbarrow veh_bicycle', 'prop', ['cart', 'market']),
+  ...cv('bench crate campfire firewood_stack directional_post notice_board laundry_line birdhouse plant_potted window_box hay_bale water_pump water_trough village_entrance_sign flower_bed pumpkin_patch shop_hanging_sign', 'prop', ['dressing']),
+  ...cv('streetlamp', 'prop', ['lamp']),
+  ...cv('tree_fruit tree_pine', 'tree', ['canopy']),
+  ...cv('hedge_straight', 'bush', ['hedge']),
+  ...cv('rail_fence', 'fence', ['rail']),
+  ...cv('road_cobble_corner road_cobble_crossing road_cobble_tee road_dirt_road road_stone_footbridge', 'path', ['road']),
+  ...cv('terrain_garden_plot terrain_tilled_field', 'prop', ['crop']),
+  ...cv('water_pond water_stream', 'prop', ['water']),
+  ...cv('rock_boulder rock_stepping_stones rock_stone_pile', 'prop', ['rock']),
+  // These are agricultural structures, never door-reachable dwellings.
+  ...farm('hay_barn chicken_coop stable greenhouse outhouse windmill_pump root_cellar grain_silo big_red_barn', 'prop', ['farm-structure']),
+  ...farm('wheelbarrow rain_barrel milk_churns produce_crates grain_sacks scarecrow water_trough feed_trough hay_bale_round hay_bale_square haystack weathervane', 'prop', ['farm-dressing']),
+  ...farm('farm_gate', 'gate', ['rail']),
+  ...farm('apple_tree', 'tree', ['orchard']),
+  ...farm('crop_row_field sunflower_row pumpkin_patch orchard_row wheat_cluster corn_stalk_cluster', 'prop', ['crop']),
+  ...farm('rail_fence drystone_wall', 'fence', ['rail']),
+  ...farm('chicken sheep duck goat', 'prop', ['animal']),
+  ...'oak pine_sapling_staked'.split(' ').map(f => mesh('nature', f, 'tree', ['sparse'])),
+  ...'wildflower tall_grass cattails granite_rock_cluster lichen_granite_boulder moss_cushion_rock fallen_log_mossy log_bench lantern mushroom_cluster river_stones creek_stepping_stones'.split(' ').map(f => mesh('nature', f, 'prop', ['sparse', f.includes('rock') || f.includes('stone') || f.includes('boulder') ? 'rock' : 'dressing'])),
+];
+
+const fenceLengths = { 'cv-rail-fence': [-1.269, 1.283], 'farm-rail-fence': [-2.015, 2.015], 'farm-drystone-wall': [-2, 2], 'farm-farm-gate': [-1.31, 1.31] };
+for (const entry of ADDITIONS) {
+  // Functional tags support authoring queries without widening legacy pools.
+  if (entry.tags.style.includes('cozy-village') && entry.tags.style.includes('dressing')) entry.tags.style.push('town-dressing');
+  const functionTag = entry.id.replace(/^(cv|farm|nat)-/, '').replace(/^farm-/, '');
+  entry.tags.style.push(functionTag);
+  if (functionTag.includes('sign') || functionTag.includes('post') || functionTag.includes('notice')) entry.tags.style.push('sign');
+  if (functionTag.includes('flower')) entry.tags.style.push('flower');
+  if (functionTag.includes('lantern')) entry.tags.style.push('lamp');
+  if (functionTag.includes('bench')) entry.tags.style.push('bench');
+  if (functionTag.includes('barrow')) entry.tags.style.push('cart');
+  const ends = fenceLengths[entry.id];
+  if (ends) entry.fenceSnaps = ends.map((x, i) => ({ pos: [x, 0, 0], dir: [i ? 1 : -1, 0, 0] }));
+  if (entry.tags.category === 'path') {
+    entry.tags.style.push(entry.id.includes('bridge') ? 'bridge' : 'tile');
+    entry.pathSnaps = [{ pos: [0, 0, -2], dir: [0, 0, -1] }, { pos: [0, 0, 2], dir: [0, 0, 1] }];
+    if (entry.id.includes('corner')) entry.pathSnaps[0] = { pos: [-2, 0, 0], dir: [-1, 0, 0] };
+    if (entry.id.includes('crossing') || entry.id.includes('tee')) entry.pathSnaps.push({ pos: [-2, 0, 0], dir: [-1, 0, 0] });
+    if (entry.id.includes('crossing')) entry.pathSnaps.push({ pos: [2, 0, 0], dir: [1, 0, 0] });
+    if (entry.id.includes('footbridge')) entry.pathSnaps = [{ pos: [-1.7, 0, 0], dir: [-1, 0, 0] }, { pos: [1.7, 0, 0], dir: [1, 0, 0] }];
+  }
+}
+// Node CLI for the town compiler. Pure JS path (no three.js): bounds.json is
+// read with fs and resolved via the same resolve-all.js the browser uses.
+//   npm run compile -- --seed 7 [--spec specs/hamlet.json] [--out out/]
+//   npm run compile -- --sweep 50     (seeds 1..50: pass rate + top failures)
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { resolveAll } from '../src/catalog/resolve-all.js';
+import { compileTown } from '../src/compiler/compile.js';
+import { validateSpec } from '../src/compiler/spec.js';
+
+function arg(name, def) {
+  const i = process.argv.indexOf(`--${name}`);
+  return i >= 0 ? (process.argv[i + 1] ?? true) : def;
+}
+const root = new URL('../', import.meta.url);
+const read = (p) => JSON.parse(readFileSync(new URL(p, root), 'utf8'));
+
+const bounds = read('src/catalog/bounds.json');
+const catalog = resolveAll(bounds);
+const specPath = arg('spec', arg('size', '') === 'large' ? 'specs/large.json' : 'specs/hamlet.json');
+const spec = validateSpec(read(specPath), catalog);
+// --town-retries N overrides spec.retries.town (0 = show first-attempt failures).
+if (arg('town-retries', null) != null) spec.retries.town = Number(arg('town-retries'));
+const outDir = arg('out', 'out/');
+
+function failing(report) {
+  return report.checks.filter((c) => !c.warn && !c.ok).map((c) => c.name);
+}
+function summarize(town) {
+  const r = town.report;
+  return `seed ${String(town.seed).padStart(6)} attempt ${town.attempt} ${town.ok ? 'OK ' : 'FAIL'} `
+    + `· ${r.stats.houses}h ${r.stats.paths}p ${r.stats.fences}f ${r.stats.trees}t ${r.stats.bushes}b ${r.stats.props}pr`
+    + (town.ok ? '' : ` · fails: ${failing(r).join(',')}`);
+}
+
+const sweep = arg('sweep', null);
+const stats = arg('stats', null); // --stats N: facing / camera / gate stats over seeds 1..N
+mkdirSync(new URL(outDir, root), { recursive: true });
+
+if (stats) {
+  const N = Number(stats);
+  let wc = 0, wp = 0, gates = 0, fenced = 0, dsum = 0, gateOff = 0, openMin = Infinity, openMax = 0, openSum = 0;
+  for (let seed = 1; seed <= N; seed++) {
+    const town = compileTown(spec, catalog, { seed });
+    for (const b of town.instances) {
+      if (!b.facing) continue;
+      wc = Math.max(wc, b.facing.cameraAngle); wp = Math.max(wp, b.facing.plazaAngle);
+    }
+    const g = town.instances.filter((i) => i.kind === 'gate');
+    gates += g.length;
+    // Gate hinge-line centre vs its lot's door-path centreline (perpendicular distance).
+    for (const gi of g) {
+      openMin = Math.min(openMin, gi.open); openMax = Math.max(openMax, gi.open); openSum += gi.open;
+      const p =town.instances.find((i) => i.kind === 'path' && i.lot === gi.lot);
+      if (!p) { gateOff = Infinity; continue; }
+      const d = [Math.sin(p.rotY), Math.cos(p.rotY)];
+      gateOff = Math.max(gateOff, Math.abs((gi.pos[0] - p.pos[0]) * d[1] - (gi.pos[1] - p.pos[1]) * d[0]));
+    }
+    fenced += new Set(town.instances.filter((i) => i.kind === 'fence').map((i) => i.lot)).size;
+    dsum += town.camera.distance;
+    if (N <= 10) {
+      const c = town.camera;
+      console.log(`seed ${seed} ${town.ok ? 'OK' : 'FAIL'} att ${town.attempt} cam D ${c.distance.toFixed(1)} el ${c.elevation} fill ${c.fillX}/${c.fillY} pos ${c.pos.map((v) => v.toFixed(1))} `
+        + `arc ${town.facingArc} want ${town.buildingsWanted} got ${town.instances.filter((i) => i.facing).length} rej ${JSON.stringify(town.placementRejects)} `
+        + `facing ${town.instances.filter((i) => i.facing).map((i) => `${i.facing.cameraAngle.toFixed(0)}/${i.facing.plazaAngle.toFixed(0)}`).join(' ')} gates ${g.length}`);
+    }
+  }
+  console.log(`stats ${N} seeds · worst cameraAngle ${wc.toFixed(1)} · worst plazaAngle ${wp.toFixed(1)} · gates ${gates} / fenced lots ${fenced} (max gate offset from path centreline ${gateOff.toFixed(3)}; open min/mean/max ${gates ? `${openMin}/${(openSum / gates).toFixed(3)}/${openMax}` : '-'}) · mean cam distance ${(dsum / N).toFixed(1)}`);
+} else if (sweep) {
+  const N = Number(sweep);
+  let firstPass = 0, retriedPass = 0;
+  const failCounts = {};
+  const rows = [];
+  for (let seed = 1; seed <= N; seed++) {
+    const town = compileTown(spec, catalog, { seed });
+    if (town.attempt === 0 && town.ok) firstPass++;
+    if (town.ok) retriedPass++;
+    else for (const name of failing(town.report)) failCounts[name] = (failCounts[name] || 0) + 1;
+    rows.push({ seed, ok: town.ok, attempt: town.attempt, fails: town.ok ? [] : failing(town.report), stats: town.report.stats });
+  }
+  const topFails = Object.entries(failCounts).sort((a, b) => b[1] - a[1]);
+  const result = {
+    spec: specPath, seeds: N,
+    firstAttemptPass: firstPass, firstAttemptRate: +(firstPass / N).toFixed(3),
+    afterRetryPass: retriedPass, afterRetryRate: +(retriedPass / N).toFixed(3),
+    topFailingChecks: topFails.map(([name, count]) => ({ name, count })),
+    rows,
+  };
+  writeFileSync(new URL(`${outDir}sweep.json`, root), JSON.stringify(result, null, 1) + '\n');
+  console.log(`sweep ${N} seeds · first-attempt ${firstPass}/${N} (${(100 * firstPass / N).toFixed(0)}%) · after-retry ${retriedPass}/${N} (${(100 * retriedPass / N).toFixed(0)}%)`);
+  console.log('top failing checks:', topFails.length ? topFails.map(([n, c]) => `${n}×${c}`).join(' ') : 'none');
+  console.log(`wrote ${outDir}sweep.json`);
+} else {
+  const seed = Number(arg('seed', spec.seed ?? 1));
+  const town = compileTown(spec, catalog, { seed });
+  const file = `${outDir}town-${seed}.json`;
+  writeFileSync(new URL(file, root), JSON.stringify({ ...town }, null, 1) + '\n');
+  console.log(summarize(town));
+  console.log(`wrote ${file}`);
+}
+// Compare the actual loader/JSON/spec/compiler module graph through Vite with
+// the CLI's fs/plain-Node path. No renderer, port, assets, or API keys needed.
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { createServer as createHttpServer } from 'node:http';
+import { fileURLToPath } from 'node:url';
+import { createServer } from 'vite';
+import { resolveAll } from '../src/catalog/resolve-all.js';
+import { compileTown, buildingSlots } from '../src/compiler/compile.js';
+import { validateSpec } from '../src/compiler/spec.js';
+import { math } from '../src/compiler/math.js';
+
+const root = fileURLToPath(new URL('../', import.meta.url));
+const read = (path) => JSON.parse(readFileSync(new URL(path, new URL('../', import.meta.url)), 'utf8'));
+const catalog = resolveAll(read('src/catalog/bounds.json'));
+const spec = validateSpec(read('specs/hamlet.json'), catalog);
+const json = (value) => JSON.stringify(value);
+// The portable routines must still agree with native geometry to much less
+// than any placement tolerance, including quadrants and axis boundaries.
+for (let i = -1000; i <= 1000; i++) {
+  const angle = i * Math.PI / 500;
+  for (const name of ['sin', 'cos', 'atan']) {
+    assert(Math.abs(math[name](angle) - Math[name](angle)) < 1e-14, `${name} accuracy at ${angle}`);
+  }
+  assert(Math.abs(math.atan2(i, 37) - Math.atan2(i, 37)) < 1e-14, 'atan2 accuracy');
+  assert(Math.abs(math.atan2(i, -37) - Math.atan2(i, -37)) < 1e-14, 'atan2 negative-x accuracy');
+  assert(Math.abs(math.asin(i / 1000) - Math.asin(i / 1000)) < 1e-14, 'asin accuracy');
+  assert(Math.abs(math.tan(i / 1000) - Math.tan(i / 1000)) < 1e-14, 'tan accuracy');
+  assert(Math.abs(math.hypot(i, 37, 9) - Math.hypot(i, 37, 9)) < 1e-12, 'hypot accuracy');
+}
+const largeSpec = validateSpec(read('specs/large.json'), catalog);
+const largeSeeds = [1, 7, 19, 1234];
+const largeExpected = new Map(largeSeeds.map(seed => [seed, json(compileTown(largeSpec, catalog, { seed }))]));
+const inputSnapshot = json([spec, [...catalog]]);
+const seeds = [...Array.from({ length: 30 }, (_, i) => i + 1), 1234];
+const expected = new Map(seeds.map((seed) => [seed, json(compileTown(spec, catalog, { seed }))]));
+
+// Frozen before expanding the catalog: catches default-pool / layout drift.
+assert.equal(createHash('sha256').update(expected.get(1234)).digest('hex'), readFileSync(new URL('fixtures/hamlet-1234.sha256', import.meta.url), 'utf8').trim(), 'original hamlet seed 1234 must stay byte-identical');
+
+// Regression: symmetric slots must keep their left-before-right tie order
+// when translating the arc centre by a single floating-point rounding step.
+const center = Math.atan2(-34, -30);
+const arc = 100 * Math.PI / 180;
+const slotOrder = (c) => buildingSlots(6, arc, arc, c).map((a) => Math.round((a - c) * 1e9));
+assert.deepEqual(slotOrder(center), slotOrder(center * (1 + Number.EPSILON)));
+assert(slotOrder(center)[0] < 0, 'symmetric centre slots prefer the lower angle');
+
+for (const perturb of [false, true]) {
+  let perturbApplied = false;
+  // Vite 5 opens an HMR socket even with hmr:false. Give it an unlistened
+  // HTTP server so middleware/SSR tests also work in restricted environments.
+  const hmrServer = createHttpServer();
+  const server = await createServer({
+    root,
+    server: { middlewareMode: true, hmr: { server: hmrServer }, watch: null },
+    appType: 'custom',
+    plugins: perturb ? [{
+      name: 'parity-engine-rounding',
+      enforce: 'pre',
+      transform(code, id) {
+        if (id === `${root}src/compiler/math.js`) {
+          perturbApplied = true;
+          // Simulate a native libm result differing by ~one ulp. Before the
+          // fix this reproduced BOTH reported Chrome stats exactly (7/1234).
+          return `const Math = Object.create(globalThis.Math);
+            for (const name of ['sin', 'cos', 'tan', 'asin', 'atan', 'atan2', 'hypot']) {
+              Math[name] = (...args) => globalThis.Math[name](...args) * (1 + Number.EPSILON);
+            }
+            ${code}`;
+        }
+      },
+    }] : [],
+  });
+  try {
+    const { RESOLVED } = await server.ssrLoadModule('/src/catalog/loader.js');
+    const { default: hamlet } = await server.ssrLoadModule('/specs/hamlet.json');
+    const viteSpec = await server.ssrLoadModule('/src/compiler/spec.js');
+    const viteCompiler = await server.ssrLoadModule('/src/compiler/compile.js');
+    if (perturb) assert(perturbApplied, 'engine rounding simulation must be applied');
+    const browserSpec = viteSpec.validateSpec(hamlet, RESOLVED);
+    assert.equal(json([...RESOLVED]), json([...catalog]), 'resolved catalog parity');
+    assert.equal(json(browserSpec), json(spec), 'validated spec parity');
+    const snapshot = json([hamlet, browserSpec, [...RESOLVED]]);
+    // Repeat in reverse order with the same objects to catch mutation/caches.
+    for (const seed of [...seeds, ...seeds.toReversed()]) {
+      const actual = json(viteCompiler.compileTown(browserSpec, RESOLVED, { seed }));
+      assert.equal(actual, expected.get(seed), `seed ${seed}: full town JSON (${perturb ? 'perturbed math' : 'Vite SSR'})`);
+      assert.equal(json(compileTown(spec, catalog, { seed })), expected.get(seed), `seed ${seed}: Node repeat`);
+    }
+    const { default: large } = await server.ssrLoadModule('/specs/large.json');
+    const browserLarge = viteSpec.validateSpec(large, RESOLVED);
+    const largeSnapshot = json(browserLarge);
+    for (const seed of [...largeSeeds, ...largeSeeds.toReversed()]) {
+      assert.equal(json(viteCompiler.compileTown(browserLarge, RESOLVED, { seed })), largeExpected.get(seed), `large seed ${seed}: full JSON parity`);
+      assert.equal(json(compileTown(largeSpec, catalog, { seed })), largeExpected.get(seed), `large seed ${seed}: Node repeat`);
+    }
+    assert.equal(json(browserLarge), largeSnapshot, 'large spec must not mutate');
+    console.log(`large parity: ${largeSeeds.length} seeds, full JSON identical (forward + reverse)`);
+    assert.equal(json([hamlet, browserSpec, [...RESOLVED]]), snapshot, 'Vite inputs must not mutate');
+    console.log(`parity ${perturb ? 'Vite SSR + one-ulp math perturbation' : 'Vite SSR'}: ${seeds.length} seeds, full JSON identical (forward + reverse)`);
+  } finally {
+    await server.close();
+  }
+}
+assert.equal(json([spec, [...catalog]]), inputSnapshot, 'Node inputs must not mutate');
+
+exec
+/bin/bash -lc "rg -n 'queryCatalog|props|extendDistricts' src/compiler/compile.js; cat tools/check-batches.mjs; cat src/compiler/spec.js; ls out/baseline; cat specs/hamlet.json; rg -n 'cv-barrel|v3-kit|town-dressing' src/catalog/*js" in /workspace/cel-town
+ succeeded in 0ms:
+16:import { extendDistricts } from './districts.js';
+128:export function queryCatalog(catalog, pick = {}) {
+149:  if (typeof c === 'string') return catalog.has(c) ? c : queryCatalog(catalog, { category: 'well' })[0]?.id;
+150:  return queryCatalog(catalog, c)[0]?.id;
+213:  const landmarkList = queryCatalog(catalog, spec.landmarks.pick);
+214:  const houseList = queryCatalog(catalog, spec.houses.pick);
+337:    extendDistricts({ spec, catalog, rng, instances, buildings, lots, paths, area });
+413:  // --- scatter: trees, bushes, then props ----------------------------------
+451:    const list = queryCatalog(catalog, cfg.pick);
+484:    const list = queryCatalog(catalog, spec.props.pick);
+486:      const [lo, hi] = scaleCount(spec.props.count, spec.density.props);
+import assert from 'node:assert/strict';
+import * as THREE from 'three';
+import { batchInstances } from '../src/compiler/batches.js';
+import { makeTree, makeGate } from '../src/builders.js';
+
+for (const build of [() => makeTree(1.2, 3), () => makeGate({ width: 2.9, open: 0.55 })]) {
+  const template = new THREE.Group();
+  template.name = 'template';
+  template.userData.entry = { bounds: { min: [-2, 0, -2], max: [2, 5, 2] } };
+  const content = build();
+  content.scale.setScalar(1.6);
+  content.rotation.y = Math.PI;
+  content.position.y = -0.2;
+  template.add(content);
+  const instances = [
+    { pos: [9, -4], rotY: 0.8, scale: 1 },
+    { pos: [-12, 7], rotY: -1.4, scale: 0.7 },
+    { pos: [3, 16], rotY: 2.9, scale: 1.15 },
+  ];
+  const originals = new THREE.Group();
+  for (const i of instances) {
+    const copy = template.clone(true);
+    copy.position.set(i.pos[0], 0, i.pos[1]); copy.rotation.y = i.rotY; copy.scale.setScalar(i.scale);
+    originals.add(copy);
+  }
+  const batched = batchInstances(template, instances);
+  const expected = new THREE.Box3().setFromObject(originals);
+  const actual = new THREE.Box3().setFromObject(batched);
+  assert(expected.min.distanceTo(actual.min) < 1e-5 && expected.max.distanceTo(actual.max) < 1e-5, 'batches preserve world extents of nested geometry / ink');
+  const sourceMeshes = [];
+  template.traverse(o => { if (o.isMesh) sourceMeshes.push(o); });
+  const batches = batched.children.filter(o => o.isInstancedMesh);
+  assert.equal(batches.length, sourceMeshes.length, 'one draw per template mesh, independent of copy count');
+  for (const [i, b] of batches.entries()) {
+    assert.equal(b.count, instances.length);
+    assert.equal(b.geometry, sourceMeshes[i].geometry);
+    assert.equal(b.material, sourceMeshes[i].material);
+    assert.equal(b.userData.outline, sourceMeshes[i].userData.outline);
+    assert.equal(b.userData.foliage, sourceMeshes[i].userData.foliage);
+    assert.equal(b.userData.instances, instances);
+  }
+  const pivots = batched.children.filter(o => o.userData.batchPivot);
+  assert.equal(pivots.length, instances.length);
+  assert(pivots.every((p, i) => p.userData.inst === instances[i] && p.userData.entry === template.userData.entry));
+}
+console.log('batches: tree and gate geometry, ink, bounds, shared resources and per-instance metadata pass');
+// Town spec format (compiler v3). A spec is plain JSON (see specs/hamlet.json)
+// describing WHAT a town contains; the seeded compiler decides WHERE. Count
+// ranges are inclusive [min, max] drawn by the seeded RNG. `pick` is a tag
+// filter resolved against the catalog.
+//
+// Spec shape (all keys optional unless noted — DEFAULTS fill the rest):
+//   name    string label.
+//   seed    default seed when none is passed to compileTown.
+//   area    { shape:'circle', radius } | { shape:'rect', w, d }  — town extent,
+//           centred on the origin.
+//   plaza   { center, radius, ring }. center = catalog id (e.g. 'cv-well') or a
+//           tag query { category:'well', ... }; it is placed at the origin.
+//           radius = the plaza disk / keep-clear radius. ring describes the
+//           paved loop every door path must join (see below).
+//   plaza.ring { style:'builder'|'cobble-tiles', width, radius }. A flat paved
+//           loop centred on the well at `radius` (centreline), `width` wide.
+//           'builder' = a single toon ring mesh (b-plaza-ring); 'cobble-tiles'
+//           falls back to the builder ring for now. Every door path ends ON this
+//           ring (overlapping ~0.3), and ring connectivity counts as reaching
+//           the plaza, so no door path dead-ends at open ground.
+//   landmarks { count:[min,max], pick, ring:[r0,r1], placement:'plaza-facing' }.
+//           Civic buildings (category:'landmark'). They are placed BEFORE houses
+//           and take the best plaza-facing slots (centre of the far arc), door
+//           facing the plaza, with a path to the ring. ring = their radius band.
+//   houses  { count:[min,max], pick, prefer, ring:[rMin,rMax], arc }.
+//           pick/prefer are tag filters; ring = radius band around the plaza;
+//           arc = half-angle (radians) of the placement arc on the side AWAY
+//           from the camera (fronts then face the viewer).
+//   houses.facing { maxCameraAngle, maxPlazaAngle, blend, maxPathBend } (v3,
+//           also used by landmarks). Each building's door yaw starts facing the
+//           plaza centre and is blended toward the camera by
+//           blend * (|slot offset| / arc), i.e. more at the arc ends, then
+//           clamped so (horizontal, degrees) the door is <= maxCameraAngle off
+//           the direction to the camera and <= maxPlazaAngle off the direction
+//           to the plaza centre, and its straight door path still lands on the
+//           ring at most maxPathBend degrees off the door direction. Every
+//           house/landmark instance records facing:{cameraAngle, plazaAngle}
+//           (degrees, horizontal, from the building origin) measured against
+//           the town's suggested camera (town.camera.pos) and the origin.
+//   trees   { count:[min,max], pick }        scattered, off lots/paths/plaza.
+//   bushes  { count:[min,max], pick, maxRadius }  maxRadius (trees too) keeps
+//           dressing within that distance of the plaza centre (optional).
+//   props   { count:[min,max], pick, near }  near:'house' lets props sit inside
+//           a lot by the house (never on footprint/path).
+//   paths   { style:'builder', id, width }   one strip per building to the ring.
+//   fences  { id, probability, edges }       per fenced house: ONE continuous
+//           run around back+left+right+front with a GATE GAP on the front edge
+//           centred on the door path. edges is accepted for back-compat but the
+//           v2 fence always runs the full perimeter (minus the gate).
+//   fences.gate { id, open } (v3). One gate per fenced lot, in the front gap:
+//           { id, kind:'gate', pos, rotY, scale:1, lot, edge:'front', width,
+//           open }. pos = hinge-line centre: where the door-path centreline
+//           crosses the front fence line. rotY = the house yaw (gate local X
+//           runs along the front edge, +Z points out of the lot). width = the
+//           gap width. open = 0..1 of a 90 deg inward swing (default 0.55,
+//           ~50 deg; the compiler lowers it per lot so leaves clear the house).
+//           gate:null = no gates AND no fenced lots (a fenced front needs its
+//           gate). A gate id missing from the catalog or not category 'gate'
+//           is an error (validateSpec with a catalog, and compileTown).
+//   density { houses, trees, bushes, props } multipliers (default 1) scaling the
+//           count ranges (rounded, clamped to >= 0). If many houses don't fit,
+//           the compiler auto-grows area.radius / houses.ring over its town
+//           retries before giving up.
+//   camera  { mode:'auto' }                  auto = suggest from final layout.
+//   retries { placement, town }              placement = per-item rejection
+//           retries; town = recompiles with a derived sub-seed on validate fail.
+//
+// districts { plazaHouses, plazaLandmarks } enables the large street layout.
+// houses.count remains the total density-scaled dwelling count; additional
+// residential rows extend the connected network as that count grows.
+// Non-plaza buildings record district + street, checked against their street.
+//
+// pick/prefer tag filter fields: { category, style (string the entry's style[]
+// must contain), source ('mesh'|'builder') }.
+
+export const DEFAULTS = {
+  name: 'Hamlet',
+  seed: 1,
+  area: { shape: 'circle', radius: 34 },
+  plaza: { center: 'cv-well', radius: 6, ring: { style: 'builder', width: 1.8, radius: 6 } },
+  landmarks: { count: [1, 2], pick: { category: 'landmark', style: 'v3-kit' }, ring: [13, 19], placement: 'plaza-facing' },
+  houses: { count: [4, 6], pick: { category: 'house', style: 'v3-kit' }, prefer: { source: 'mesh' }, ring: [13, 22], arc: 1.75,
+    facing: { maxCameraAngle: 45, maxPlazaAngle: 50, blend: 0.8, maxPathBend: 18 } },
+  trees: { count: [10, 16], pick: { category: 'tree', style: 'v3-kit' } },
+  bushes: { count: [6, 12], pick: { category: 'bush', style: 'v3-kit' }, maxRadius: 28 },
+  props: { count: [2, 5], pick: { category: 'prop', style: 'v3-kit' }, near: 'house' },
+  paths: { style: 'builder', id: 'b-path-6', width: 2.3 },
+  fences: { id: 'cv-picket-fence', probability: 0.6, edges: ['back', 'left', 'right', 'front'], gate: { id: 'b-gate', open: 0.55 } },
+  density: { houses: 1, trees: 1, bushes: 1, props: 1 },
+  camera: { mode: 'auto' },
+  retries: { placement: 40, town: 12 },
+};
+
+const isRange = (v) => Array.isArray(v) && v.length === 2 && v[0] <= v[1];
+
+/** Merge a (possibly partial) spec over DEFAULTS. Shallow-per-section. */
+export function applyDefaults(spec = {}) {
+  const out = { ...DEFAULTS, ...spec };
+  for (const k of ['area', 'plaza', 'landmarks', 'houses', 'trees', 'bushes', 'props', 'paths', 'fences', 'density', 'camera', 'retries']) {
+    out[k] = { ...DEFAULTS[k], ...(spec[k] || {}) };
+  }
+  // plaza.ring is nested one level deeper; deep-merge it too.
+  out.plaza.ring = { ...DEFAULTS.plaza.ring, ...((spec.plaza && spec.plaza.ring) || {}) };
+  // v3 nested sections.
+  out.houses.facing = { ...DEFAULTS.houses.facing, ...((spec.houses && spec.houses.facing) || {}) };
+  out.fences.gate = (spec.fences && spec.fences.gate === null) ? null
+    : { ...DEFAULTS.fences.gate, ...((spec.fences && spec.fences.gate) || {}) };
+  return out;
+}
+
+/** Apply a density multiplier to an inclusive [min,max] count range. */
+export function scaleCount([lo, hi], mult = 1) {
+  const m = mult == null ? 1 : mult;
+  const slo = Math.max(0, Math.round(lo * m));
+  const shi = Math.max(slo, Math.round(hi * m));
+  return [slo, shi];
+}
+
+/**
+ * Gate-config problem for a defaulted spec against a resolved catalog Map, or
+ * null if fine. gate:null is allowed (no gates, and then no fenced lots: a
+ * front edge without its gate would break the gate/fence invariants).
+ */
+export function gateSpecError(spec, catalog) {
+  const g = spec.fences.gate;
+  if (g == null) return null;
+  if (typeof g.id !== 'string' || !g.id) return 'fences.gate.id must be a catalog id (or set fences.gate to null)';
+  if (!catalog) return null;
+  const e = catalog.get(g.id);
+  if (!e) return `fences.gate.id '${g.id}' is not in the catalog`;
+  if (e.tags?.category !== 'gate') return `fences.gate.id '${g.id}' is category '${e.tags?.category}', not 'gate'`;
+  return null;
+}
+
+/** Throw on a malformed spec. Returns the defaulted spec on success. Pass the
+ *  resolved catalog to also validate catalog references (fences.gate.id). */
+export function validateSpec(rawSpec, catalog) {
+  const spec = applyDefaults(rawSpec);
+  const err = (m) => { throw new Error(`spec: ${m}`); };
+  const a = spec.area;
+  if (a.shape === 'circle') { if (!(a.radius > 0)) err('circle area needs radius > 0'); }
+  else if (a.shape === 'rect') { if (!(a.w > 0 && a.d > 0)) err('rect area needs w,d > 0'); }
+  else err(`unknown area.shape ${a.shape}`);
+  if (!(spec.plaza.radius > 0)) err('plaza.radius must be > 0');
+  if (!(spec.plaza.ring.radius > 0 && spec.plaza.ring.width > 0)) err('plaza.ring needs radius,width > 0');
+  for (const k of ['houses', 'trees', 'bushes', 'props', 'landmarks']) {
+    if (!isRange(spec[k].count)) err(`${k}.count must be an inclusive [min,max]`);
+  }
+  if (!isRange(spec.houses.ring) || spec.houses.ring[0] <= 0) err('houses.ring must be [rMin,rMax], rMin > 0');
+  if (!isRange(spec.landmarks.ring) || spec.landmarks.ring[0] <= 0) err('landmarks.ring must be [r0,r1], r0 > 0');
+  for (const k of ['houses', 'trees', 'bushes', 'props']) {
+    if (!(spec.density[k] >= 0)) err(`density.${k} must be >= 0`);
+  }
+  if (!(spec.paths.width > 0)) err('paths.width must be > 0');
+  const fc = spec.houses.facing;
+  if (!(fc.maxCameraAngle > 0 && fc.maxCameraAngle <= 180)) err('houses.facing.maxCameraAngle must be in (0,180]');
+  if (!(fc.maxPlazaAngle >= 0 && fc.maxPlazaAngle <= 180)) err('houses.facing.maxPlazaAngle must be in [0,180]');
+  if (spec.fences.gate && !(spec.fences.gate.open >= 0 && spec.fences.gate.open <= 1)) err('fences.gate.open must be in [0,1]');
+  if (spec.districts) {
+    for (const key of ['plazaHouses', 'plazaLandmarks']) {
+      const range = spec.districts[key];
+      if (!isRange(range) || range.some(n => !Number.isInteger(n) || n < 0)) err(`districts.${key} needs a nonnegative integer range`);
+    }
+  }
+  const ge = gateSpecError(spec, catalog);
+  if (ge) err(ge);
+  return spec;
+}
+town-1234.json
+{
+  "name": "Hamlet",
+  "seed": 1,
+  "area": { "shape": "circle", "radius": 34 },
+  "plaza": {
+    "center": "cv-well",
+    "radius": 6,
+    "ring": { "style": "builder", "width": 1.8, "radius": 6 }
+  },
+  "landmarks": { "count": [1, 2], "pick": { "category": "landmark", "style": "v3-kit" }, "ring": [13, 19], "placement": "plaza-facing" },
+  "houses": {
+    "count": [4, 6],
+    "pick": { "category": "house", "style": "v3-kit" },
+    "prefer": { "source": "mesh" },
+    "ring": [13, 22],
+    "arc": 1.75,
+    "facing": { "maxCameraAngle": 45, "maxPlazaAngle": 50, "blend": 0.8, "maxPathBend": 18 }
+  },
+  "trees": { "count": [10, 16], "pick": { "category": "tree", "style": "v3-kit" } },
+  "bushes": { "count": [6, 12], "pick": { "category": "bush", "style": "v3-kit" }, "maxRadius": 28 },
+  "props": { "count": [2, 5], "pick": { "category": "prop", "style": "v3-kit" }, "near": "house" },
+  "paths": { "style": "builder", "id": "b-path-6", "width": 2.3 },
+  "fences": { "id": "cv-picket-fence", "probability": 0.6, "edges": ["back", "left", "right", "front"], "gate": { "id": "b-gate", "open": 0.55 } },
+  "density": { "houses": 1, "trees": 1, "bushes": 1, "props": 1 },
+  "camera": { "mode": "auto" },
+  "retries": { "placement": 40, "town": 12 }
+}
+src/catalog/catalog.js:90:  { id: 'cv-barrel', name: 'Barrel 01', tags: { category: 'prop', style: ['cozy-village'] }, ...cozy('barrel_01.glb'), groundY: 0.3, eaveY: null, door: null },
+src/catalog/catalog.js:136:export const CATALOG = [...LEGACY_CATALOG.map(e => ({ ...e, tags: { ...e.tags, style: [...e.tags.style, 'v3-kit'] } })), ...ADDITIONS];
+src/catalog/additions.js:53:  if (entry.tags.style.includes('cozy-village') && entry.tags.style.includes('dressing')) entry.tags.style.push('town-dressing');
+
+codex
+The lawn scatter comes from one broad Cozy prop pool; the isolated farm fences come from a separate loop that places each segment independently. I’ll remove that loop and split the scatter into market stock near stalls and ground-safe props beside residential lots. Lamps and benches already have street placement, so I’ll keep them there and limit signage to deliberate street locations.
+
+exec
+/bin/bash -lc "sed -n '125,145p' src/compiler/compile.js; sed -n '330,345p' src/compiler/compile.js; rg -n 'obbFromRect|toWorldXZ' src/compiler/geometry.js; sed -n '1,80p' src/compiler/geometry.js; sed -n '410,495p' src/compiler/compile.js; cat tools/check-negatives.mjs" in /workspace/cel-town
+ succeeded in 0ms:
+}
+
+// --- catalog tag queries ---------------------------------------------------
+export function queryCatalog(catalog, pick = {}) {
+  let list = [...catalog.values()];
+  if (pick.category) list = list.filter((e) => e.tags.category === pick.category);
+  if (pick.style) list = list.filter((e) => (e.tags.style || []).includes(pick.style));
+  if (pick.source) list = list.filter((e) => e.source === pick.source);
+  return list;
+}
+
+function pickEntry(rng, list, prefer) {
+  if (!list.length) return null;
+  if (prefer) {
+    const pref = list.filter((e) => (!prefer.source || e.source === prefer.source)
+      && (!prefer.style || (e.tags.style || []).includes(prefer.style)));
+    // Favour preferred entries ~70% of the time when both exist.
+    if (pref.length && (pref.length === list.length || rng.chance(0.7))) return rng.pick(pref);
+  }
+  return rng.pick(list);
+}
+  for (let i = nLand; i < total; i++) {
+    const entry = pickEntry(rng, houseList, spec.houses.prefer);
+    const placed = placeBuilding(entry, slots[i], houseRing);
+    if (placed) addBuilding(placed, 'house');
+  }
+  if (spec.districts) {
+    for (const i of [...instances, ...paths]) i.district = 'plaza';
+    extendDistricts({ spec, catalog, rng, instances, buildings, lots, paths, area });
+  }
+  const houses = buildings.filter((b) => b.kind === 'house');
+  instances.push(...paths);
+
+  // --- fences: ONE continuous run per fenced house around back/left/right +
+  //     a gated front (gap = pathWidth + 0.6 centred on the door path) --------
+  const fenceEntry = catalog.get(spec.fences.id);
+  // Gate ids were validated in compileTown. Without gates there are no fenced
+11:export function toWorldXZ([lx, lz], { x = 0, z = 0, rotY = 0 }) {
+23:export function obbFromRect(rect, place, scale = 1) {
+28:  const [wx, wz] = toWorldXZ([cx, cz], place);
+// 2D geometry on the XZ ground plane for the compiler and checks. Pure JS, no
+// three.js. Points are [x, z]; a "rect" is a local-frame AABB { min:[x,z],
+// max:[x,z] } (as resolved footprint / lot / bounds-XZ); an OBB is that rect
+// rotated+translated by a placement { x, z, rotY }.
+
+import { math as Math } from './math.js';
+
+export const TAU = Math.PI * 2;
+
+/** Local [x,z] -> world [x,z] under a placement. Matches schema.toWorld's XZ. */
+export function toWorldXZ([lx, lz], { x = 0, z = 0, rotY = 0 }) {
+  const c = Math.cos(rotY), s = Math.sin(rotY);
+  return [x + lx * c + lz * s, z - lx * s + lz * c];
+}
+
+/** Rotate a local direction [x,z] by rotY (no translation). */
+export function rotDir([dx, dz], rotY) {
+  const c = Math.cos(rotY), s = Math.sin(rotY);
+  return [dx * c + dz * s, -dx * s + dz * c];
+}
+
+/** OBB from a local rect + placement, with an optional extra uniform scale. */
+export function obbFromRect(rect, place, scale = 1) {
+  const cx = ((rect.min[0] + rect.max[0]) / 2) * scale;
+  const cz = ((rect.min[1] + rect.max[1]) / 2) * scale;
+  const hu = ((rect.max[0] - rect.min[0]) / 2) * scale;
+  const hv = ((rect.max[1] - rect.min[1]) / 2) * scale;
+  const [wx, wz] = toWorldXZ([cx, cz], place);
+  return {
+    c: [wx, wz],
+    u: rotDir([1, 0], place.rotY || 0), // world axis for local X
+    v: rotDir([0, 1], place.rotY || 0), // world axis for local Z
+    hu, hv,
+  };
+}
+
+/** XZ rect from a 3D bounds { min:[x,y,z], max:[x,y,z] }. */
+export const rectXZ = (b) => ({ min: [b.min[0], b.min[2]], max: [b.max[0], b.max[2]] });
+
+export function obbCorners(o) {
+  const out = [];
+  for (const su of [-1, 1]) for (const sv of [-1, 1]) {
+    out.push([
+      o.c[0] + su * o.hu * o.u[0] + sv * o.hv * o.v[0],
+      o.c[1] + su * o.hu * o.u[1] + sv * o.hv * o.v[1],
+    ]);
+  }
+  return out;
+}
+
+function projRadius(o, ax) {
+  return Math.abs(o.u[0] * ax[0] + o.u[1] * ax[1]) * o.hu
+       + Math.abs(o.v[0] * ax[0] + o.v[1] * ax[1]) * o.hv;
+}
+
+/** SAT overlap of two OBBs; `gap` inflates both (require that much clearance). */
+export function obbOverlap(a, b, gap = 0) {
+  for (const ax of [a.u, a.v, b.u, b.v]) {
+    const d = Math.abs((b.c[0] - a.c[0]) * ax[0] + (b.c[1] - a.c[1]) * ax[1]);
+    if (d - projRadius(a, ax) - projRadius(b, ax) - gap >= 0) return false; // separated
+  }
+  return true;
+}
+
+/** Signed separation of two OBBs: >=0 apart (max axis gap), <0 overlapping. */
+export function obbSeparation(a, b) {
+  let maxGap = -Infinity;
+  for (const ax of [a.u, a.v, b.u, b.v]) {
+    const d = Math.abs((b.c[0] - a.c[0]) * ax[0] + (b.c[1] - a.c[1]) * ax[1]);
+    const gap = d - projRadius(a, ax) - projRadius(b, ax);
+    if (gap > maxGap) maxGap = gap;
+  }
+  return maxGap;
+}
+
+/** Distance from a point to an OBB (0 if inside). */
+export function obbPointDistance(o, p) {
+  const dx = p[0] - o.c[0], dz = p[1] - o.c[1];
+  const lu = Math.abs(dx * o.u[0] + dz * o.u[1]) - o.hu;
+  const lv = Math.abs(dx * o.v[0] + dz * o.v[1]) - o.hv;
+    }
+  }
+
+  // --- scatter: trees, bushes, then props ----------------------------------
+  const scattered = []; // {pos, radius}
+  const fpRadius = (entry, scale = 1) => {
+    const f = entry.footprint;
+    return Math.max(f.max[0] - f.min[0], f.max[1] - f.min[1]) / 2 * scale;
+  };
+  const boundsRadius = (entry, scale = 1) => {
+    const b = entry.bounds;
+    let r = 0;
+    for (const x of [b.min[0], b.max[0]]) for (const z of [b.min[2], b.max[2]]) r = Math.max(r, Math.hypot(x, z));
+    return r * scale;
+  };
+  const offPaths = (pos, rad) => paths.every((p) => {
+    const [A, B] = strutEnds(p);
+    return segPointDistance(A, B, pos) > pathWidth / 2 + rad + 0.4;
+  });
+  const insideLot = (pos, grow2 = 0) => lots.some((l) => obbPointDistance(l, pos) <= grow2);
+
+  function sampleArea() {
+    if (area.shape === 'rect') return [rng.float(-area.w / 2, area.w / 2), rng.float(-area.d / 2, area.d / 2)];
+    const r = Math.sqrt(rng.next()) * area.radius;
+    const a = rng.next() * TAU;
+    return [r * Math.cos(a), r * Math.sin(a)];
+  }
+
+  // View corridor: the wedge between the camera and the core — keep tall trees
+  // out of it so they never hide a façade.
+  let vfx = 0, vfz = 0;
+  for (const b of buildings) { const f = rotDir([0, 1], b.rotY); vfx += f[0]; vfz += f[1]; }
+  const viewDir = (vfx || vfz) ? norm([vfx, vfz]) : VIEWER_DIR;
+  const rMax = houseRing[1];
+  const inViewCorridor = (pos) => {
+    const along = pos[0] * viewDir[0] + pos[1] * viewDir[1];
+    const lateral = Math.abs(pos[0] * viewDir[1] - pos[1] * viewDir[0]);
+    return along > 0 && lateral < rMax + 2;
+  };
+
+  function scatter(cfg, kind, mult, { jitter: jit = false } = {}) {
+    const list = queryCatalog(catalog, cfg.pick);
+    if (!list.length) return;
+    const [lo, hi] = scaleCount(cfg.count, mult);
+    const n = rng.int(lo, hi);
+    for (let i = 0; i < n; i++) {
+      for (let t = 0; t < spec.retries.placement; t++) {
+        const entry = rng.pick(list);
+        const scale = jit ? rng.float(0.9, 1.15) : 1;
+        const pos = sampleArea();
+        const rad = fpRadius(entry, scale);
+        if (!pointInArea(area, pos, boundsRadius(entry, scale) + 0.3)) continue;
+        if (Math.hypot(pos[0], pos[1]) < clearR + rad + 0.5) continue; // off plaza + ring
+        if (cfg.maxRadius && Math.hypot(pos[0], pos[1]) > cfg.maxRadius) continue; // keep dressing near the town
+        if (insideLot(pos, rad)) continue;
+        if (kind === 'tree') {
+          if (inViewCorridor(pos)) continue;
+          if (Math.hypot(pos[0], pos[1]) < houseRing[0]) continue; // keep the green open
+          if (!offPaths(pos, rad + 2.0)) continue;
+        }
+        if (!offPaths(pos, rad)) continue;
+        if (scattered.some((s) => Math.hypot(s.pos[0] - pos[0], s.pos[1] - pos[1]) < s.radius + rad + 0.6)) continue;
+        scattered.push({ pos, radius: rad });
+        instances.push({ id: entry.id, kind, pos, rotY: rng.float(0, TAU), scale });
+        break;
+      }
+    }
+  }
+
+  if (!spec.districts) scatter(spec.trees, 'tree', spec.density.trees, { jitter: true });
+  if (!spec.districts) scatter(spec.bushes, 'bush', spec.density.bushes, { jitter: true });
+
+  // Props: near a house (inside/edge of its lot), off footprint and paths.
+  if (houses.length && !spec.districts) {
+    const list = queryCatalog(catalog, spec.props.pick);
+    if (list.length) {
+      const [lo, hi] = scaleCount(spec.props.count, spec.density.props);
+      const n = rng.int(lo, hi);
+      for (let i = 0; i < n; i++) {
+        for (let t = 0; t < spec.retries.placement; t++) {
+          const entry = rng.pick(list);
+          const h = rng.pick(houses);
+          const rad = fpRadius(entry);
+          const lx = rng.sign() * rng.float(1.6, Math.max(1.7, (h.entry.footprint.max[0]) + 1.2));
+          const lz = rng.float(h.entry.footprint.min[1] + 0.3, h.entry.footprint.max[1] - 0.3);
+          const pos = toWorldXZ([lx, lz], { x: h.pos[0], z: h.pos[1], rotY: h.rotY });
+// Negative tests: break a passing town on purpose; each break must be caught.
+// Run: npm run test:checks
+import { readFileSync } from 'node:fs';
+import { resolveAll } from '../src/catalog/resolve-all.js';
+import { compileTown } from '../src/compiler/compile.js';
+import { validate } from '../src/compiler/checks.js';
+import { applyDefaults } from '../src/compiler/spec.js';
+const cat = resolveAll(JSON.parse(readFileSync(new URL('../src/catalog/bounds.json', import.meta.url))));
+const spec = applyDefaults(JSON.parse(readFileSync(new URL('../specs/hamlet.json', import.meta.url))));
+let bad = 0;
+const expect = (label, t, name) => { const r = fail(t); const ok = r.includes(name); if (!ok) bad++; console.log((ok ? 'ok  ' : 'MISS') + ' ' + label + ' -> ' + r); };
+const fail = (t) => validate(t, cat, spec).checks.filter(c => !c.ok).map(c => c.name + (c.warn ? '(w)' : '') + ':' + c.failures.length).join(' ') || 'PASS';
+// Seed 1234 has buildings, dressing, fences and gates under the explicit
+// symmetric-slot ordering. Seed 7 legitimately has no fences after parity fix.
+const original = compileTown(spec, cat, { seed: 1234 });
+if (!original.ok) throw new Error('negative tests require a passing baseline town');
+const gateCount = original.instances.filter(i => i.kind === 'gate').length;
+if (!gateCount) throw new Error('seed 1234 must contain gates for the gate negatives');
+console.log(`seed 1234: ${gateCount} gates`);
+const base = () => structuredClone(original);
+
+let t = base(); const H = t.instances.filter(i => i.kind === 'house'); H[1].pos = [H[0].pos[0] + 1, H[0].pos[1]]; expect('house on house', t, 'footprint-overlap');
+t = base(); const tr = t.instances.find(i => i.kind === 'tree'); const p = t.instances.find(i => i.kind === 'path'); tr.pos = [...p.pos]; expect('tree on path', t, 'trees-off-paths');
+t = base(); t.instances = t.instances.filter((i, k) => !(i.kind === 'path' && k === t.instances.findIndex(j => j.kind === 'path'))); expect('drop a path', t, 'door-reachable');
+t = base(); t.instances.find(i => i.kind === 'tree').pos = [60, 0]; expect('tree outside area', t, 'within-area');
+t = base(); const tr2 = t.instances.find(i => i.kind === 'tree'); tr2.pos = [...t.instances.find(i => i.kind === 'house').pos]; expect('tree in lot', t, 'trees-outside-lots');
+
+// --- v2 breaks -------------------------------------------------------------
+// Path dead-ends off the ring: shove a path's plaza end well past the ring.
+t = base(); const pd = t.instances.find(i => i.kind === 'path'); pd.pos = [pd.pos[0] * 1.8, pd.pos[1] * 1.8]; expect('path dead-ends off ring', t, 'door-reachable');
+// Fence across a door path: drop a fence segment onto a path centre.
+t = base(); const fseg = t.instances.find(i => i.kind === 'fence'); const pp = t.instances.find(i => i.kind === 'path'); fseg.pos = [...pp.pos]; fseg.rotY = pp.rotY + Math.PI / 2; expect('fence across a door path', t, 'fences-not-on-paths');
+// Landmark overlapping a house: move the landmark onto a house.
+t = base(); const lm = t.instances.find(i => i.kind === 'landmark'); const hh = t.instances.find(i => i.kind === 'house'); lm.pos = [...hh.pos]; expect('landmark on a house', t, 'footprint-overlap');
+
+// --- v3 breaks -------------------------------------------------------------
+t = base(); t.instances.splice(t.instances.findIndex(i => i.kind === 'gate'), 1); expect('delete a gate', t, 'gate-at-door');
+t = base(); const shiftedGate = t.instances.find(i => i.kind === 'gate');
+const gateHouse = t.instances.find(i => (i.kind === 'house' || i.kind === 'landmark') && i.lot === shiftedGate.lot);
+shiftedGate.pos[0] += 1.2 * Math.cos(gateHouse.rotY); shiftedGate.pos[1] -= 1.2 * Math.sin(gateHouse.rotY);
+expect('shift gate along fence', t, 'gate-at-door');
+t = base(); t.instances.push({ ...structuredClone(t.instances.find(i => i.kind === 'gate')), lot: 'orphan', pos: [0, 0] }); expect('orphan gate', t, 'gate-at-door');
+t = base(); t.instances.find(i => i.kind === 'house').rotY += Math.PI / 2; expect('house side-on', t, 'house-facing');
+t = base(); t.instances.find(i => i.kind === 'house').rotY += Math.PI; expect('house back to plaza', t, 'house-facing');
+
+const largeSpec = applyDefaults(JSON.parse(readFileSync(new URL('../specs/large.json', import.meta.url))));
+const large = compileTown(largeSpec, cat, { seed: 1234 });
+if (!large.ok) throw new Error('large negatives require a passing baseline');
+if (large.instances.filter(i => i.id.startsWith('nat-')).length > 10) throw new Error('heavy Nature assets must stay sparse');
+if (large.instances.filter(i => i.id === 'cv-market-stall').length < 4) throw new Error('large town needs a market cluster');
+const largeExpect = (label, mutate, name) => {
+  const t = structuredClone(large); mutate(t);
+  const c = validate(t, cat, largeSpec).checks.find(c => c.name === name);
+  const caught = c && !c.ok;
+  if (!caught) bad++;
+  console.log(`${caught ? 'ok  ' : 'MISS'} ${label} -> ${name}`);
+};
+largeExpect('street house faces away', t => { t.instances.find(i => i.kind === 'house' && i.street).rotY += Math.PI; }, 'street-facing');
+largeExpect('street lot invents a street', t => { t.instances.find(i => i.street).street = 'missing'; }, 'street-facing');
+largeExpect('sever farm track', t => { t.instances = t.instances.filter(i => i.streetId !== 'farm-track'); }, 'door-reachable');
+largeExpect('remove market district street', t => { t.instances = t.instances.filter(i => i.streetId !== 'market-street'); }, 'district-streets');
+largeExpect('move street through a lot', t => {
+  const road = t.instances.find(i => i.streetId === 'upper-street');
+  road.pos = [...t.instances.find(i => i.kind === 'house' && i.street === 'upper-street').pos];
+}, 'paths-clear-lots');
+largeExpect('drop civic building', t => { t.instances.splice(t.instances.findIndex(i => i.kind === 'landmark'), 1); }, 'landmark-count-in-range');
+largeExpect('delete street lot gate', t => {
+  const h = t.instances.find(i => i.street && t.instances.some(g => g.kind === 'gate' && g.lot === i.lot));
+  t.instances = t.instances.filter(i => !(i.kind === 'gate' && i.lot === h.lot));
+}, 'gate-at-door');
+largeExpect('farm animal overlaps barn', t => {
+  t.instances.find(i => i.id === 'farm-chicken').pos = [...t.instances.find(i => i.id === 'farm-big-red-barn').pos];
+}, 'footprint-overlap');
+
+if (bad) { console.error(bad + ' break(s) not caught'); process.exit(1); }
+console.log('all breaks caught');
+
+apply patch
+patch: completed
+/workspace/cel-town/src/catalog/additions.js
+/workspace/cel-town/src/compiler/districts.js
+diff --git a/src/catalog/additions.js b/src/catalog/additions.js
+index 127a9e211f0325af34e371b04e34994b552c0d37..13905a8ef85a5658562cadea820a15a65befac75
+--- a/src/catalog/additions.js
++++ b/src/catalog/additions.js
+@@ -48,9 +48,12 @@
+ ];
+ 
+ const fenceLengths = { 'cv-rail-fence': [-1.269, 1.283], 'farm-rail-fence': [-2.015, 2.015], 'farm-drystone-wall': [-2, 2], 'farm-farm-gate': [-1.31, 1.31] };
++// Ground-safe yard details only. Furniture, civic signs and wall attachments
++// need intentional placement; agricultural props belong in the farm district.
++const yardDressing = new Set(['cv-firewood-stack', 'cv-plant-potted', 'cv-flower-bed', 'cv-rock-boulder', 'cv-rock-stone-pile']);
+ for (const entry of ADDITIONS) {
+   // Functional tags support authoring queries without widening legacy pools.
+-  if (entry.tags.style.includes('cozy-village') && entry.tags.style.includes('dressing')) entry.tags.style.push('town-dressing');
++  if (yardDressing.has(entry.id)) entry.tags.style.push('town-dressing');
+   const functionTag = entry.id.replace(/^(cv|farm|nat)-/, '').replace(/^farm-/, '');
+   entry.tags.style.push(functionTag);
+   if (functionTag.includes('sign') || functionTag.includes('post') || functionTag.includes('notice')) entry.tags.style.push('sign');
+diff --git a/src/compiler/districts.js b/src/compiler/districts.js
+index 8dfbdf3bdff998f0256169a71d04424438e03789..83a0557a025f6ef74c1c4cff85dee5114489b22a
+--- a/src/compiler/districts.js
++++ b/src/compiler/districts.js
+@@ -114,23 +114,20 @@
+   }
+   for (const [id, pos] of [
+     ['cv-flower-cart', [24, 24]], ['cv-hand-cart', [35, 24]], ['cv-horse-cart', [46, 24]],
+-    ['cv-notice-board', [10, 12]], ['cv-directional-post', [-5, 12]], ['cv-village-entrance-sign', [-48, 24]],
++    ['cv-notice-board', [26, 15]], ['cv-directional-post', [-4, 15]], ['cv-village-entrance-sign', [-48, 22]],
+     ['farm-big-red-barn', [84, -27]], ['farm-stable', [84, -12]],
+     ['farm-chicken-coop', [68, 25]], ['farm-greenhouse', [78, 22]],
+     ['farm-grain-silo', [91, 7]], ['farm-hay-barn', [86, 20]],
+     ['farm-windmill-pump', [64, -43]], ['farm-root-cellar', [82, -42]],
+     ['farm-scarecrow', [68, -48]], ['farm-water-trough', [72, 15]],
+-    ['nat-log-bench', [-38, 25]], ['nat-granite-rock-cluster', [-45, 29]],
+-    ['nat-fallen-log-mossy', [-38, -81]],
+   ]) dress(id, pos, 0, 'prop', pos[0] > 58 ? 'farm' : 'market');
++  dress('nat-log-bench', [-46, 25], 0, 'prop', 'residential');
++  dress('nat-granite-rock-cluster', [-45, 29], 0, 'prop', 'woodland');
++  dress('nat-fallen-log-mossy', [-38, -81], 0, 'prop', 'woodland');
+   for (let x = 65; x <= 85; x += 6) for (let z = -65; z <= -49; z += 6) {
+     dress(rng.pick(['farm-crop-row-field', 'farm-pumpkin-patch', 'farm-sunflower-row', 'farm-corn-stalk-cluster', 'farm-wheat-cluster']), [x, z], 0, 'prop', 'farm');
+   }
+   for (let x = 65; x <= 85; x += 7) dress('farm-orchard-row', [x, -73], 0, 'prop', 'farm');
+-  for (let z = -10; z <= 32; z += 4.1) {
+-    dress('farm-rail-fence', [94, z], Math.PI / 2, 'prop', 'farm');
+-    dress('farm-drystone-wall', [63, z], Math.PI / 2, 'prop', 'farm');
+-  }
+   for (const p of streets) {
+     const [a, b] = strutEnds(p), length = dist(a, b), d = [(b[0] - a[0]) / length, (b[1] - a[1]) / length];
+     for (let t = 5; t < length - 2; t += 12) {
+@@ -139,8 +136,8 @@
+       dress('cv-bench', [pos[0] + d[0] * 4, pos[1] + d[1] * 4], p.rotY + Math.PI / 2, 'prop', p.district);
+     }
+   }
+-  function scatter(cfg, kind, mult, sample, district) {
+-    const list = queryCatalog(catalog, cfg.pick);
++  function scatter(cfg, kind, mult, sample, district, list = queryCatalog(catalog, cfg.pick)) {
++    if (!list.length) return;
+     const n = rng.int(...scaleCount(cfg.count, mult));
+     for (let i = 0; i < n; i++) for (let t = 0; t < spec.retries.placement; t++) {
+       const e = rng.pick(list), pos = sample();
+@@ -152,10 +149,21 @@
+   const trees = () => { const p = forest(); return p[0] + p[1] > 45 ? [-p[0], -p[1]] : p; };
+   scatter(spec.trees, 'tree', spec.density.trees, trees, 'woodland');
+   scatter(spec.bushes, 'bush', spec.density.bushes, forest, 'woodland');
+-  const market = () => [rng.float(17, 48), rng.float(-30, 29)];
+-  const residential = () => [rng.float(-70, 20), rng.float(-76, 26)];
++  // Stock stays immediately behind the stall row, leaving the approaches open.
++  const market = () => [rng.float(18, 25), rng.float(-27, 14)];
++  const homes = buildings.filter(b => b.kind === 'house' && b.inst.district === 'residential');
++  const residential = () => {
++    const h = rng.pick(homes), r = h.entry.lot || h.entry.footprint;
++    const side = rng.sign();
++    // Side yards just outside the reserved lot; all mesh/road clearance still
++    // goes through dress(). Never fall back to an arbitrary field position.
++    return toWorldXZ([side < 0 ? r.min[0] - rng.float(1.5, 3.5) : r.max[0] + rng.float(1.5, 3.5),
++      rng.float(r.min[1], r.max[1])], { x: h.pos[0], z: h.pos[1], rotY: h.rotY });
++  };
+   const farmyard = () => [rng.float(64, 93), rng.float(-44, 33)];
+-  scatter(spec.props, 'prop', spec.density.props, () => rng.chance(0.5) ? market() : residential(), 'dressing');
++  const stock = ['cv-crate', 'cv-barrel', 'cv-hand-cart', 'cv-wheelbarrow'].map(id => catalog.get(id));
++  scatter({ count: spec.props.count.map(n => Math.round(n * 0.3)) }, 'prop', spec.density.props, market, 'market', stock);
++  if (homes.length) scatter({ ...spec.props, count: spec.props.count.map(n => Math.round(n * 0.7)) }, 'prop', spec.density.props, residential, 'residential');
+   scatter({ count: [35, 45], pick: { style: 'farm-dressing' } }, 'prop', spec.density.props, farmyard, 'farm');
+   scatter({ count: [12, 18], pick: { style: 'animal' } }, 'prop', 1, farmyard, 'farm');
+   scatter({ count: [5, 7], pick: { style: 'orchard', category: 'tree' } }, 'tree', 1, () => [rng.float(65, 90), rng.float(-85, -78)], 'farm');
+
+exec
+/bin/bash -lc 'npm run compile -- --size large --seed 1234 --out out/large/' in /workspace/cel-town
+ succeeded in 615ms:
+
+> cel-town@0.1.0 compile
+> node tools/compile.mjs --size large --seed 1234 --out out/large/
+
+seed   1234 attempt 0 OK  · 20h 34p 125f 89t 47b 322pr
+wrote out/large/town-1234.json
+
+apply patch
+patch: completed
+/workspace/cel-town/src/compiler/districts.js
+/workspace/cel-town/tools/check-negatives.mjs
+diff --git a/src/catalog/additions.js b/src/catalog/additions.js
+index 127a9e211f0325af34e371b04e34994b552c0d37..13905a8ef85a5658562cadea820a15a65befac75
+--- a/src/catalog/additions.js
++++ b/src/catalog/additions.js
+@@ -48,9 +48,12 @@
+ ];
+ 
+ const fenceLengths = { 'cv-rail-fence': [-1.269, 1.283], 'farm-rail-fence': [-2.015, 2.015], 'farm-drystone-wall': [-2, 2], 'farm-farm-gate': [-1.31, 1.31] };
++// Ground-safe yard details only. Furniture, civic signs and wall attachments
++// need intentional placement; agricultural props belong in the farm district.
++const yardDressing = new Set(['cv-firewood-stack', 'cv-plant-potted', 'cv-flower-bed', 'cv-rock-boulder', 'cv-rock-stone-pile']);
+ for (const entry of ADDITIONS) {
+   // Functional tags support authoring queries without widening legacy pools.
+-  if (entry.tags.style.includes('cozy-village') && entry.tags.style.includes('dressing')) entry.tags.style.push('town-dressing');
++  if (yardDressing.has(entry.id)) entry.tags.style.push('town-dressing');
+   const functionTag = entry.id.replace(/^(cv|farm|nat)-/, '').replace(/^farm-/, '');
+   entry.tags.style.push(functionTag);
+   if (functionTag.includes('sign') || functionTag.includes('post') || functionTag.includes('notice')) entry.tags.style.push('sign');
+diff --git a/src/compiler/districts.js b/src/compiler/districts.js
+index 8dfbdf3bdff998f0256169a71d04424438e03789..94991a8241fefc47edae5dcf36d138ad103ae1bb
+--- a/src/compiler/districts.js
++++ b/src/compiler/districts.js
+@@ -114,23 +114,22 @@
+   }
+   for (const [id, pos] of [
+     ['cv-flower-cart', [24, 24]], ['cv-hand-cart', [35, 24]], ['cv-horse-cart', [46, 24]],
+-    ['cv-notice-board', [10, 12]], ['cv-directional-post', [-5, 12]], ['cv-village-entrance-sign', [-48, 24]],
+     ['farm-big-red-barn', [84, -27]], ['farm-stable', [84, -12]],
+     ['farm-chicken-coop', [68, 25]], ['farm-greenhouse', [78, 22]],
+     ['farm-grain-silo', [91, 7]], ['farm-hay-barn', [86, 20]],
+     ['farm-windmill-pump', [64, -43]], ['farm-root-cellar', [82, -42]],
+     ['farm-scarecrow', [68, -48]], ['farm-water-trough', [72, 15]],
+-    ['nat-log-bench', [-38, 25]], ['nat-granite-rock-cluster', [-45, 29]],
+-    ['nat-fallen-log-mossy', [-38, -81]],
+   ]) dress(id, pos, 0, 'prop', pos[0] > 58 ? 'farm' : 'market');
++  dress('cv-notice-board', [26, 15], 0, 'prop', 'market');
++  dress('cv-directional-post', [-4, 15], 0, 'prop', 'plaza');
++  dress('cv-village-entrance-sign', [-48, 22], 0, 'prop', 'residential');
++  dress('nat-log-bench', [-46, 12], Math.PI / 2, 'prop', 'residential');
++  dress('nat-granite-rock-cluster', [-45, 29], 0, 'prop', 'woodland');
++  dress('nat-fallen-log-mossy', [-38, -81], 0, 'prop', 'woodland');
+   for (let x = 65; x <= 85; x += 6) for (let z = -65; z <= -49; z += 6) {
+     dress(rng.pick(['farm-crop-row-field', 'farm-pumpkin-patch', 'farm-sunflower-row', 'farm-corn-stalk-cluster', 'farm-wheat-cluster']), [x, z], 0, 'prop', 'farm');
+   }
+   for (let x = 65; x <= 85; x += 7) dress('farm-orchard-row', [x, -73], 0, 'prop', 'farm');
+-  for (let z = -10; z <= 32; z += 4.1) {
+-    dress('farm-rail-fence', [94, z], Math.PI / 2, 'prop', 'farm');
+-    dress('farm-drystone-wall', [63, z], Math.PI / 2, 'prop', 'farm');
+-  }
+   for (const p of streets) {
+     const [a, b] = strutEnds(p), length = dist(a, b), d = [(b[0] - a[0]) / length, (b[1] - a[1]) / length];
+     for (let t = 5; t < length - 2; t += 12) {
+@@ -139,8 +138,8 @@
+       dress('cv-bench', [pos[0] + d[0] * 4, pos[1] + d[1] * 4], p.rotY + Math.PI / 2, 'prop', p.district);
+     }
+   }
+-  function scatter(cfg, kind, mult, sample, district) {
+-    const list = queryCatalog(catalog, cfg.pick);
++  function scatter(cfg, kind, mult, sample, district, list = queryCatalog(catalog, cfg.pick)) {
++    if (!list.length) return;
+     const n = rng.int(...scaleCount(cfg.count, mult));
+     for (let i = 0; i < n; i++) for (let t = 0; t < spec.retries.placement; t++) {
+       const e = rng.pick(list), pos = sample();
+@@ -152,10 +151,21 @@
+   const trees = () => { const p = forest(); return p[0] + p[1] > 45 ? [-p[0], -p[1]] : p; };
+   scatter(spec.trees, 'tree', spec.density.trees, trees, 'woodland');
+   scatter(spec.bushes, 'bush', spec.density.bushes, forest, 'woodland');
+-  const market = () => [rng.float(17, 48), rng.float(-30, 29)];
+-  const residential = () => [rng.float(-70, 20), rng.float(-76, 26)];
++  // Stock stays immediately behind the stall row, leaving the approaches open.
++  const market = () => [rng.float(18, 25), rng.float(-27, 14)];
++  const homes = buildings.filter(b => b.kind === 'house' && b.inst.district === 'residential');
++  const residential = () => {
++    const h = rng.pick(homes), r = h.entry.lot || h.entry.footprint;
++    const side = rng.sign();
++    // Side yards just outside the reserved lot; all mesh/road clearance still
++    // goes through dress(). Never fall back to an arbitrary field position.
++    return toWorldXZ([side < 0 ? r.min[0] - rng.float(1.5, 3.5) : r.max[0] + rng.float(1.5, 3.5),
++      rng.float(r.min[1], r.max[1])], { x: h.pos[0], z: h.pos[1], rotY: h.rotY });
++  };
+   const farmyard = () => [rng.float(64, 93), rng.float(-44, 33)];
+-  scatter(spec.props, 'prop', spec.density.props, () => rng.chance(0.5) ? market() : residential(), 'dressing');
++  const stock = ['cv-crate', 'cv-barrel', 'cv-hand-cart', 'cv-wheelbarrow'].map(id => catalog.get(id));
++  scatter({ count: spec.props.count.map(n => Math.round(n * 0.3)) }, 'prop', spec.density.props, market, 'market', stock);
++  if (homes.length) scatter({ ...spec.props, count: spec.props.count.map(n => Math.round(n * 0.7)) }, 'prop', spec.density.props, residential, 'residential');
+   scatter({ count: [35, 45], pick: { style: 'farm-dressing' } }, 'prop', spec.density.props, farmyard, 'farm');
+   scatter({ count: [12, 18], pick: { style: 'animal' } }, 'prop', 1, farmyard, 'farm');
+   scatter({ count: [5, 7], pick: { style: 'orchard', category: 'tree' } }, 'tree', 1, () => [rng.float(65, 90), rng.float(-85, -78)], 'farm');
+diff --git a/tools/check-negatives.mjs b/tools/check-negatives.mjs
+index 4efc26c00a08e27a7ec34a6209833bf83de90ad1..92ec5737fc722828d20cf6529eda8cef1e9d9397
+--- a/tools/check-negatives.mjs
++++ b/tools/check-negatives.mjs
+@@ -5,6 +5,7 @@
+ import { compileTown } from '../src/compiler/compile.js';
+ import { validate } from '../src/compiler/checks.js';
+ import { applyDefaults } from '../src/compiler/spec.js';
++import { strutEnds, segPointDistance } from '../src/compiler/geometry.js';
+ const cat = resolveAll(JSON.parse(readFileSync(new URL('../src/catalog/bounds.json', import.meta.url))));
+ const spec = applyDefaults(JSON.parse(readFileSync(new URL('../specs/hamlet.json', import.meta.url))));
+ let bad = 0;
+@@ -48,6 +49,16 @@
+ if (!large.ok) throw new Error('large negatives require a passing baseline');
+ if (large.instances.filter(i => i.id.startsWith('nat-')).length > 10) throw new Error('heavy Nature assets must stay sparse');
+ if (large.instances.filter(i => i.id === 'cv-market-stall').length < 4) throw new Error('large town needs a market cluster');
++// Visual dressing regressions: attachments and fence modules cannot become
++// lawn ornaments, and civic furniture must remain beside connected streets.
++const omitted = new Set(['cv-window-box', 'cv-shop-hanging-sign', 'cv-birdhouse', 'cv-laundry-line', 'farm-rail-fence', 'farm-drystone-wall']);
++if (large.instances.some(i => omitted.has(i.id) || i.district === 'dressing')) throw new Error('large town has unscoped ground dressing');
++const streetFurniture = new Set(['cv-bench', 'nat-log-bench', 'cv-streetlamp', 'cv-notice-board', 'cv-directional-post', 'cv-village-entrance-sign']);
++const streets = large.instances.filter(i => i.streetId);
++for (const i of large.instances.filter(i => streetFurniture.has(i.id))) {
++  if (!streets.some(p => segPointDistance(...strutEnds(p), i.pos) <= p.params.width / 2 + 4)) throw new Error(`${i.id} must stay beside a street`);
++}
++console.log('large dressing: no wall attachments, orphan fence props or unscoped scatter; furniture beside streets');
+ const largeExpect = (label, mutate, name) => {
+   const t = structuredClone(large); mutate(t);
+   const c = validate(t, cat, largeSpec).checks.find(c => c.name === name);
+
+exec
+/bin/bash -lc 'npm run compile -- --size large --seed 1234 --out out/large/' in /workspace/cel-town
+ succeeded in 539ms:
+
+> cel-town@0.1.0 compile
+> node tools/compile.mjs --size large --seed 1234 --out out/large/
+
+seed   1234 attempt 0 OK  · 20h 34p 123f 89t 40b 320pr
+wrote out/large/town-1234.json
+
+exec
+/bin/bash -lc 'npm run compile -- --seed 1234 --out out/hamlet-visual/ && cmp out/baseline/town-1234.json out/hamlet-visual/town-1234.json' in /workspace/cel-town
+ succeeded in 76ms:
+
+> cel-town@0.1.0 compile
+> node tools/compile.mjs --seed 1234 --out out/hamlet-visual/
+
+seed   1234 attempt 0 OK  · 5h 6p 41f 15t 7b 3pr
+wrote out/hamlet-visual/town-1234.json
+
+exec
+/bin/bash -lc 'npm run test:parity > out/parity.log 2>&1' in /workspace/cel-town
+exec
+/bin/bash -lc 'npm run test:checks > out/checks.log 2>&1' in /workspace/cel-town
+exec
+/bin/bash -lc 'npm run compile -- --size large --sweep 50 --out out/large/ > out/large/sweep.log 2>&1' in /workspace/cel-town
+ succeeded in 826ms:
+exec
+/bin/bash -lc "tail -8 out/checks.log; node --input-type=module <<'JS'
+import fs from 'node:fs';
+const t=JSON.parse(fs.readFileSync('out/large/town-1234.json'));
+const by=fn=>Object.fromEntries([...new Set(t.instances.map(fn))].sort().map(k=>[k,t.instances.filter(i=>fn(i)===k).length]));
+console.log(JSON.stringify({attempt:t.attempt,ok:t.ok,stats:t.report.stats,kinds:by(i=>i.kind),districts:by(i=>i.district),props:by(i=>i.kind==='prop'?i.id:'(other)'),warnings:t.report.checks.filter(c=>c.warn&&"'!c.ok)},null,2));
+JS' in /workspace/cel-town
+ succeeded in 0ms:
+ok   sever farm track -> door-reachable
+ok   remove market district street -> district-streets
+ok   move street through a lot -> paths-clear-lots
+ok   drop civic building -> landmark-count-in-range
+ok   delete street lot gate -> gate-at-door
+ok   farm animal overlaps barn -> footprint-overlap
+all breaks caught
+batches: tree and gate geometry, ink, bounds, shared resources and per-instance metadata pass
+{
+  "attempt": 0,
+  "ok": true,
+  "stats": {
+    "houses": 20,
+    "landmarks": 7,
+    "paths": 34,
+    "fences": 123,
+    "trees": 89,
+    "bushes": 40,
+    "props": 320,
+    "instances": 648
+  },
+  "kinds": {
+    "bush": 40,
+    "fence": 123,
+    "gate": 12,
+    "house": 20,
+    "landmark": 7,
+    "path": 34,
+    "plaza": 1,
+    "prop": 320,
+    "ring": 1,
+    "tree": 89,
+    "well": 1
+  },
+  "districts": {
+    "civic": 4,
+    "farm": 101,
+    "market": 81,
+    "plaza": 17,
+    "residential": 179,
+    "woodland": 131,
+    "undefined": 135
+  },
+  "props": {
+    "(other)": 328,
+    "cv-barrel": 20,
+    "cv-bench": 34,
+    "cv-crate": 24,
+    "cv-directional-post": 1,
+    "cv-firewood-stack": 5,
+    "cv-flower-bed": 16,
+    "cv-flower-cart": 1,
+    "cv-hand-cart": 4,
+    "cv-horse-cart": 1,
+    "cv-market-stall": 7,
+    "cv-notice-board": 1,
+    "cv-plant-potted": 68,
+    "cv-rock-boulder": 3,
+    "cv-rock-stone-pile": 6,
+    "cv-streetlamp": 35,
+    "cv-village-entrance-sign": 1,
+    "cv-wheelbarrow": 6,
+    "farm-big-red-barn": 1,
+    "farm-chicken": 6,
+    "farm-chicken-coop": 1,
+    "farm-corn-stalk-cluster": 3,
+    "farm-crop-row-field": 2,
+    "farm-duck": 5,
+    "farm-feed-trough": 1,
+    "farm-goat": 2,
+    "farm-grain-sacks": 1,
+    "farm-grain-silo": 1,
+    "farm-greenhouse": 1,
+    "farm-hay-bale-round": 3,
+    "farm-hay-bale-square": 1,
+    "farm-hay-barn": 1,
+    "farm-haystack": 2,
+    "farm-milk-churns": 8,
+    "farm-orchard-row": 2,
+    "farm-produce-crates": 2,
+    "farm-pumpkin-patch": 2,
+    "farm-rain-barrel": 2,
+    "farm-root-cellar": 1,
+    "farm-scarecrow": 5,
+    "farm-sheep": 3,
+    "farm-stable": 1,
+    "farm-sunflower-row": 1,
+    "farm-water-trough": 7,
+    "farm-weathervane": 6,
+    "farm-wheat-cluster": 4,
+    "farm-wheelbarrow": 5,
+    "farm-windmill-pump": 1,
+    "nat-fallen-log-mossy": 1,
+    "nat-granite-rock-cluster": 1,
+    "nat-lichen-granite-boulder": 1,
+    "nat-log-bench": 1,
+    "nat-wildflower": 2
+  },
+  "warnings": []
+}
+
+ succeeded in 25599ms:
+ succeeded in 27719ms:
+codex
+Large seed 1234 now passes on attempt 0, with zero wall attachments, scattered fence modules, laundry lines, or unscoped `dressing` instances. It retains 320 props, including seven stalls, market stock, farm details, and street-side furniture. Hamlet seed 1234 passed the byte-for-byte `cmp`, and `test:checks` is green. Parity and the 50-seed sweep are still running.
+
+exec
+/bin/bash -lc 'npm run build > out/build.log 2>&1' in /workspace/cel-town
+exec
+/bin/bash -lc 'tail -8 out/parity.log; tail -5 out/large/sweep.log; cat .gitignore; ls -l out/large/sweep.json' in /workspace/cel-town
+ succeeded in 0ms:
+
+> cel-town@0.1.0 test:parity
+> node tools/parity.mjs
+
+large parity: 4 seeds, full JSON identical (forward + reverse)
+parity Vite SSR: 31 seeds, full JSON identical (forward + reverse)
+large parity: 4 seeds, full JSON identical (forward + reverse)
+parity Vite SSR + one-ulp math perturbation: 31 seeds, full JSON identical (forward + reverse)
+> node tools/compile.mjs --size large --sweep 50 --out out/large/
+
+sweep 50 seeds · first-attempt 41/50 (82%) · after-retry 50/50 (100%)
+top failing checks: none
+wrote out/large/sweep.json
+node_modules/
+dist/
+# Compiler output (town JSON + sweep reports) — regenerated on demand.
+out/
+# Licensed assets (ThreeJS Assets commercial license) — never commit or publish.
+public/licensed/
+*.glb
+.licensed-cache/
+# Build output can contain copied licensed files
+shots/*.tmp
+-rw-r--r-- 1 box box 12117 Nov 12 08:09 out/large/sweep.json
+
+ succeeded in 2008ms:
+exec
+/bin/bash -lc "node --input-type=module <<'JS'
+import fs from 'node:fs';
+const t=JSON.parse(fs.readFileSync('out/large/town-1234.json'));
+const s=JSON.parse(fs.readFileSync('out/large/sweep.json'));
+console.log('max retry',Math.max(...s.rows.map(r=>r.attempt)));
+console.log('prop districts',Object.fromEntries(['market','residential','farm','plaza','woodland'].map(d=>[d,t.instances.filter(i=>i.kind==='prop'&&i.district===d).length])));
+JS" in /workspace/cel-town
+ succeeded in 0ms:
+max retry 2
+prop districts { market: 74, residential: 147, farm: 91, plaza: 3, woodland: 5 }
+
+apply patch
+patch: completed
+/workspace/cel-town/out/codex-large.md
+diff --git a/out/codex-large.md b/out/codex-large.md
+index 234367f81bf409d9412f41037584b66a2f8a72f8..40aa858792577d5207dc46d2f302e18dbd65e89e
+--- a/out/codex-large.md
++++ b/out/codex-large.md
+@@ -12,13 +12,23 @@
+ | houses | 5 | 20 |
+ | landmarks | 1 | 7 |
+ | paths | 6 | 34 |
+-| fences | 41 | 109 |
+-| trees | 15 | 91 |
+-| bushes | 7 | 44 |
+-| props | 3 | 337 |
+-| instances | 85 | 656 |
++| fences | 41 | 123 |
++| trees | 15 | 89 |
++| bushes | 7 | 40 |
++| props | 3 | 320 |
++| instances | 85 | 648 |
++
++Large has 4.5× as many building lots, including two farm dwellings. Farm outbuildings, market stalls, crops and animals are counted as props, not dwelling lots. Default seed 1234 and large both pass on attempt 0. Neither has framing warnings. Large ground radius is 125 for area radius 110; hills expand with it.
++
++## Large dressing visual fix
++
++Removed wall attachments from the generic ground pool: `cv-window-box`, `cv-shop-hanging-sign`, and `cv-birdhouse` are omitted. Removed the independent farm fence-segment placement loop; farm rail fences and drystone walls are omitted rather than leaving disconnected fragments. Existing continuous, gated dwelling fences retain all hard checks.
++
++The large preset's `town-dressing` query now contains only firewood stacks, potted plants, flower beds, boulders and stone piles. Its original 130–160 target is split 30% into market stock (crates, barrels, hand carts and wheelbarrows immediately behind the stalls) and 70% into side-yard details sampled beside actual residential lots. Placement still rejects full mesh bounds against lots, streets and other dressing; failed placements never fall back to open fields. Lamps and benches use the existing street placement, with the Nature log bench moved beside west lane. Notice board, directional post and entrance sign each have one deliberate street-side location. Laundry lines are omitted. Farm dressing stays in the farm district and Nature remains sparse in woodland. No unscoped `dressing` field scatter remains.
++
++Seed 1234 now has zero window boxes, hanging signs, birdhouses, laundry lines, farm rail-fence props, drystone-wall props and `district: dressing` instances. It retains 7 market stalls, 24 crates, 20 barrels, 35 streetlamps, 34 Cozy benches and 1 Nature log bench. Civic signs are limited to 1 notice board, 1 directional post and 1 entrance sign. Changes to subsequent seeded draws and passing on attempt 0 account for other count differences above; hamlet uses its unchanged legacy pools and random stream.
+ 
+-Large has 4.5× as many building lots, including two farm dwellings. Farm outbuildings, market stalls, crops and animals are counted as props, not dwelling lots. Default seed 1234 passes on attempt 0; large passes on attempt 1. Neither has framing warnings. Large ground radius is 125 for area radius 110; hills expand with it.
++Recompiled with `npm run compile -- --size large --seed 1234 --out out/large/`. The fresh default compilation in `out/hamlet-visual/town-1234.json` passes `cmp` against `out/baseline/town-1234.json`. No screenshots were taken during this fix pass.
+ 
+ ## Layout and rendering
+ 
+@@ -30,11 +40,11 @@
+ 
+ ## Verification
+ 
+-- `npm run test:checks`: all 13 original breaks and 8 large-town breaks caught, plus batch geometry/ink/bounds/shared-resource/metadata checks.
++- `npm run test:checks`: all 13 original breaks and 8 large-town breaks caught, plus batch geometry/ink/bounds/shared-resource/metadata checks. Added seed-1234 dressing regressions for omitted attachments/fence modules, no unscoped scatter, and furniture/signage beside streets. No hard checks were weakened.
+ - `npm run test:parity`: 31 hamlet seeds and 4 large seeds, forward/reverse, through Vite SSR and simulated one-ulp engine rounding; full town JSON identical. Frozen original-hamlet checksum also passes.
+-- `npm run compile -- --spec specs/large.json --sweep 50 --out out/large/`: 42/50 first attempt (84%), 50/50 after retries (100%). No remaining failing hard checks. Maximum retry index 4. Full seed rows: `out/large/sweep.json`.
++- `npm run compile -- --size large --sweep 50 --out out/large/`: 41/50 first attempt (82%), 50/50 after retries (100%). No remaining failing hard checks. Full seed rows: `out/large/sweep.json`; command log: `out/large/sweep.log`.
+ - `npm run build`: passes; existing large-bundle warning remains. No public assets are copied into dist. Private Vite preview serves them directly from public.
+-- Five local seed-1234 compilations averaged ~26 ms for hamlet and ~529 ms for large, excluding GLB loading/rendering. Samples: `out/compile-timings.json`. Logs: `out/checks.log`, `out/parity.log`, `out/build.log`.
++- Earlier pre-fix timings are retained in `out/compile-timings.json`; they were not remeasured in this visual fix pass. Fresh verification logs: `out/checks.log`, `out/parity.log`, `out/build.log`.
+ 
+ ## Known limits
+ 
+diff --git a/src/catalog/additions.js b/src/catalog/additions.js
+index 127a9e211f0325af34e371b04e34994b552c0d37..13905a8ef85a5658562cadea820a15a65befac75
+--- a/src/catalog/additions.js
++++ b/src/catalog/additions.js
+@@ -48,9 +48,12 @@
+ ];
+ 
+ const fenceLengths = { 'cv-rail-fence': [-1.269, 1.283], 'farm-rail-fence': [-2.015, 2.015], 'farm-drystone-wall': [-2, 2], 'farm-farm-gate': [-1.31, 1.31] };
++// Ground-safe yard details only. Furniture, civic signs and wall attachments
++// need intentional placement; agricultural props belong in the farm district.
++const yardDressing = new Set(['cv-firewood-stack', 'cv-plant-potted', 'cv-flower-bed', 'cv-rock-boulder', 'cv-rock-stone-pile']);
+ for (const entry of ADDITIONS) {
+   // Functional tags support authoring queries without widening legacy pools.
+-  if (entry.tags.style.includes('cozy-village') && entry.tags.style.includes('dressing')) entry.tags.style.push('town-dressing');
++  if (yardDressing.has(entry.id)) entry.tags.style.push('town-dressing');
+   const functionTag = entry.id.replace(/^(cv|farm|nat)-/, '').replace(/^farm-/, '');
+   entry.tags.style.push(functionTag);
+   if (functionTag.includes('sign') || functionTag.includes('post') || functionTag.includes('notice')) entry.tags.style.push('sign');
+diff --git a/src/compiler/districts.js b/src/compiler/districts.js
+index 8dfbdf3bdff998f0256169a71d04424438e03789..94991a8241fefc47edae5dcf36d138ad103ae1bb
+--- a/src/compiler/districts.js
++++ b/src/compiler/districts.js
+@@ -114,23 +114,22 @@
+   }
+   for (const [id, pos] of [
+     ['cv-flower-cart', [24, 24]], ['cv-hand-cart', [35, 24]], ['cv-horse-cart', [46, 24]],
+-    ['cv-notice-board', [10, 12]], ['cv-directional-post', [-5, 12]], ['cv-village-entrance-sign', [-48, 24]],
+     ['farm-big-red-barn', [84, -27]], ['farm-stable', [84, -12]],
+     ['farm-chicken-coop', [68, 25]], ['farm-greenhouse', [78, 22]],
+     ['farm-grain-silo', [91, 7]], ['farm-hay-barn', [86, 20]],
+     ['farm-windmill-pump', [64, -43]], ['farm-root-cellar', [82, -42]],
+     ['farm-scarecrow', [68, -48]], ['farm-water-trough', [72, 15]],
+-    ['nat-log-bench', [-38, 25]], ['nat-granite-rock-cluster', [-45, 29]],
+-    ['nat-fallen-log-mossy', [-38, -81]],
+   ]) dress(id, pos, 0, 'prop', pos[0] > 58 ? 'farm' : 'market');
++  dress('cv-notice-board', [26, 15], 0, 'prop', 'market');
++  dress('cv-directional-post', [-4, 15], 0, 'prop', 'plaza');
++  dress('cv-village-entrance-sign', [-48, 22], 0, 'prop', 'residential');
++  dress('nat-log-bench', [-46, 12], Math.PI / 2, 'prop', 'residential');
++  dress('nat-granite-rock-cluster', [-45, 29], 0, 'prop', 'woodland');
++  dress('nat-fallen-log-mossy', [-38, -81], 0, 'prop', 'woodland');
+   for (let x = 65; x <= 85; x += 6) for (let z = -65; z <= -49; z += 6) {
+     dress(rng.pick(['farm-crop-row-field', 'farm-pumpkin-patch', 'farm-sunflower-row', 'farm-corn-stalk-cluster', 'farm-wheat-cluster']), [x, z], 0, 'prop', 'farm');
+   }
+   for (let x = 65; x <= 85; x += 7) dress('farm-orchard-row', [x, -73], 0, 'prop', 'farm');
+-  for (let z = -10; z <= 32; z += 4.1) {
+-    dress('farm-rail-fence', [94, z], Math.PI / 2, 'prop', 'farm');
+-    dress('farm-drystone-wall', [63, z], Math.PI / 2, 'prop', 'farm');
+-  }
+   for (const p of streets) {
+     const [a, b] = strutEnds(p), length = dist(a, b), d = [(b[0] - a[0]) / length, (b[1] - a[1]) / length];
+     for (let t = 5; t < length - 2; t += 12) {
+@@ -139,8 +138,8 @@
+       dress('cv-bench', [pos[0] + d[0] * 4, pos[1] + d[1] * 4], p.rotY + Math.PI / 2, 'prop', p.district);
+     }
+   }
+-  function scatter(cfg, kind, mult, sample, district) {
+-    const list = queryCatalog(catalog, cfg.pick);
++  function scatter(cfg, kind, mult, sample, district, list = queryCatalog(catalog, cfg.pick)) {
++    if (!list.length) return;
+     const n = rng.int(...scaleCount(cfg.count, mult));
+     for (let i = 0; i < n; i++) for (let t = 0; t < spec.retries.placement; t++) {
+       const e = rng.pick(list), pos = sample();
+@@ -152,10 +151,21 @@
+   const trees = () => { const p = forest(); return p[0] + p[1] > 45 ? [-p[0], -p[1]] : p; };
+   scatter(spec.trees, 'tree', spec.density.trees, trees, 'woodland');
+   scatter(spec.bushes, 'bush', spec.density.bushes, forest, 'woodland');
+-  const market = () => [rng.float(17, 48), rng.float(-30, 29)];
+-  const residential = () => [rng.float(-70, 20), rng.float(-76, 26)];
++  // Stock stays immediately behind the stall row, leaving the approaches open.
++  const market = () => [rng.float(18, 25), rng.float(-27, 14)];
++  const homes = buildings.filter(b => b.kind === 'house' && b.inst.district === 'residential');
++  const residential = () => {
++    const h = rng.pick(homes), r = h.entry.lot || h.entry.footprint;
++    const side = rng.sign();
++    // Side yards just outside the reserved lot; all mesh/road clearance still
++    // goes through dress(). Never fall back to an arbitrary field position.
++    return toWorldXZ([side < 0 ? r.min[0] - rng.float(1.5, 3.5) : r.max[0] + rng.float(1.5, 3.5),
++      rng.float(r.min[1], r.max[1])], { x: h.pos[0], z: h.pos[1], rotY: h.rotY });
++  };
+   const farmyard = () => [rng.float(64, 93), rng.float(-44, 33)];
+-  scatter(spec.props, 'prop', spec.density.props, () => rng.chance(0.5) ? market() : residential(), 'dressing');
++  const stock = ['cv-crate', 'cv-barrel', 'cv-hand-cart', 'cv-wheelbarrow'].map(id => catalog.get(id));
++  scatter({ count: spec.props.count.map(n => Math.round(n * 0.3)) }, 'prop', spec.density.props, market, 'market', stock);
++  if (homes.length) scatter({ ...spec.props, count: spec.props.count.map(n => Math.round(n * 0.7)) }, 'prop', spec.density.props, residential, 'residential');
+   scatter({ count: [35, 45], pick: { style: 'farm-dressing' } }, 'prop', spec.density.props, farmyard, 'farm');
+   scatter({ count: [12, 18], pick: { style: 'animal' } }, 'prop', 1, farmyard, 'farm');
+   scatter({ count: [5, 7], pick: { style: 'orchard', category: 'tree' } }, 'tree', 1, () => [rng.float(65, 90), rng.float(-85, -78)], 'farm');
+diff --git a/tools/check-negatives.mjs b/tools/check-negatives.mjs
+index 4efc26c00a08e27a7ec34a6209833bf83de90ad1..92ec5737fc722828d20cf6529eda8cef1e9d9397
+--- a/tools/check-negatives.mjs
++++ b/tools/check-negatives.mjs
+@@ -5,6 +5,7 @@
+ import { compileTown } from '../src/compiler/compile.js';
+ import { validate } from '../src/compiler/checks.js';
+ import { applyDefaults } from '../src/compiler/spec.js';
++import { strutEnds, segPointDistance } from '../src/compiler/geometry.js';
+ const cat = resolveAll(JSON.parse(readFileSync(new URL('../src/catalog/bounds.json', import.meta.url))));
+ const spec = applyDefaults(JSON.parse(readFileSync(new URL('../specs/hamlet.json', import.meta.url))));
+ let bad = 0;
+@@ -48,6 +49,16 @@
+ if (!large.ok) throw new Error('large negatives require a passing baseline');
+ if (large.instances.filter(i => i.id.startsWith('nat-')).length > 10) throw new Error('heavy Nature assets must stay sparse');
+ if (large.instances.filter(i => i.id === 'cv-market-stall').length < 4) throw new Error('large town needs a market cluster');
++// Visual dressing regressions: attachments and fence modules cannot become
++// lawn ornaments, and civic furniture must remain beside connected streets.
++const omitted = new Set(['cv-window-box', 'cv-shop-hanging-sign', 'cv-birdhouse', 'cv-laundry-line', 'farm-rail-fence', 'farm-drystone-wall']);
++if (large.instances.some(i => omitted.has(i.id) || i.district === 'dressing')) throw new Error('large town has unscoped ground dressing');
++const streetFurniture = new Set(['cv-bench', 'nat-log-bench', 'cv-streetlamp', 'cv-notice-board', 'cv-directional-post', 'cv-village-entrance-sign']);
++const streets = large.instances.filter(i => i.streetId);
++for (const i of large.instances.filter(i => streetFurniture.has(i.id))) {
++  if (!streets.some(p => segPointDistance(...strutEnds(p), i.pos) <= p.params.width / 2 + 4)) throw new Error(`${i.id} must stay beside a street`);
++}
++console.log('large dressing: no wall attachments, orphan fence props or unscoped scatter; furniture beside streets');
+ const largeExpect = (label, mutate, name) => {
+   const t = structuredClone(large); mutate(t);
+   const c = validate(t, cat, largeSpec).checks.find(c => c.name === name);
+
+apply patch
+patch: completed
+/workspace/cel-town/out/codex-large.md
+diff --git a/out/codex-large.md b/out/codex-large.md
+index 234367f81bf409d9412f41037584b66a2f8a72f8..4bdcd2c20ba38bf51f4168e3bafc99752f56ea21
+--- a/out/codex-large.md
++++ b/out/codex-large.md
+@@ -12,13 +12,23 @@
+ | houses | 5 | 20 |
+ | landmarks | 1 | 7 |
+ | paths | 6 | 34 |
+-| fences | 41 | 109 |
+-| trees | 15 | 91 |
+-| bushes | 7 | 44 |
+-| props | 3 | 337 |
+-| instances | 85 | 656 |
++| fences | 41 | 123 |
++| trees | 15 | 89 |
++| bushes | 7 | 40 |
++| props | 3 | 320 |
++| instances | 85 | 648 |
++
++Large has 4.5× as many building lots, including two farm dwellings. Farm outbuildings, market stalls, crops and animals are counted as props, not dwelling lots. Default seed 1234 and large both pass on attempt 0. Neither has framing warnings. Large ground radius is 125 for area radius 110; hills expand with it.
++
++## Large dressing visual fix
++
++Removed wall attachments from the generic ground pool: `cv-window-box`, `cv-shop-hanging-sign`, and `cv-birdhouse` are omitted. Removed the independent farm fence-segment placement loop; farm rail fences and drystone walls are omitted rather than leaving disconnected fragments. Existing continuous, gated dwelling fences retain all hard checks.
++
++The large preset's `town-dressing` query now contains only firewood stacks, potted plants, flower beds, boulders and stone piles. Its original 130–160 target is split 30% into market stock (crates, barrels, hand carts and wheelbarrows immediately behind the stalls) and 70% into side-yard details sampled beside actual residential lots. Placement still rejects full mesh bounds against lots, streets and other dressing; failed placements never fall back to open fields. Lamps and benches use the existing street placement, with the Nature log bench moved beside west lane. Notice board, directional post and entrance sign each have one deliberate street-side location. Laundry lines are omitted. Farm dressing stays in the farm district and Nature remains sparse in woodland. No unscoped `dressing` field scatter remains.
++
++Seed 1234 now has zero window boxes, hanging signs, birdhouses, laundry lines, farm rail-fence props, drystone-wall props and `district: dressing` instances. It retains 7 market stalls, 24 crates, 20 barrels, 35 streetlamps, 34 Cozy benches and 1 Nature log bench. Civic signs are limited to 1 notice board, 1 directional post and 1 entrance sign. Changes to subsequent seeded draws and passing on attempt 0 account for other count differences above; hamlet uses its unchanged legacy pools and random stream.
+ 
+-Large has 4.5× as many building lots, including two farm dwellings. Farm outbuildings, market stalls, crops and animals are counted as props, not dwelling lots. Default seed 1234 passes on attempt 0; large passes on attempt 1. Neither has framing warnings. Large ground radius is 125 for area radius 110; hills expand with it.
++Recompiled with `npm run compile -- --size large --seed 1234 --out out/large/`. The fresh default compilation in `out/hamlet-visual/town-1234.json` passes `cmp` against `out/baseline/town-1234.json`. No screenshots were taken during this fix pass.
+ 
+ ## Layout and rendering
+ 
+@@ -30,11 +40,11 @@
+ 
+ ## Verification
+ 
+-- `npm run test:checks`: all 13 original breaks and 8 large-town breaks caught, plus batch geometry/ink/bounds/shared-resource/metadata checks.
++- `npm run test:checks`: all 13 original breaks and 8 large-town breaks caught, plus batch geometry/ink/bounds/shared-resource/metadata checks. Added seed-1234 dressing regressions for omitted attachments/fence modules, no unscoped scatter, and furniture/signage beside streets. No hard checks were weakened.
+ - `npm run test:parity`: 31 hamlet seeds and 4 large seeds, forward/reverse, through Vite SSR and simulated one-ulp engine rounding; full town JSON identical. Frozen original-hamlet checksum also passes.
+-- `npm run compile -- --spec specs/large.json --sweep 50 --out out/large/`: 42/50 first attempt (84%), 50/50 after retries (100%). No remaining failing hard checks. Maximum retry index 4. Full seed rows: `out/large/sweep.json`.
++- `npm run compile -- --size large --sweep 50 --out out/large/`: 41/50 first attempt (82%), 50/50 after retries (100%). No remaining failing hard checks. Maximum retry index 2. Full seed rows: `out/large/sweep.json`; command log: `out/large/sweep.log`.
+ - `npm run build`: passes; existing large-bundle warning remains. No public assets are copied into dist. Private Vite preview serves them directly from public.
+-- Five local seed-1234 compilations averaged ~26 ms for hamlet and ~529 ms for large, excluding GLB loading/rendering. Samples: `out/compile-timings.json`. Logs: `out/checks.log`, `out/parity.log`, `out/build.log`.
++- Earlier pre-fix timings are retained in `out/compile-timings.json`; they were not remeasured in this visual fix pass. Fresh verification logs: `out/checks.log`, `out/parity.log`, `out/build.log`.
+ 
+ ## Known limits
+ 
+diff --git a/src/catalog/additions.js b/src/catalog/additions.js
+index 127a9e211f0325af34e371b04e34994b552c0d37..13905a8ef85a5658562cadea820a15a65befac75
+--- a/src/catalog/additions.js
++++ b/src/catalog/additions.js
+@@ -48,9 +48,12 @@
+ ];
+ 
+ const fenceLengths = { 'cv-rail-fence': [-1.269, 1.283], 'farm-rail-fence': [-2.015, 2.015], 'farm-drystone-wall': [-2, 2], 'farm-farm-gate': [-1.31, 1.31] };
++// Ground-safe yard details only. Furniture, civic signs and wall attachments
++// need intentional placement; agricultural props belong in the farm district.
++const yardDressing = new Set(['cv-firewood-stack', 'cv-plant-potted', 'cv-flower-bed', 'cv-rock-boulder', 'cv-rock-stone-pile']);
+ for (const entry of ADDITIONS) {
+   // Functional tags support authoring queries without widening legacy pools.
+-  if (entry.tags.style.includes('cozy-village') && entry.tags.style.includes('dressing')) entry.tags.style.push('town-dressing');
++  if (yardDressing.has(entry.id)) entry.tags.style.push('town-dressing');
+   const functionTag = entry.id.replace(/^(cv|farm|nat)-/, '').replace(/^farm-/, '');
+   entry.tags.style.push(functionTag);
+   if (functionTag.includes('sign') || functionTag.includes('post') || functionTag.includes('notice')) entry.tags.style.push('sign');
+diff --git a/src/compiler/districts.js b/src/compiler/districts.js
+index 8dfbdf3bdff998f0256169a71d04424438e03789..94991a8241fefc47edae5dcf36d138ad103ae1bb
+--- a/src/compiler/districts.js
++++ b/src/compiler/districts.js
+@@ -114,23 +114,22 @@
+   }
+   for (const [id, pos] of [
+     ['cv-flower-cart', [24, 24]], ['cv-hand-cart', [35, 24]], ['cv-horse-cart', [46, 24]],
+-    ['cv-notice-board', [10, 12]], ['cv-directional-post', [-5, 12]], ['cv-village-entrance-sign', [-48, 24]],
+     ['farm-big-red-barn', [84, -27]], ['farm-stable', [84, -12]],
+     ['farm-chicken-coop', [68, 25]], ['farm-greenhouse', [78, 22]],
+     ['farm-grain-silo', [91, 7]], ['farm-hay-barn', [86, 20]],
+     ['farm-windmill-pump', [64, -43]], ['farm-root-cellar', [82, -42]],
+     ['farm-scarecrow', [68, -48]], ['farm-water-trough', [72, 15]],
+-    ['nat-log-bench', [-38, 25]], ['nat-granite-rock-cluster', [-45, 29]],
+-    ['nat-fallen-log-mossy', [-38, -81]],
+   ]) dress(id, pos, 0, 'prop', pos[0] > 58 ? 'farm' : 'market');
++  dress('cv-notice-board', [26, 15], 0, 'prop', 'market');
++  dress('cv-directional-post', [-4, 15], 0, 'prop', 'plaza');
++  dress('cv-village-entrance-sign', [-48, 22], 0, 'prop', 'residential');
++  dress('nat-log-bench', [-46, 12], Math.PI / 2, 'prop', 'residential');
++  dress('nat-granite-rock-cluster', [-45, 29], 0, 'prop', 'woodland');
++  dress('nat-fallen-log-mossy', [-38, -81], 0, 'prop', 'woodland');
+   for (let x = 65; x <= 85; x += 6) for (let z = -65; z <= -49; z += 6) {
+     dress(rng.pick(['farm-crop-row-field', 'farm-pumpkin-patch', 'farm-sunflower-row', 'farm-corn-stalk-cluster', 'farm-wheat-cluster']), [x, z], 0, 'prop', 'farm');
+   }
+   for (let x = 65; x <= 85; x += 7) dress('farm-orchard-row', [x, -73], 0, 'prop', 'farm');
+-  for (let z = -10; z <= 32; z += 4.1) {
+-    dress('farm-rail-fence', [94, z], Math.PI / 2, 'prop', 'farm');
+-    dress('farm-drystone-wall', [63, z], Math.PI / 2, 'prop', 'farm');
+-  }
+   for (const p of streets) {
+     const [a, b] = strutEnds(p), length = dist(a, b), d = [(b[0] - a[0]) / length, (b[1] - a[1]) / length];
+     for (let t = 5; t < length - 2; t += 12) {
+@@ -139,8 +138,8 @@
+       dress('cv-bench', [pos[0] + d[0] * 4, pos[1] + d[1] * 4], p.rotY + Math.PI / 2, 'prop', p.district);
+     }
+   }
+-  function scatter(cfg, kind, mult, sample, district) {
+-    const list = queryCatalog(catalog, cfg.pick);
++  function scatter(cfg, kind, mult, sample, district, list = queryCatalog(catalog, cfg.pick)) {
++    if (!list.length) return;
+     const n = rng.int(...scaleCount(cfg.count, mult));
+     for (let i = 0; i < n; i++) for (let t = 0; t < spec.retries.placement; t++) {
+       const e = rng.pick(list), pos = sample();
+@@ -152,10 +151,21 @@
+   const trees = () => { const p = forest(); return p[0] + p[1] > 45 ? [-p[0], -p[1]] : p; };
+   scatter(spec.trees, 'tree', spec.density.trees, trees, 'woodland');
+   scatter(spec.bushes, 'bush', spec.density.bushes, forest, 'woodland');
+-  const market = () => [rng.float(17, 48), rng.float(-30, 29)];
+-  const residential = () => [rng.float(-70, 20), rng.float(-76, 26)];
++  // Stock stays immediately behind the stall row, leaving the approaches open.
++  const market = () => [rng.float(18, 25), rng.float(-27, 14)];
++  const homes = buildings.filter(b => b.kind === 'house' && b.inst.district === 'residential');
++  const residential = () => {
++    const h = rng.pick(homes), r = h.entry.lot || h.entry.footprint;
++    const side = rng.sign();
++    // Side yards just outside the reserved lot; all mesh/road clearance still
++    // goes through dress(). Never fall back to an arbitrary field position.
++    return toWorldXZ([side < 0 ? r.min[0] - rng.float(1.5, 3.5) : r.max[0] + rng.float(1.5, 3.5),
++      rng.float(r.min[1], r.max[1])], { x: h.pos[0], z: h.pos[1], rotY: h.rotY });
++  };
+   const farmyard = () => [rng.float(64, 93), rng.float(-44, 33)];
+-  scatter(spec.props, 'prop', spec.density.props, () => rng.chance(0.5) ? market() : residential(), 'dressing');
++  const stock = ['cv-crate', 'cv-barrel', 'cv-hand-cart', 'cv-wheelbarrow'].map(id => catalog.get(id));
++  scatter({ count: spec.props.count.map(n => Math.round(n * 0.3)) }, 'prop', spec.density.props, market, 'market', stock);
++  if (homes.length) scatter({ ...spec.props, count: spec.props.count.map(n => Math.round(n * 0.7)) }, 'prop', spec.density.props, residential, 'residential');
+   scatter({ count: [35, 45], pick: { style: 'farm-dressing' } }, 'prop', spec.density.props, farmyard, 'farm');
+   scatter({ count: [12, 18], pick: { style: 'animal' } }, 'prop', 1, farmyard, 'farm');
+   scatter({ count: [5, 7], pick: { style: 'orchard', category: 'tree' } }, 'tree', 1, () => [rng.float(65, 90), rng.float(-85, -78)], 'farm');
+diff --git a/tools/check-negatives.mjs b/tools/check-negatives.mjs
+index 4efc26c00a08e27a7ec34a6209833bf83de90ad1..92ec5737fc722828d20cf6529eda8cef1e9d9397
+--- a/tools/check-negatives.mjs
++++ b/tools/check-negatives.mjs
+@@ -5,6 +5,7 @@
+ import { compileTown } from '../src/compiler/compile.js';
+ import { validate } from '../src/compiler/checks.js';
+ import { applyDefaults } from '../src/compiler/spec.js';
++import { strutEnds, segPointDistance } from '../src/compiler/geometry.js';
+ const cat = resolveAll(JSON.parse(readFileSync(new URL('../src/catalog/bounds.json', import.meta.url))));
+ const spec = applyDefaults(JSON.parse(readFileSync(new URL('../specs/hamlet.json', import.meta.url))));
+ let bad = 0;
+@@ -48,6 +49,16 @@
+ if (!large.ok) throw new Error('large negatives require a passing baseline');
+ if (large.instances.filter(i => i.id.startsWith('nat-')).length > 10) throw new Error('heavy Nature assets must stay sparse');
+ if (large.instances.filter(i => i.id === 'cv-market-stall').length < 4) throw new Error('large town needs a market cluster');
++// Visual dressing regressions: attachments and fence modules cannot become
++// lawn ornaments, and civic furniture must remain beside connected streets.
++const omitted = new Set(['cv-window-box', 'cv-shop-hanging-sign', 'cv-birdhouse', 'cv-laundry-line', 'farm-rail-fence', 'farm-drystone-wall']);
++if (large.instances.some(i => omitted.has(i.id) || i.district === 'dressing')) throw new Error('large town has unscoped ground dressing');
++const streetFurniture = new Set(['cv-bench', 'nat-log-bench', 'cv-streetlamp', 'cv-notice-board', 'cv-directional-post', 'cv-village-entrance-sign']);
++const streets = large.instances.filter(i => i.streetId);
++for (const i of large.instances.filter(i => streetFurniture.has(i.id))) {
++  if (!streets.some(p => segPointDistance(...strutEnds(p), i.pos) <= p.params.width / 2 + 4)) throw new Error(`${i.id} must stay beside a street`);
++}
++console.log('large dressing: no wall attachments, orphan fence props or unscoped scatter; furniture beside streets');
+ const largeExpect = (label, mutate, name) => {
+   const t = structuredClone(large); mutate(t);
+   const c = validate(t, cat, largeSpec).checks.find(c => c.name === name);
+
+exec
+/bin/bash -lc "tail -8 out/build.log; rg -n 'large dressing' out/checks.log" in /workspace/cel-town
+ succeeded in 0ms:
+dist/assets/large-B42Xf6Ej.js     39.82 kB │ gzip:  15.99 kB
+dist/assets/ui-BWObux95.js       702.51 kB │ gzip: 188.20 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.67s
+19:large dressing: no wall attachments, orphan fence props or unscoped scatter; furniture beside streets
+
+codex
+Fixed large-town dressing: removed wall props and orphan farm fence bits, confined market stock and yard details to appropriate locations, and kept furniture/signage beside streets.
+
+- Seed 1234 recompiles successfully on attempt 0 with 320 props.
+- Hamlet seed 1234 is byte-identical to baseline via `cmp`.
+- Checks, parity, and build pass; hard checks remain intact.
+- Large sweep: 50/50 pass after retries, 41/50 first attempt.
+
+Updated [out/codex-large.md](/workspace/cel-town/out/codex-large.md) with changes and counts. No screenshots, push, or deployment.
+tokens used
+49,131
+Fixed large-town dressing: removed wall props and orphan farm fence bits, confined market stock and yard details to appropriate locations, and kept furniture/signage beside streets.
+
+- Seed 1234 recompiles successfully on attempt 0 with 320 props.
+- Hamlet seed 1234 is byte-identical to baseline via `cmp`.
+- Checks, parity, and build pass; hard checks remain intact.
+- Large sweep: 50/50 pass after retries, 41/50 first attempt.
+
+Updated [out/codex-large.md](/workspace/cel-town/out/codex-large.md) with changes and counts. No screenshots, push, or deployment.

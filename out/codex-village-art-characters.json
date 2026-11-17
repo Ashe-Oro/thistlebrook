@@ -1,0 +1,248 @@
+{
+  "identityUnchanged": true,
+  "rows": [
+    {
+      "id": "townsfolk-baker",
+      "role": "baker",
+      "height": 1.72,
+      "outfit": {
+        "hair": "bun",
+        "tops": [
+          "tunic",
+          "apron"
+        ],
+        "bottoms": "breeches",
+        "shoes": "dress-shoe"
+      },
+      "hairColor": "#78462d",
+      "skin": "#d5a078",
+      "pants": "#775848",
+      "bytes": 1118980,
+      "sha256": "3189fb1bd29e9ad57d57e4c5a7b027b4fcea776def0850b9cb1266de81a44138",
+      "measuredMinY": 0,
+      "measuredMaxY": 1.7977739572525024
+    },
+    {
+      "id": "townsfolk-blacksmith",
+      "role": "blacksmith",
+      "height": 1.86,
+      "outfit": {
+        "hair": "buzz",
+        "tops": [
+          "tunic",
+          "apron"
+        ],
+        "bottoms": "breeches",
+        "shoes": "work-boot",
+        "facialHair": "beard-full",
+        "accessories": "gloves"
+      },
+      "hairColor": "#382c26",
+      "skin": "#a9704c",
+      "pants": "#414756",
+      "bytes": 1382452,
+      "sha256": "f17d21275b230a46241314de2898071b62c066669f606740b7ec313318c81e20",
+      "measuredMinY": -8.484502385158487e-18,
+      "measuredMaxY": 1.865604281425476
+    },
+    {
+      "id": "townsfolk-innkeeper",
+      "role": "innkeeper",
+      "height": 1.67,
+      "outfit": {
+        "hair": "ringlets",
+        "tops": "vest",
+        "bottoms": "long-skirt",
+        "shoes": "dress-shoe",
+        "accessories": "necklace"
+      },
+      "hairColor": "#a54e2c",
+      "skin": "#e4b590",
+      "pants": "#703d50",
+      "bytes": 380308,
+      "sha256": "33dc29ffbc1f273f9f6b3dc738f9b3b50401a296fbe0e0c5cf14c5e30fa68cb0",
+      "measuredMinY": 0,
+      "measuredMaxY": 1.6752285957336426
+    },
+    {
+      "id": "townsfolk-shopkeeper",
+      "role": "shopkeeper",
+      "height": 1.76,
+      "outfit": {
+        "hair": "side-part",
+        "tops": "tunic",
+        "bottoms": "breeches",
+        "shoes": "boot",
+        "outerwear": "satchel",
+        "headgear": "flat-cap"
+      },
+      "hairColor": "#463322",
+      "skin": "#b8835d",
+      "pants": "#585a46",
+      "bytes": 273424,
+      "sha256": "4a9db3108569989d554b401f44819c2b5bd3562c8f0e795dd198066ecbe126e0",
+      "measuredMinY": 0,
+      "measuredMaxY": 1.7660613059997559
+    },
+    {
+      "id": "townsfolk-merchant",
+      "role": "merchant",
+      "height": 1.6,
+      "outfit": {
+        "hair": "curly-bob",
+        "tops": "vest",
+        "bottoms": "skirt",
+        "shoes": "boot",
+        "headgear": "beret"
+      },
+      "hairColor": "#593c2c",
+      "skin": "#a76e4b",
+      "pants": "#476c72",
+      "bytes": 1147812,
+      "sha256": "7bd9ba718cd495a5e787fae6ad7b18c3caecebed8db74112d754d617c1c2d5c3",
+      "measuredMinY": 0,
+      "measuredMaxY": 1.6386584043502808
+    },
+    {
+      "id": "townsfolk-miller",
+      "role": "miller",
+      "height": 1.79,
+      "outfit": {
+        "hair": "short-crop",
+        "tops": "tunic",
+        "bottoms": "breeches",
+        "shoes": "work-boot",
+        "headgear": "straw-hat",
+        "facialHair": "moustache-handlebar"
+      },
+      "hairColor": "#c4b49a",
+      "skin": "#d5a078",
+      "pants": "#6b6355",
+      "bytes": 1214360,
+      "sha256": "8edbdf21a8f5ef01ce479c7e8ab5b4763579616be2994358014b0edb102eacae",
+      "measuredMinY": -8.165193297920155e-18,
+      "measuredMaxY": 1.8973764181137085
+    },
+    {
+      "id": "townsfolk-farmhand",
+      "role": "farmhand",
+      "height": 1.64,
+      "outfit": {
+        "hair": "braids",
+        "tops": "tunic",
+        "bottoms": "overalls",
+        "shoes": "work-boot",
+        "headgear": "straw-hat"
+      },
+      "hairColor": "#c38d3f",
+      "skin": "#c48e67",
+      "pants": "#766144",
+      "bytes": 311664,
+      "sha256": "d823e32eb5cafcba64895c7bb9d2062132b4b0b8d73a55c221fae0bf5e92d454",
+      "measuredMinY": 0,
+      "measuredMaxY": 1.747827172279358
+    },
+    {
+      "id": "townsfolk-carpenter",
+      "role": "carpenter",
+      "height": 1.81,
+      "outfit": {
+        "hair": "messy",
+        "tops": "vest",
+        "bottoms": "breeches",
+        "shoes": "work-boot",
+        "facialHair": "beard-short",
+        "accessories": "belt-pouch"
+      },
+      "hairColor": "#873e25",
+      "skin": "#d8a078",
+      "pants": "#4e635f",
+      "bytes": 1428384,
+      "sha256": "0fe1c83f621c24e89921d79170f06a64b89472b64d3410b8efae597524c02ff3",
+      "measuredMinY": -8.256424702039853e-18,
+      "measuredMaxY": 1.929483413696289
+    },
+    {
+      "id": "townsfolk-child",
+      "role": "child",
+      "height": 1.12,
+      "outfit": {
+        "hair": "bowl",
+        "tops": "tunic",
+        "bottoms": "shorts",
+        "shoes": "boot",
+        "outerwear": "satchel"
+      },
+      "hairColor": "#653b25",
+      "skin": "#dbac84",
+      "pants": "#9a6a3c",
+      "bytes": 948212,
+      "sha256": "a07ceff23b9a16714ecfeee7970a237769bfcc0a6274cd598a5139a5de200ff0",
+      "measuredMinY": 0,
+      "measuredMaxY": 1.1238261461257935
+    },
+    {
+      "id": "townsfolk-elder",
+      "role": "elder",
+      "height": 1.58,
+      "outfit": {
+        "hair": "bun",
+        "tops": "tunic",
+        "bottoms": "long-skirt",
+        "shoes": "dress-shoe",
+        "outerwear": "scarf",
+        "accessories": "glasses"
+      },
+      "hairColor": "#d3cfc4",
+      "skin": "#d6aa8a",
+      "pants": "#6d596e",
+      "bytes": 290844,
+      "sha256": "527224dfb0ea0dcabedf7c700f14a07ed1bb542917beb999b1fdc2de5d5c5179",
+      "measuredMinY": 0,
+      "measuredMaxY": 1.655336856842041
+    },
+    {
+      "id": "townsfolk-herbalist",
+      "role": "herbalist",
+      "height": 1.69,
+      "outfit": {
+        "hair": "dreadlocks",
+        "tops": [
+          "tunic",
+          "apron"
+        ],
+        "bottoms": "long-skirt",
+        "shoes": "boot",
+        "outerwear": "satchel"
+      },
+      "hairColor": "#302b25",
+      "skin": "#98633f",
+      "pants": "#596d4e",
+      "bytes": 303216,
+      "sha256": "8f7de7c5fdd46057776cc2da0351bbb58917e5cd8d232970e04711653ee969dd",
+      "measuredMinY": 0,
+      "measuredMaxY": 1.7286467552185059
+    },
+    {
+      "id": "townsfolk-watch",
+      "role": "watch",
+      "height": 1.89,
+      "outfit": {
+        "hair": "short-crop",
+        "tops": "vest",
+        "bottoms": "breeches",
+        "shoes": "tall-boot",
+        "headgear": "flat-cap",
+        "facialHair": "mutton-chops",
+        "outerwear": "scarf"
+      },
+      "hairColor": "#777267",
+      "skin": "#c28d68",
+      "pants": "#414b61",
+      "bytes": 1561256,
+      "sha256": "0e01a595b36614cfef60f8b51da1917ab40e54ee57db7769287382addcd6f5ef",
+      "measuredMinY": -8.621349491338035e-18,
+      "measuredMaxY": 1.8958499431610107
+    }
+  ]
+}

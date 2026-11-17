@@ -1,0 +1,27 @@
+
+> cel-town@0.1.0 shots:village-m3
+> node tools/shots-village-m3.mjs
+
+shot bakery
+shot lantern
+shot doorway
+shot inn
+shot store
+shot smithy
+M3 keyboard, collision, fixture, feet and query checks passed
+video frame 0 /144 null door
+video frame 12 /144 null door
+video frame 24 /144 bakery null
+video frame 36 /144 bakery counter
+video frame 48 /144 bakery counter
+video frame 60 /144 bakery counter
+video frame 72 /144 bakery null
+video frame 84 /144 bakery lamp
+video frame 88 /144 bakery lamp
+video frame 96 /144 bakery lamp
+video frame 100 /144 bakery lamp
+video frame 108 /144 bakery null
+video frame 120 /144 bakery null
+video frame 132 /144 bakery exit
+video frame 143 /144 null door
+M3 evidence complete

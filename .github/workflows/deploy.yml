@@ -1,0 +1,73 @@
+name: Test and deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      PROD_URL: https://cel-village.vercel.app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.1
+          cache: npm
+
+      - run: npm ci
+
+      # Licensed models never live in git. Pull the compressed pack from the
+      # private Vercel Blob store (skipped on PRs from forks, which get no secrets).
+      - name: Fetch licensed models from private Blob
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+        run: npm run models:fetch
+
+      - name: Tests
+        run: npm run test:ci
+
+      - name: Build dist (compress + headless asset check)
+        if: ${{ github.event_name != 'pull_request' }}
+        env:
+          ASTRA_ASSET_ROOT: ${{ github.workspace }}/.models-pack/owned-assets
+        run: npm run deploy:dist
+
+      - name: Deploy to Vercel production
+        if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          url=$(npx --yes vercel@65.17.0 deploy dist --prod --yes --token "$VERCEL_TOKEN")
+          echo "Deployed: $url"
+          echo "DEPLOY_URL=$url" >> "$GITHUB_ENV"
+
+      - name: Check production is public and serving
+        if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        run: |
+          for i in 1 2 3 4 5 6; do
+            code=$(curl -s -o /tmp/index.html -w '%{http_code}' "$PROD_URL/")
+            [ "$code" = "200" ] && grep -q 'asset-aliases' /tmp/index.html && break
+            echo "attempt $i: HTTP $code"; sleep 10
+          done
+          echo "Production HTTP $code"
+          test "$code" = "200"
+          grep -q 'asset-aliases' /tmp/index.html
+          model=$(curl -s -o /dev/null -w '%{http_code}' "$PROD_URL/draco/draco_decoder.wasm")
+          echo "draco wasm HTTP $model"
+          test "$model" = "200"

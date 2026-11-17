@@ -1,0 +1,16 @@
+/* The world grows without squeezing district names into a clipped tab strip. */
+.astra-ui .view-tabs.world-navigation{top:35px;bottom:auto;left:50%;transform:translateX(-50%);max-width:none;width:310px;overflow:visible;padding:0;border-radius:15px;z-index:8;white-space:normal}
+.world-nav{width:100%;pointer-events:auto}.world-nav summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;padding:16px 18px;min-height:52px;font-size:12px}.world-nav summary::-webkit-details-marker{display:none}.nav-kicker{font-size:8px;letter-spacing:1.5px;color:#89967d}.nav-current{flex:1}.world-nav summary:focus-visible{outline:3px solid #ce9c4e;border-radius:15px}.world-menu{position:absolute;top:62px;left:50%;transform:translateX(-50%);width:690px;padding:20px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;max-height:calc(100dvh - 180px);overflow-y:auto;overscroll-behavior:contain;box-shadow:0 14px 45px #263f3628}.world-menu section{min-width:0}.world-menu h2{font:400 18px 'Fraunces',Georgia,serif;margin:0 0 12px}.astra-ui .world-menu button{display:block;width:100%;padding:10px 9px;text-align:left;border-radius:8px;white-space:normal;line-height:1.35;color:#62745f}.astra-ui .world-menu button:hover{background:#eef1e6}.astra-ui .world-menu button.active{background:#dfe8d7;color:#344c40}.world-nav[open] summary{background:#edf1e7;border-radius:15px}
+@media(max-width:1000px){.astra-ui .view-tabs.world-navigation{top:106px;width:310px}.world-menu{max-height:calc(100dvh - 260px);width:min(690px,calc(100vw - 40px))}.intro{top:178px}.work-panel{top:176px}}
+@media(max-width:600px){.astra-ui .view-tabs.world-navigation{top:99px;left:20px;transform:none;width:calc(100vw - 40px)}.world-nav summary{padding:12px 15px;min-height:44px}.world-menu{top:53px;left:0;transform:none;width:100%;grid-template-columns:1fr 1fr;gap:18px 12px;padding:16px;max-height:calc(100dvh - 240px)}.world-menu section:last-child{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:0 12px}.world-menu section:last-child h2{grid-column:1/-1}.world-menu h2{font-size:17px}.astra-ui .world-menu button{font-size:11px;padding:9px 6px}.intro{top:168px}.work-panel{top:166px}.card{top:166px;max-height:calc(100dvh - 270px);overflow-y:auto}.clock #astra-clock{font-size:16px;font-weight:500}.clock{min-width:128px}.moment{max-width:calc(100vw - 96px)}}
+
+/* An open menu must fully cover copy and cards behind it. */
+.astra-ui .world-menu{background:#fffdf4;isolation:isolate}
+@media(max-width:600px){.astra-ui:has(.world-nav[open]) :is(.intro,.moment,.card,.work-panel){visibility:hidden}}
+
+/* The mobile navigator occupies the hero's first line. Reserve its space even
+   when closed; an opaque surface also protects against translucent text bleed. */
+@media(max-width:600px){
+ .astra-ui .intro{top:168px}
+ .astra-ui .view-tabs.world-navigation{background:#fffdf4;max-width:none}
+}

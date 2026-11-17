@@ -1,0 +1,27 @@
+{
+  "name": "Hamlet",
+  "seed": 1,
+  "area": { "shape": "circle", "radius": 34 },
+  "plaza": {
+    "center": "cv-well",
+    "radius": 6,
+    "ring": { "style": "builder", "width": 1.8, "radius": 6 }
+  },
+  "landmarks": { "count": [1, 2], "pick": { "category": "landmark", "style": "v3-kit" }, "ring": [13, 19], "placement": "plaza-facing" },
+  "houses": {
+    "count": [4, 6],
+    "pick": { "category": "house", "style": "v3-kit" },
+    "prefer": { "source": "mesh" },
+    "ring": [13, 22],
+    "arc": 1.75,
+    "facing": { "maxCameraAngle": 45, "maxPlazaAngle": 50, "blend": 0.8, "maxPathBend": 18 }
+  },
+  "trees": { "count": [10, 16], "pick": { "category": "tree", "style": "v3-kit" } },
+  "bushes": { "count": [6, 12], "pick": { "category": "bush", "style": "v3-kit" }, "maxRadius": 28 },
+  "props": { "count": [2, 5], "pick": { "category": "prop", "style": "v3-kit" }, "near": "house" },
+  "paths": { "style": "builder", "id": "b-path-6", "width": 2.3 },
+  "fences": { "id": "cv-picket-fence", "probability": 0.6, "edges": ["back", "left", "right", "front"], "gate": { "id": "b-gate", "open": 0.55 } },
+  "density": { "houses": 1, "trees": 1, "bushes": 1, "props": 1 },
+  "camera": { "mode": "auto" },
+  "retries": { "placement": 40, "town": 12 }
+}

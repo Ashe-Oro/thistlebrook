@@ -1,0 +1,8 @@
+
+> cel-town@0.1.0 test:parity
+> node tools/parity.mjs
+
+large parity: 4 seeds, full JSON identical (forward + reverse)
+parity Vite SSR: 31 seeds, full JSON identical (forward + reverse)
+large parity: 4 seeds, full JSON identical (forward + reverse)
+parity Vite SSR + one-ulp math perturbation: 31 seeds, full JSON identical (forward + reverse)
