@@ -1,3 +1,4 @@
+import {TOWN_RULE} from '../src/compiler/town-rules.js';
 // OWNER: grok-skins lane (Grok). Skin contract tests (docs/SKINS.md).
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,7 +13,7 @@ import { SKIN_UNIFORMS, applySkinMaterial, patchSkinShader } from '../src/astra/
 const HEX = /^#[0-9a-f]{6}$/i;
 const hexes = o => JSON.stringify(o).match(/"#[^"]*"/g)?.map(s => s.slice(1, -1)) || [];
 
-test('registry: unique ids, cel first and the default', () => {
+test(`${TOWN_RULE.skins} registry: unique ids, cel first and the default`, () => {
  assert.equal(DEFAULT_SKIN, 'cel'); assert.equal(SKINS[0].id, 'cel');
  assert.equal(new Set(SKINS.map(s => s.id)).size, SKINS.length);
  assert.ok(SKINS.length >= 4);
@@ -78,7 +79,7 @@ test('LUT atlas is generated (no download) and neutral grades stay neutral', () 
  const o = id(.3, .5, .7); [.3, .5, .7].forEach((v, i) => assert.ok(Math.abs(o[i] - v) < 1e-6));
 });
 
-test('skins are tiny data (< 8 KB each, no assets)', () => {
+test(`${TOWN_RULE.skins} skins are tiny data (< 8 KB each, no assets)`, () => {
  for (const s of SKINS) {
   const bytes = statSync(new URL(`../src/skins/${s.id}.js`, import.meta.url)).size;
   assert.ok(bytes < 8192, `${s.id} is ${bytes} B`);
@@ -121,7 +122,7 @@ function fixture() {
  return { scene, world, renderer, lighting, camera, calls, lit, bulb, bulbMat, signMat, pool, poolMat, hulls, hullMat };
 }
 
-test('live switching restores every practical exactly and the default skips post', () => {
+test(`${TOWN_RULE.skins} live switching restores every practical exactly and the default skips post`, () => {
  const f = fixture();
  const rt = createSkinRuntime({ ...f, initial: 'cel' });
  rt.render(0, 0, 11); assert.deepEqual(f.calls, ['scene']);

@@ -20,9 +20,8 @@ for(const r of town.regions)s+=rect({min:[r.bounds.minX,r.bounds.minZ],max:[r.bo
 for(const h of town.landscape.hills)s+=`<circle cx="${X(h.pos[0])}" cy="${Z(h.pos[1])}" r="${(h.radius*S).toFixed(1)}" fill="${h.mountain?'#8e9d7b':'#9eaf77'}" opacity=".8"/>`;
 for(const f of town.outskirts.fields)s+=rect({min:[f.x-f.w/2,f.z-f.d/2],max:[f.x+f.w/2,f.z+f.d/2]},'fill="#d8c27a"');
 const water=town.water;
-if(water){for(const c of water.channels)s+=line(c.points.map(p=>[p[0],p[1]]),`stroke="#4f9fb0" stroke-width="${(2*c.halfWidth*S).toFixed(1)}" stroke-linejoin="round"`);
- for(const c of water.channels)for(const p of c.points)if(p[3]!==undefined)s+=`<circle cx="${X(p[0])}" cy="${Z(p[1])}" r="${(p[3]*S).toFixed(1)}" fill="#4f9fb0"/>`;
- for(const b of water.bridges||[])s+=line([b.a,b.b],`stroke="#8b5a2b" stroke-width="${(b.width*S).toFixed(1)}"`);}
+if(water){for(const c of water.reaches)for(const p of c.points)s+=`<circle cx="${X(p[0])}" cy="${Z(p[1])}" r="${(p[3]*S).toFixed(1)}" fill="#4f9fb0"/>`;
+ for(const b of water.bridges||[]){const c=Math.sin(b.yaw)*b.length/2,d=Math.cos(b.yaw)*b.length/2;s+=line([[b.pos[0]-c,b.pos[1]-d],[b.pos[0]+c,b.pos[1]+d]],`stroke="#8b5a2b" stroke-width="${(b.width*S).toFixed(1)}"`);}}
 else{const pts=[];for(let x=town.riverBounds.minX;x<=town.riverBounds.maxX;x+=1)pts.push([x,riverZ(x)]);s+=line(pts,`stroke="#4f9fb0" stroke-width="${(5.3*S).toFixed(1)}"`);for(const x of town.bridges)s+=line([[x,riverZ(x)-3.7],[x,riverZ(x)+3.7]],`stroke="#8b5a2b" stroke-width="${(3.3*S).toFixed(1)}"`);}
 s+=`<ellipse cx="${X(LAKE.x)}" cy="${Z(LAKE.z)}" rx="${(LAKE.rx*S).toFixed(1)}" ry="${(LAKE.rz*S).toFixed(1)}" fill="#4f9fb0"/>`;
 for(const r of town.roads){if(r.centerline)s+=line(r.centerline,`stroke="#5c6a62" stroke-width="${(5.6*S).toFixed(1)}" opacity=".9"`);else s+=line([r.a,r.b],`stroke="${r.kind==='trail'||r.kind==='walk'||r.kind==='boardwalk'?'#c9a66b':'#5c6a62'}" stroke-width="${Math.max(1,r.width*S).toFixed(1)}" opacity=".9"`);}
@@ -30,6 +29,9 @@ for(const b of town.buildings)s+=rect(b.box,'fill="#b9574a"');
 for(const v of town.venues)if(v.box)s+=rect(v.box,'fill="none" stroke="#a33" stroke-width="1"');
 for(const t of town.trees)s+=`<circle cx="${X(t.pos[0])}" cy="${Z(t.pos[1])}" r="${Math.max(1,S*.8)}" fill="#3d6b3a"/>`;
 for(const t of town.outskirts.trees)s+=`<circle cx="${X(t.pos[0])}" cy="${Z(t.pos[1])}" r="${Math.max(1,S*.8)}" fill="#2d5b2a"/>`;
+for(const m of town.landscape.models)s+=`<circle cx="${X(m.pos[0])}" cy="${Z(m.pos[1])}" r="${Math.max(1,S*.6)}" fill="${m.asset.includes('pine')?'#1d4b1a':m.asset.includes('tree')?'#4c8a3a':m.asset.includes('rock')?'#777':'#c9d27a'}"/>`;
+for(const m of town.modelPlacements||[])s+=`<circle cx="${X(m.pos[0])}" cy="${Z(m.pos[1])}" r="${Math.max(1,S*.5)}" fill="#e0a" opacity=".6"/>`;
+for(const tr of town.woods?.trails||[])s+=line(tr.points.map(p=>[p[0],p[2]]),`stroke="#a0703a" stroke-width="${Math.max(1,tr.width*S).toFixed(1)}"`);
 for(const sc of town.catalogScenes||[])for(const m of sc.members)s+=rect(m.box,'fill="#e0a" opacity=".5"');
 for(const p of town.props)if(p.pos)s+=`<circle cx="${X(p.pos[0])}" cy="${Z(p.pos[1])}" r="1.2" fill="#e0a"/>`;
 // grid

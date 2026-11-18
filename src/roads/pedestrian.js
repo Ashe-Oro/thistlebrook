@@ -1,20 +1,10 @@
-// OWNER: grok-roads lane. Pedestrian network (pure; no THREE, no DOM).
-//
-// Root cause this fixes: residents used to route on town.nodes/edges, which is
-// built from road CENTERLINES, so every walk went down the middle of the
-// asphalt. This module derives a separate walk graph: kerb-side sidewalks on
-// both sides of every carriageway, footpaths clipped at the kerb, and crossing
-// edges only at junction mouths, road ends and authored crosswalks (or where a
-// footpath runs straight across a road). Walkers path-find on this graph.
+// Pure sidewalk and footpath network used for pedestrian routing and street rendering.
 import {motorRoads, CROSSWALKS} from '../astra/traffic-simulation.js';
 import {REGIONAL} from './regional.js';
+import {WALK_GAP, ZEBRA_HALF_WIDTH, addScaled, direction, dot, midpoint, minus as sub, normal as perp, crossingRoad, spansCurbs, inJunction} from './crosswalks.js';
 
-export const SIDEWALK = Object.freeze({gap: .55, crossingCost: 6, crossingWeight: 1.6, corridor: .9});
-const sub = (a, b) => [a[0] - b[0], a[1] - b[1]];
-const len = (v) => Math.hypot(v[0], v[1]);
+export const SIDEWALK = Object.freeze({gap: WALK_GAP, crossingCost: 6, crossingWeight: 1.6, corridor: .9});
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
-const unit = (v) => { const l = len(v) || 1; return [v[0] / l, v[1] / l]; };
-const perp = (d) => [-d[1], d[0]];
 export function segDistance(p, a, b) {
   const dx = b[0] - a[0], dz = b[1] - a[1], t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dz) / (dx * dx + dz * dz || 1)));
   return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dz);
@@ -43,18 +33,67 @@ function grid(items, boxOf, cell = 8) {
   items.forEach((it, i) => { const [x0, z0, x1, z1] = boxOf(it); for (let x = Math.floor(x0 / cell); x <= Math.floor(x1 / cell); x++) for (let z = Math.floor(z0 / cell); z <= Math.floor(z1 / cell); z++) { const k = `${x},${z}`; if (!map.has(k)) map.set(k, []); map.get(k).push(i); } });
   return (p, r = 0) => { const s = new Set(); for (let x = Math.floor((p[0] - r) / cell); x <= Math.floor((p[0] + r) / cell); x++) for (let z = Math.floor((p[1] - r) / cell); z <= Math.floor((p[1] + r) / cell); z++) for (const i of map.get(`${x},${z}`) || []) s.add(i); return [...s].map((i) => items[i]); };
 }
-export function surfaceIndex(surfaces) {
-  const near = grid(surfaces, (s) => [Math.min(s.a[0], s.b[0]) - s.hw - 2, Math.min(s.a[1], s.b[1]) - s.hw - 2, Math.max(s.a[0], s.b[0]) + s.hw + 2, Math.max(s.a[1], s.b[1]) + s.hw + 2]);
+export function surfaceIndex(surfaces, turningCircles = []) {
+  const near = grid([...surfaces, ...turningCircles], (s) => [Math.min(s.a[0], s.b[0]) - s.hw - 2, Math.min(s.a[1], s.b[1]) - s.hw - 2, Math.max(s.a[0], s.b[0]) + s.hw + 2, Math.max(s.a[1], s.b[1]) + s.hw + 2]);
   // Depth inside the asphalt (positive = inside), over every surface piece.
   const depth = (p) => { let best = -Infinity; for (const s of near(p)) best = Math.max(best, s.hw - segDistance(p, s.a, s.b)); return best; };
   return {near, depth, inside: (p, tol = 0) => depth(p) > tol};
 }
 
+// Trace a short gap around the road profile when an offset corner is too tight
+// for a straight sidewalk. Every candidate segment must clear the carriageway.
+function sidewalkDetour(a, b, clear) {
+  const step = .2, margin = 4;
+  const min = a.map((v, i) => Math.min(v, b[i]) - margin);
+  const max = a.map((v, i) => Math.max(v, b[i]) + margin);
+  const size = max.map((v, i) => Math.ceil((v - min[i]) / step));
+  const directions = [[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+  const queue = [{p: a, previous: null}], seen = new Set();
+  for (let index = 0; index < queue.length; index++) {
+    const node = queue[index];
+    if (dist(node.p, b) < .5 && clear(node.p, b)) {
+      const path = [b];
+      for (let next = node; next; next = next.previous) path.unshift(next.p);
+      const turns = [];
+      for (let i = 0; i < path.length - 1;) {
+        let j = path.length - 1;
+        while (j > i + 1 && !clear(path[i], path[j])) j--;
+        if (j < path.length - 1) turns.push(path[j]);
+        i = j;
+      }
+      return turns;
+    }
+    const origin = node.p.map((v, i) => Math.round((v - min[i]) / step));
+    for (const [dx, dz] of directions) {
+      const x = origin[0] + dx, z = origin[1] + dz, key = x + size[0] * z;
+      if (x < 0 || z < 0 || x >= size[0] || z >= size[1] || seen.has(key)) continue;
+      const p = [min[0] + x * step, min[1] + z * step];
+      if (!clear(node.p, p)) continue;
+      seen.add(key);
+      queue.push({p, previous: node});
+    }
+  }
+  return null;
+}
+
 export function buildPedestrianGraph(town) {
-  const surfaces = roadSurfaces(town), index = surfaceIndex(surfaces);
+  const surfaces = roadSurfaces(town);
+  const turningCircles = (town.roads.flatMap((road) => road.ends ?? []))
+    .filter((end) => end.terminus && !end.touches)
+    .map(({pos}) => ({a: pos, b: pos, hw: REGIONAL.turnRadius, source: 'regional', turningCircle: true}));
+  const index = surfaceIndex(surfaces, turningCircles);
   const nodes = [], edges = [], crossings = [], kerbs = [];
   const add = (pos, kind) => { nodes.push({pos: pos.map((v) => +v.toFixed(4)), kind}); edges.push([]); return nodes.length - 1; };
-  const link = (a, b, crossing = false) => { if (a === b || a < 0 || b < 0 || edges[a].some((e) => e.to === b)) return; const w = dist(nodes[a].pos, nodes[b].pos); const cost = crossing ? w * SIDEWALK.crossingWeight + SIDEWALK.crossingCost : w; edges[a].push({to: b, cost, crossing}); edges[b].push({to: a, cost, crossing}); if (crossing) crossings.push([a, b]); };
+  const link = (a, b, {road, sidewalk = nodes[a]?.kind === 'kerb' && nodes[b]?.kind === 'kerb'} = {}) => {
+    if (a === b || a === null || b === null || edges[a].some((e) => e.to === b)) return;
+    const length = dist(nodes[a].pos, nodes[b].pos);
+    const crossing = Boolean(road);
+    const cost = crossing ? length * SIDEWALK.crossingWeight + SIDEWALK.crossingCost : length;
+    const traits = {cost, crossing, sidewalk: sidewalk && !crossing, ...(road && {road})};
+    edges[a].push({to: b, ...traits});
+    edges[b].push({to: a, ...traits});
+    if (crossing) crossings.push([a, b]);
+  };
 
   // 1) Road graph: merge near-coincident ends (authored 1-2 m jogs become one
   // junction) and split pieces at T-touches and crossings.
@@ -70,14 +109,15 @@ export function buildPedestrianGraph(town) {
   const legs = [];
   for (const s of raw) {
     s.cuts.sort((p, q) => dist(p, s.a) - dist(q, s.a));
-    for (let k = 1; k < s.cuts.length; k++) { const a = pointId(s.cuts[k - 1], s.source), b = pointId(s.cuts[k], s.source); if (a !== b && !legs.some((l) => (l.a === a && l.b === b) || (l.a === b && l.b === a))) legs.push({a, b, hw: s.hw, source: s.source}); }
+    for (let k = 1; k < s.cuts.length; k++) { const a = pointId(s.cuts[k - 1], s.source), b = pointId(s.cuts[k], s.source); if (a !== b && !legs.some((l) => (l.a === a && l.b === b) || (l.a === b && l.b === a))) legs.push({a, b, start: s.cuts[k - 1], end: s.cuts[k], hw: s.hw, source: s.source}); }
   }
-  legs.forEach((l, i) => { for (const [from, to] of [[l.a, l.b], [l.b, l.a]]) { const d = unit(sub(pts[to].p, pts[from].p)); pts[from].arms.push({leg: i, to, d, off: l.hw + SIDEWALK.gap, angle: Math.atan2(d[1], d[0])}); } });
+  legs.forEach((l, i) => { for (const [from, to] of [[l.a, l.b], [l.b, l.a]]) { const d = direction(pts[from].p, pts[to].p); pts[from].arms.push({leg: i, to, d, off: l.hw + SIDEWALK.gap, angle: Math.atan2(d[1], d[0])}); } });
   // 2) Corner points between consecutive arms; dead ends get two kerb points.
-  const crosswalkAt = (p) => CROSSWALKS.some((c) => dist(c.point, p) < 1.2);
   for (const pt of pts) {
     pt.arms.sort((a, b) => a.angle - b.angle);
     const n = pt.arms.length; pt.corner = [];
+    const circle = n === 1 && turningCircles.find(({a}) => dist(a, pt.p) < .05);
+    if (circle) pt.arms[0].off = circle.hw + WALK_GAP;
     for (let k = 0; k < n; k++) {
       const a = pt.arms[k], b = pt.arms[(k + 1) % n];
       const pa = [pt.p[0] + perp(a.d)[0] * a.off, pt.p[1] + perp(a.d)[1] * a.off], pb = [pt.p[0] - perp(b.d)[0] * b.off, pt.p[1] - perp(b.d)[1] * b.off];
@@ -88,39 +128,120 @@ export function buildPedestrianGraph(town) {
       else c = lineIntersect(pa, a.d, pb, b.d); // inner corner, or the outer miter of a bend
       if (c && dist(c, pt.p) > 3 * Math.max(a.off, b.off)) c = null;
       if (c) { const id = add(c, 'kerb'); pt.corner.push({left: id, right: id}); }
-      else { const l = add(pa, 'kerb'), r = add(pb, 'kerb'); if (n > 1) link(l, r); pt.corner.push({left: l, right: r}); } // at a dead end the pair is joined by a crossing below
+      else {
+        const l = add(pa, 'kerb'), r = add(pb, 'kerb');
+        if (n > 1) kerbs.push([l, r]);
+        else {
+          // Continue both sidewalks around the carriageway's rounded end.
+          let previous = l;
+          for (let step = 1; step < 6; step++) {
+            const angle = a.angle + Math.PI / 2 + Math.PI * step / 6;
+            const next = add(addScaled(pt.p, [Math.cos(angle), Math.sin(angle)], a.off), 'kerb');
+            kerbs.push([previous, next]);
+            previous = next;
+          }
+          kerbs.push([previous, r]);
+        }
+        pt.corner.push({left: l, right: r});
+      }
     }
-    // Crossing edges across each arm mouth: at junctions, corners, dead ends
-    // and painted crosswalks; never mid-block on a straight road.
-    const straight = n === 2 && Math.abs(Math.abs(pt.arms[1].angle - pt.arms[0].angle) - Math.PI) < .35;
-    if (n === 1) link(pt.corner[0].left, pt.corner[0].right, true);
-    else if (!straight || crosswalkAt(pt.p)) for (let k = 0; k < n; k++) link(pt.corner[(k - 1 + n) % n].right, pt.corner[k].left, true);
   }
   // 3) Kerb edges along each leg, both sides.
-  for (const l of legs) {
-    const A = pts[l.a], B = pts[l.b], ka = A.arms.findIndex((a) => a.leg === legs.indexOf(l) && a.to === l.b), kb = B.arms.findIndex((a) => a.leg === legs.indexOf(l) && a.to === l.a);
+  legs.forEach((l, legId) => {
+    const A = pts[l.a], B = pts[l.b];
+    const ka = A.arms.findIndex((a) => a.leg === legId), kb = B.arms.findIndex((a) => a.leg === legId);
     const na = A.arms.length, nb = B.arms.length;
     // Left of A->B (+perp) is corner k at A and corner k-1 at B.
     const aLeft = A.corner[ka].left, aRight = A.corner[(ka - 1 + na) % na].right;
     const bLeft = B.corner[(kb - 1 + nb) % nb].right, bRight = B.corner[kb].left;
-    for (const [p, q] of [[aLeft, bLeft], [aRight, bRight]]) kerbs.push([p, q]);
-  }
-  // Authored crosswalks part-way along a leg.
+    l.kerbs = [kerbs.length, kerbs.length + 1];
+    kerbs.push([aLeft, bLeft], [aRight, bRight]);
+  });
   const kerbSplits = kerbs.map(() => []);
-  for (const c of CROSSWALKS) {
-    const leg = legs.find((l) => segDistance(c.point, pts[l.a].p, pts[l.b].p) < .3); if (!leg) continue;
-    const d = unit(sub(pts[leg.b].p, pts[leg.a].p)), o = leg.hw + SIDEWALK.gap;
-    const l = add([c.point[0] + perp(d)[0] * o, c.point[1] + perp(d)[1] * o], 'kerb'), r = add([c.point[0] - perp(d)[0] * o, c.point[1] - perp(d)[1] * o], 'kerb');
-    link(l, r, true); for (const id of [l, r]) attach(id);
+  const clear = (a, b, tolerance = .005) => {
+    const steps = Math.max(1, Math.ceil(dist(a, b) / .15));
+    const d = sub(b, a);
+    for (let i = 0; i <= steps; i++) if (index.inside(addScaled(a, d, i / steps), tolerance)) return false;
+    return true;
+  };
+  const kerbStation = (p, id) => {
+    const [u, v] = kerbs[id], a = nodes[u].pos, b = nodes[v].pos, d = sub(b, a);
+    return dot(sub(p, a), d) / (dot(d, d) || 1);
+  };
+  const placed = [];
+  function placeCrossing(leg, station, spacing = 2.2) {
+    const d = direction(leg.start, leg.end), length = dist(leg.start, leg.end);
+    if (station < ZEBRA_HALF_WIDTH || station > length - ZEBRA_HALF_WIDTH) return false;
+    const center = addScaled(leg.start, d, station), offset = leg.hw + WALK_GAP;
+    if (placed.some((p) => dist(p, center) < spacing)) return false;
+    const landings = [addScaled(center, perp(d), offset), addScaled(center, perp(d), -offset)];
+    const road = crossingRoad(index, ...landings);
+    if (!road || !spansCurbs(index, road, ...landings) || inJunction(index, road, ...landings)) return false;
+    if (!landings.every((p, side) => {
+      const id = leg.kerbs[side], [u, v] = kerbs[id], a = nodes[u].pos, b = nodes[v].pos;
+      const t = kerbStation(p, id);
+      return t > .001 && t < .999 && segDistance(p, a, b) < 1.2 && clear(a, p) && clear(p, b);
+    })) return false;
+    const ids = landings.map((p, side) => {
+      const id = add(p, 'kerb');
+      kerbSplits[leg.kerbs[side]].push(id);
+      return id;
+    });
+    link(...ids, {road});
+    placed.push(center);
+    return true;
   }
-  function attach(id) { // split the nearest kerb edge at node id
-    let best = -1, bd = 1.2; kerbs.forEach(([p, q], i) => { const d = segDistance(nodes[id].pos, nodes[p].pos, nodes[q].pos); if (d < bd) { bd = d; best = i; } });
-    if (best >= 0) { kerbSplits[best].push(id); return true; }
-    let near = -1, nd = 5.2; nodes.forEach((n, i) => { if (i !== id && n.kind === 'kerb') { const d = dist(n.pos, nodes[id].pos); if (d < nd) { nd = d; near = i; } } });
-    if (near >= 0) { link(id, near); return true; } return false;
+  // A road can contain several short straight pieces near an intersection.
+  // Follow the arm past those samples, stopping at the next turn or junction.
+  function crossArm(junction, first) {
+    const firstLeg = legs[first.leg], end = Number(pts[firstLeg.b] === junction);
+    const start = end ? firstLeg.end : firstLeg.start;
+    const mouth = Math.max(firstLeg.hw, ...firstLeg.kerbs.map((id) => dot(sub(nodes[kerbs[id][end]].pos, start), first.d)));
+    const min = mouth + 1.05, max = mouth + 4;
+    let arm = first, travelled = 0;
+    while (arm && travelled < max) {
+      const leg = legs[arm.leg], length = dist(leg.start, leg.end), forward = leg.b === arm.to;
+      const firstStation = Math.max(ZEBRA_HALF_WIDTH + .1, min - travelled);
+      const lastStation = Math.min(length - ZEBRA_HALF_WIDTH - .1, max - travelled);
+      for (let station = firstStation; station <= lastStation; station += .3) {
+        if (placeCrossing(leg, forward ? station : length - station)) return;
+      }
+      const next = pts[arm.to];
+      const continuation = next.arms.length === 2 && next.arms.find((a) => a.leg !== arm.leg && dot(a.d, first.d) > .995);
+      travelled += length;
+      arm = continuation;
+    }
   }
-  // 4) Footpaths: every town-graph edge that is not a carriageway, clipped at
-  // the kerb line. A path that runs straight across a road gets a crossing.
+  for (const pt of pts) {
+    if (pt.arms.length >= 3) for (const arm of pt.arms) crossArm(pt, arm);
+  }
+  function crossingNear(p, maxOffset, spacing) {
+    for (const leg of legs.filter((l) => segDistance(p, l.start, l.end) < maxOffset)) {
+      const station = dot(sub(p, leg.start), direction(leg.start, leg.end));
+      if (placeCrossing(leg, station, spacing)) return;
+    }
+  }
+  for (const c of CROSSWALKS) crossingNear(c.point, .3, 3);
+
+  function attach(id) {
+    const p = nodes[id].pos;
+    let best = null, distance = 4.5;
+    kerbs.forEach(([u, v], i) => {
+      const a = nodes[u].pos, b = nodes[v].pos;
+      const t = Math.max(0, Math.min(1, kerbStation(p, i)));
+      const q = addScaled(a, sub(b, a), t);
+      const d = dist(p, q);
+      if (d >= distance || !clear(p, q)) return;
+      best = {i, q, endpoint: t === 0 ? u : t === 1 ? v : null};
+      distance = d;
+    });
+    if (!best) return;
+    const kerb = best.endpoint ?? add(best.q, 'kerb');
+    if (best.endpoint === null) kerbSplits[best.i].push(kerb);
+    link(id, kerb);
+  }
+  // 4) Clip footpaths at the kerb. A path on both sides can request a
+  // perpendicular crossing if the nearby carriageway has room for one.
   const kerbZone = (p) => index.depth(p) > -SIDEWALK.gap + .02;
   const onAxis = (p, q) => index.near(p).some((s) => segDistance(p, s.a, s.b) < .06 && segDistance(q, s.a, s.b) < .06 && segDistance([(p[0] + q[0]) / 2, (p[1] + q[1]) / 2], s.a, s.b) < .06);
   const pathNode = new Map(), pathKey = (p) => p.map((v) => v.toFixed(3)).join(',');
@@ -132,35 +253,37 @@ export function buildPedestrianGraph(town) {
     for (let k = 1; k <= steps; k++) {
       const p = k === steps ? B : [A[0] + (B[0] - A[0]) * k / steps, A[1] + (B[1] - A[1]) * k / steps], inside = kerbZone(p);
       if (inside && !prevIn) { const id = pnode(prev); link(run, id); attach(id); entered = id; run = null; }
-      if (!inside && prevIn) { const id = pnode(p); attach(id); if (entered !== null) link(entered, id, true); entered = null; run = id; }
+      if (!inside && prevIn) { const id = pnode(p); attach(id); if (entered !== null) crossingNear(midpoint(nodes[entered].pos, nodes[id].pos), .6, 5); entered = null; run = id; }
       if (k === steps && !inside) link(run, pnode(B));
       prev = p; prevIn = inside;
     }
   } });
   // 5) Materialise split kerb edges.
   kerbs.forEach(([p, q], i) => {
-    const chain = [p, ...kerbSplits[i].sort((a, b) => dist(nodes[a].pos, nodes[p].pos) - dist(nodes[b].pos, nodes[p].pos)), q];
+    const chain = [p, ...kerbSplits[i].sort((a, b) => kerbStation(nodes[a].pos, i) - kerbStation(nodes[b].pos, i)), q];
     for (let k = 1; k < chain.length; k++) link(chain[k - 1], chain[k]);
   });
-  // 5b) Relax: authored 1-2 m jogs and mixed widths can leave a kerb point or
-  // edge clipping a neighbouring carriageway. Push such points out to the kerb
-  // line, and bend clipping edges around the asphalt with extra points.
-  const outward = (p) => {
-    for (let k = 0; k < 6; k++) {
-      const d0 = index.depth(p); if (d0 <= -SIDEWALK.gap + .03) break;
-      const e = .05, g = [index.depth([p[0] + e, p[1]]) - index.depth([p[0] - e, p[1]]), index.depth([p[0], p[1] + e]) - index.depth([p[0], p[1] - e])], u = unit(g);
-      if (!len(g)) break; const step = d0 + SIDEWALK.gap + .01; p = [p[0] - u[0] * step, p[1] - u[1] * step];
+  // 5b) Miters near mixed-width or closely spaced roads can clip asphalt.
+  // Move those corners to clear ground, then detour the affected links locally.
+  nodes.forEach((node, id) => {
+    const p = node.pos;
+    if (node.kind !== 'kerb' || edges[id].some((e) => e.crossing) || !index.inside(p, -.1)) return;
+    for (let r = .1; r <= 5; r += .1) {
+      for (let j = 0; j < 24; j++) {
+        const angle = j * Math.PI / 12, q = addScaled(p, [Math.cos(angle), Math.sin(angle)], r);
+        if (!index.inside(q, -.12)) { node.pos = q.map((v) => +v.toFixed(4)); return; }
+      }
     }
-    return p.map((v) => +v.toFixed(4));
-  };
-  nodes.forEach((n) => { if (n.kind === 'kerb' && index.depth(n.pos) > -SIDEWALK.gap + .03) n.pos = outward(n.pos); });
-  const clips = (a, b) => { for (let k = 1; k < 12; k++) { const p = [a[0] + (b[0] - a[0]) * k / 12, a[1] + (b[1] - a[1]) * k / 12]; if (index.depth(p) > -.05) return p; } return null; };
-  // Bounded: each pass only revisits nodes that existed when it started, so
-  // overlapping asphalt (e.g. the old stacked regional ribbons) cannot grow it forever.
-  for (let pass = 0; pass < 3; pass++) for (let u = 0, n0 = nodes.length; u < n0; u++) for (const e of [...edges[u]]) {
-    if (e.to < u || e.crossing) continue; const hit = clips(nodes[u].pos, nodes[e.to].pos); if (!hit) continue;
-    const v = e.to, m = add(outward(hit), 'kerb');
-    edges[u] = edges[u].filter((x) => x.to !== v); edges[v] = edges[v].filter((x) => x.to !== u); link(u, m); link(m, v);
+  });
+  for (let u = 0, count = nodes.length; u < count; u++) for (const edge of [...edges[u]]) {
+    const v = edge.to, a = nodes[u].pos, b = nodes[v].pos;
+    if (v <= u || edge.crossing || clear(a, b)) continue;
+    edges[u] = edges[u].filter((e) => e.to !== v);
+    edges[v] = edges[v].filter((e) => e.to !== u);
+    const detour = sidewalkDetour(a, b, clear);
+    if (!detour) continue;
+    const chain = [u, ...detour.map((p) => add(p, edge.sidewalk ? 'kerb' : 'path')), v];
+    for (let i = 1; i < chain.length; i++) link(chain[i - 1], chain[i], {sidewalk: edge.sidewalk});
   }
   // 6) Map town nodes onto the walk graph.
   const nearNode = grid(nodes, (n) => [n.pos[0], n.pos[1], n.pos[0], n.pos[1]], 6);

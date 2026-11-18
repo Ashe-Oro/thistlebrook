@@ -1,10 +1,11 @@
+import {TOWN_RULE} from '../src/compiler/town-rules.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {compileWorld as compileAstra} from '../src/compiler/world-plan.js';
 import { shortestPath, pointInTown } from '../src/compiler/astra.js';
 import { resolveAll } from '../src/catalog/resolve-all.js';
-import { bowlPose, bikePose, streetPose, bowlHeight } from '../src/astra/skatepark-motion.js';
+import { bowlPose, bikePose, streetPose, bowlHeight, rampHeight } from '../src/astra/skatepark-motion.js';
 const catalog=resolveAll(JSON.parse(readFileSync(new URL('../src/catalog/bounds.json',import.meta.url))));
 const samplers=[t=>bowlPose(t,0),t=>bowlPose(t,1),streetPose,t=>bikePose(t,0),t=>bikePose(t,1)];
 test('park entrance is inside its reserved parcel and reachable from every home',()=>{
@@ -31,7 +32,9 @@ test('riders stay in the parcel, never teleport, and complete their activities',
 });
 
 // grok-merge: the pump track is built up on the dirt pad, never carved into it.
-test('pump track surface, lips and rollers sit at or above the pad; bikes ride the surface', async () => {
+test(`${TOWN_RULE.surface} pump track surface, lips and rollers sit at or above the pad; bikes ride the surface`, async () => {
+ for(let i=0;i<=28;i++)assert(bowlHeight(4.6*i/28)>=.17,'bowl clears park pavement');
+ for(let i=0;i<=20;i++)assert(rampHeight(i/10)>=.22,'quarter pipe clears the street deck');
  const { PUMP, pumpHeight, pumpSurface } = await import('../src/astra/skatepark-motion.js');
  let min = Infinity;
  for (let i = 0; i <= 720; i++) {

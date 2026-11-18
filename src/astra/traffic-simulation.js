@@ -12,12 +12,13 @@ export const TRAFFIC_STOPS = [
  {id:'town-hall',name:'Town Hall',point:[-57,4],side:[0,-1]},
 ];
 export const WEST_STOPS=[{id:'union-station',name:'Union Station',point:[-88,-139],side:[0,1]},{id:'civic-green',name:'Civic Green',point:[-90,-77],side:[0,1]},{id:'sunbeam',name:'Sunbeam Terrace',point:[-126,-33],side:[0,-1]},{id:'market-gardens',name:'Market Gardens',point:[-115,-119],side:[1,0]}];
+// Candidate locations. The walk graph places them only where both curbs connect.
 export const CROSSWALKS = [
- {point:[-94,-77],axis:'x'}, {point:[-132,-33],axis:'x'}, {point:[-100,-139],axis:'x'},
- {point:[-62,-16],axis:'x'}, {point:[-48,-8],axis:'z'},
- {point:[-61,4],axis:'x'}, {point:[-22,-25],axis:'z'},
- {point:[1,-33],axis:'x'}, {point:[28,-33],axis:'x'},
- {point:[22,-7],axis:'z'}, {point:[46,-1],axis:'z'},
+ {point:[-94,-77]}, {point:[-132,-33]}, {point:[-100,-139]},
+ {point:[-48,-8]},
+ {point:[-61,4]}, {point:[-22,-25]},
+ {point:[1,-33]}, {point:[28,-33]},
+ {point:[22,-7]}, {point:[46,-1]},
 ];
 // Parked cars sit in marked bays beside the street, beyond the sidewalk, never
 // on a drive lane (grok-roads). yaw is the car's heading; length runs along it.
@@ -123,7 +124,7 @@ export function createTrafficSimulation(town) {
    Object.assign(v,sampleLane(v.path,v.distance));
   }
  }
- return {roads,routes,vehicles,junctions,events,stops:[...TRAFFIC_STOPS,...WEST_STOPS],crosswalks:CROSSWALKS,
+ return {roads,routes,vehicles,junctions,events,stops:[...TRAFFIC_STOPS,...WEST_STOPS],
   update(dt,pedestrians=[]){if(!Number.isFinite(dt)||dt<=0)return;let left=Math.min(dt,1);while(left>1e-8){const step=Math.min(left,1/30);tick(step,pedestrians);left-=step;}},
   audit(){return {time:+time.toFixed(2),vehicles:vehicles.map(({id,kind,position,speed,status,visits,stoppedAt})=>({id,kind,position:[...position],speed,status,visits,stoppedAt})),events:structuredClone(events)};}
  };

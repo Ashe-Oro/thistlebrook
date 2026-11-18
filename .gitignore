@@ -27,5 +27,8 @@ shots/grok-skins/.frames/
 .vercel/
 .env*
 
+# Tesla reference photos: local modelling refs only (see docs/specs/tesla-refs/SOURCES.md).
+docs/specs/tesla-refs/*.jpg
+
 # GitHub snapshot (tools/publish-main.sh): kept local only
 /shots/

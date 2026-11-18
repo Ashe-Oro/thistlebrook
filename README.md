@@ -1,5 +1,7 @@
 # Thistlebrook — a little place to linger
 
+Add Ashe’s design feedback as a rule and an automated check. See [Contributing](CONTRIBUTING.md) and [Town Rules](docs/TOWN-RULES.md).
+
 The default page opens Downtown: a bakery, shoe shop, café, bookshop and other
 local shops around a flowing fountain. The wider cel-shaded town includes
 Willowbank’s homes, Thistlebrook High’s schoolyard, baseball and football stadium,

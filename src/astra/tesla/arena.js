@@ -22,8 +22,8 @@ export function createDemoArena(parent,{residents=null}={}){
  };
  const ink='#304b4c',cream='#eee3c4',amber='#d7aa55',steel='#6f8985';
  box(0,-1.25,0,46,2.5,42,'#b1b98d');box(0,.09,0,44,.18,40,cream);box(0,.205,0,42.8,.07,38.8,'#607477');
- // A real visible connection to the existing campus walk, without crossing a road.
- box(25.5,-.35,-7,7,.7,3.2,'#a7b697');box(25.5,.12,-7,7,.24,2.5,cream);
+ // The east world-link road meets the lot edge directly; no connector slab
+ // (it used to lie across that road's crosswalk and asphalt).
  for(const side of [-1,1]){box(side*21.65,.36,0,.22,.3,39.5,cream);box(0,.36,side*19.7,43.5,.3,.22,cream);}
  for(let z=-5;z<10;z+=2.3)box(-13,.25,z,.12,.02,1,cream);
  // Continuous curved surface with illuminated edges; 185 degrees curls past vertical.

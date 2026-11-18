@@ -1,3 +1,4 @@
+import {TOWN_RULE} from '../src/compiler/town-rules.js';
 import {cozyBenchSeats} from '../src/astra/registry/asset-points.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -13,13 +14,13 @@ import {buildLifeRegistry} from '../src/astra/life/registry.js';
 import {FAIR_SLOTS,fairApproach} from '../src/astra/registry/district-activities.js';
 const catalog=resolveAll(JSON.parse(readFileSync(new URL('../src/catalog/bounds.json',import.meta.url))));
 
-test('eighteen-district model coverage, rest-stop access and canonical asset metadata across seeds',()=>{
+test(`${TOWN_RULE.access} eighteen-district model coverage, rest-stop access and canonical asset metadata across seeds`,()=>{
  for(const spec of sceneData.districtScenes)assert.equal(groupAssets('public-stop-'+spec.district).length,3);
  for(const seed of [0,1,17,42,99,831,9999]){
   const town=compileWorld(catalog,seed),r=createWorldRegistry(town),coverage=registryCoverage(town,catalog);
   assert.deepEqual(registryErrors(town),[]);assert.deepEqual(coverage.missing,[]);assert.equal(coverage.registeredModels,coverage.placedModels);assert.equal(coverage.ownedModels,634);
   for(const p of town.modelPlacements){const record=r.findPlace(p.id);assert(record.canonicalAsset,`${p.id}: canonical model`);assert(record.size.every(n=>Number.isFinite(n)&&n>0));assert(record.assetMetadata.type);assert(Array.isArray(record.interactionPoints));assert(record.activity);}
-  const stops=town.catalogScenes.filter(s=>s.id.startsWith('stop-'));assert.equal(stops.length,9);assert.equal(new Set(stops.map(s=>s.district)).size,9);
+  const stops=town.catalogScenes.filter(s=>s.id.startsWith('stop-'));assert.equal(stops.length,8);assert.equal(new Set(stops.map(s=>s.district)).size,8);assert(!stops.some(s=>s.district==='roadster'),'No rest stop at the Roadster proving ground');
   for(const s of stops){
    assert.deepEqual(checkScene(s),[]);assert.equal(s.members.length,3);assert.equal(s.slots.length,1);
    for(const m of town.modelPlacements){const box={min:[m.pos[0]-m.size[0]/2,m.pos[1]-m.size[2]/2],max:[m.pos[0]+m.size[0]/2,m.pos[1]+m.size[2]/2]};assert(!overlap(s.box,box,.15),s.id+' overlaps '+m.id);}

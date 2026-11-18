@@ -1,9 +1,10 @@
+import {TOWN_RULE} from '../src/compiler/town-rules.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { createTeslaVehicle, TESLA_STYLES } from '../src/astra/tesla/models.js';
 import { roadsterPose, ROADSTER_PERIOD, createPreviewLoop, createPreviewFleetSimulation } from '../src/astra/tesla/motion.js';
-import { DEMO, RAMP, LINEUP, STUNT_SEAMS, HOVER_PAD, ROW_AXIS, lineupApexTime } from '../src/astra/tesla/demo-motion.js';
+import { DEMO, RAMP, LINEUP, STUNT_SEAMS, HOVER_PAD, ROW_AXIS, lineupApexTime, rampContact } from '../src/astra/tesla/demo-motion.js';
 import { installTeslaTraffic } from '../src/astra/tesla/adapter.js';
 import { createTeslaTown } from '../src/astra/tesla/index.js';
 import { compileAstra, distanceToSegment } from '../src/compiler/astra.js';
@@ -26,6 +27,11 @@ test('two inverted ramp holds, rolling kickflip, standing flip and upright landi
  for(const t of [34,54,62,70,86])assert(up(roadsterPose(t)).y>.999);
  assert(up(roadsterPose(lineupApexTime())).y<-.95);assert(up(roadsterPose(66.85)).y<-.9);
  for(let t=64;t<70;t+=.05){const p=roadsterPose(t);assert.equal(p.localX,HOVER_PAD.x);assert.equal(p.localZ,HOVER_PAD.z);assert(p.thrust>0);}
+});
+
+test(`${TOWN_RULE.surface} the Roadster ramp sits on and rises from the lot surface`, () => {
+ assert.equal(rampContact(0).y, DEMO.ground);
+ for (let step = 0; step <= 80; step++) assert(rampContact(RAMP.end * step / 80).y >= DEMO.ground);
 });
 
 test('actual Roadster mesh clears all five parked vehicles and the lot floor',()=>{
@@ -112,4 +118,25 @@ test('scene system creates exactly one Roadster, freezes at identical time, and 
  tesla.update(12);const before=tesla.audit();tesla.update(12);assert.deepEqual(tesla.audit(),before);assert.equal(before.roadster.count,1);assert(before.roadster.altitude>8);assert.equal(before.arena.lineup.length,5);
  const sameScene=new THREE.Scene(),trafficRoot=new THREE.Group();sameScene.add(trafficRoot);const vehicles=[{id:0,kind:'car',width:.88,length:1.85,distance:0,speed:1}];const original=new THREE.Group();trafficRoot.add(original);const integrated=createTeslaTown(sameScene,town,{traffic:{root:trafficRoot,objects:[original],simulation:{vehicles}}});assert.equal(integrated.simulation,null);assert(Math.abs(integrated.roadster.object.position.y-(DEMO.ground+.05))<1e-8);assert.equal(integrated.audit().mode,'traffic-adapter');integrated.dispose();assert.deepEqual(trafficRoot.children,[original]);
  tesla.dispose();assert.equal(scene.children.length,0);
+});
+
+test('lineup look-alikes: per-vehicle budgets and recognisable proportions',()=>{
+ const built=Object.fromEntries(LINEUP.map(v=>[v.kind,createTeslaVehicle(v.kind,{color:v.color})]));
+ for(const [kind,o] of Object.entries(built)){
+  let meshes=0,triangles=0;o.traverse(m=>{if(m.isMesh){meshes++;triangles+=(m.geometry.index?.count??m.geometry.attributes.position.count)/3;}});
+  assert(triangles<=3000,`${kind} triangles ${triangles}`);assert(meshes<=(kind==='semi'?10:8),`${kind} draw calls ${meshes}`);
+  assert(o.children[0].children[0].children.some(m=>m.userData.outline),`${kind} has an ink hull`);
+ }
+ const size=k=>new THREE.Box3().setFromObject(built[k]).getSize(new THREE.Vector3());
+ // Real length order: Cybercab < Model 3 <= Model Y < Cybertruck < Semi cab.
+ assert(size('cybercab').z<size('sedan').z&&size('sedan').z<=size('crossover').z&&size('crossover').z<size('cybertruck').z&&size('cybertruck').z<size('semi').z);
+ // Model Y is visibly taller than Model 3; the Semi towers over everything.
+ assert(size('crossover').y-size('sedan').y>.15);assert(size('semi').y>1.8*size('sedan').y);
+ Object.values(built).forEach(o=>o.userData.dispose());
+});
+
+test('arena leaves the east world-link road clear (no connector slab over the crosswalk)',()=>{
+ const scene=new THREE.Scene(),tesla=createTeslaTown(scene,town);scene.updateMatrixWorld(true);
+ const box=new THREE.Box3();tesla.arena.root.traverse(o=>{if(o.isMesh&&!o.userData.kind&&o.parent===tesla.arena.root&&o.geometry.attributes.position){o.geometry.computeBoundingBox();box.union(o.geometry.boundingBox);}});
+ assert(box.max.x<=23.01,`Arena geometry reaches local x ${box.max.x}`);tesla.dispose();
 });

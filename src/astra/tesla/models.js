@@ -1,16 +1,16 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { toonMaterial, outlineMaterial } from '../../toon.js';
-import { createTeslaSemi } from './semi.js';
+import { createLineupVehicle } from './lineup-models.js';
 
 // Original, logo-free toy proportions. +Z is forward; origin is the ground
 // contact point. No asset loading, timers, scene ownership or traffic logic.
 export const TESLA_STYLES = Object.freeze({
-  sedan: { name: 'Pearl fastback', color: '#e9e5d9', width: 1.08, length: 2.3, height: .96 },
-  crossover: { name: 'Blue crossover', color: '#568baf', width: 1.12, length: 2.36, height: 1.08 },
-  cybercab: { name: 'Golden Cybercab', color: '#dfba69', width: 1.08, length: 2.3, height: .92 },
-  cybertruck: { name: 'Silver wedge truck', color: '#aebfbd', width: 1.14, length: 2.5, height: 1.04 },
-  semi: { name: 'Tesla Semi look-alike', color: '#eeeadd', width:1.5, length:4.5, height:2.5 },
+  sedan: { name: 'Model 3 look-alike', color: '#2f4f86', width: 1.19, length: 2.31, height: .78 },
+  crossover: { name: 'Model Y look-alike', color: '#eceae3', width: 1.19, length: 2.35, height: 1.0 },
+  cybercab: { name: 'Cybercab look-alike', color: '#d6b46e', width: 1.09, length: 2.06, height: .78 },
+  cybertruck: { name: 'Cybertruck look-alike', color: '#b9c3c3', width: 1.25, length: 2.83, height: 1.0 },
+  semi: { name: 'Tesla Semi look-alike', color: '#eeeadd', width: 1.41, length: 3.51, height: 1.96 },
   roadster: { name: 'White Roadster', color: '#f2f0e7', width: 1.1, length: 2.36, height: .77 },
 });
 const INK = '#283e43', GLASS = '#294f60', RIM = '#a6bac0';
@@ -38,8 +38,8 @@ function pane(points) {
 }
 
 export function createTeslaVehicle(kind='sedan', { color, scale=1 }={}) {
-  if(kind==='semi')return createTeslaSemi({color,scale});
   const spec=TESLA_STYLES[kind];if(!spec)throw Error(`Unknown electric vehicle style: ${kind}`);
+  if(kind!=='roadster')return createLineupVehicle(kind,spec,{color,scale});
   const root=new THREE.Group();root.name=spec.name;root.scale.setScalar(scale);
   // Stunt rotations happen about the centre of mass, not the contact patch.
   const pivot=new THREE.Group();pivot.position.y=.43;root.add(pivot);

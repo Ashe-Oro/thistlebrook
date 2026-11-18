@@ -6,11 +6,11 @@ export const DEMO = Object.freeze({x:-65,z:-62,width:46,depth:42,ground:.24,carS
 export const RAMP = Object.freeze({x:-13,z:-6,radius:5.5,width:3.4,hold:165*Math.PI/180,end:185*Math.PI/180});
 export const ROW_AXIS=Object.freeze({z:1.5,firstX:-4,centerX:4,lastX:12});
 export const LINEUP = Object.freeze([
-  {kind:'cybercab',label:'CYBERCAB',x:-4,z:ROW_AXIS.z,color:'#e3bd65'},
-  {kind:'cybertruck',label:'CYBERTRUCK',x:0,z:ROW_AXIS.z,color:'#bbc9c8'},
+  {kind:'cybercab',label:'CYBERCAB',x:-4,z:ROW_AXIS.z,color:'#d6b46e'},
+  {kind:'cybertruck',label:'CYBERTRUCK',x:0,z:ROW_AXIS.z,color:'#b9c3c3'},
   {kind:'semi',label:'SEMI',x:4,z:ROW_AXIS.z,color:'#eeeadd'},
-  {kind:'crossover',label:'MODEL Y',x:8,z:ROW_AXIS.z,color:'#bd5348'},
-  {kind:'sedan',label:'MODEL 3',x:12,z:ROW_AXIS.z,color:'#426d98'},
+  {kind:'crossover',label:'MODEL Y',x:8,z:ROW_AXIS.z,color:'#b3322e'},
+  {kind:'sedan',label:'MODEL 3',x:12,z:ROW_AXIS.z,color:'#2f4f86'},
 ]);
 export const LINEUP_JUMP=Object.freeze({start:44,end:54,takeoffX:-7.4,landingX:18,z:ROW_AXIS.z,apexX:ROW_AXIS.centerX,apex:14});
 export const HOVER_PAD=Object.freeze({x:-4,z:15});

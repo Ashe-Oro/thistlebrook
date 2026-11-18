@@ -10026,24 +10026,6 @@
     "path": "fairground/road_midway_corner.glb"
   },
   {
-    "id": "model:themepark:95b98a03",
-    "asset": "cv-tree-pine",
-    "district": "themepark",
-    "pos": [
-      224.387304604752,
-      12.566578245488927
-    ],
-    "scale": 0.7936013373546302,
-    "rot": -1.740212048488678,
-    "size": [
-      3.5058912628871894,
-      5.5298144580576,
-      3.505891262887168
-    ],
-    "elevation": 0,
-    "path": "licensed/cozy-village/tree_pine_01.glb"
-  },
-  {
     "id": "model:themepark:95d2b2e9",
     "asset": "fairground/road_midway_4way",
     "district": "themepark",
@@ -11644,24 +11626,6 @@
       3.7298059617236845,
       6.506203830799036,
       3.7298059617236703
-    ],
-    "elevation": 0,
-    "path": "licensed/cozy-village/tree_pine_01.glb"
-  },
-  {
-    "id": "model:themepark:b4732240",
-    "asset": "cv-tree-pine",
-    "district": "themepark",
-    "pos": [
-      263.2474032707978,
-      11.475253047654405
-    ],
-    "scale": 0.8405033986084162,
-    "rot": 1.819935774700716,
-    "size": [
-      3.9106168533148775,
-      5.856628040930875,
-      3.9106168533148917
     ],
     "elevation": 0,
     "path": "licensed/cozy-village/tree_pine_01.glb"

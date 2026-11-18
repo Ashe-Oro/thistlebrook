@@ -7,10 +7,13 @@
 // crop per finding to shots/grok-roads/audit/<label>-<id>.png.
 import {readFileSync, writeFileSync, mkdirSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
+import {ROAD_RULE} from '../src/compiler/town-rules.js';
+import {auditPedestrianRules, auditTownLayout, auditFairLot} from './audit-town-rules.mjs';
+import {existsSync} from 'node:fs';
 const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const here = new URL('..', import.meta.url).pathname;
-/** Audit seed 831. `mutate(town)` lets tests inject faults after compiling. */
-export async function runAudit({root = here, label = 'after', mutate = null} = {}) {
+/** Audit seed 831. Mutation hooks let tests inject faults before checking. */
+export async function runAudit({root = here, label = 'after', mutate = null, mutateGraph = null} = {}) {
 root = root.replace(/\/$/, '') + '/';
 const imp = (p) => import(pathToFileURL(root + p).href), mine = (p) => import(pathToFileURL(here + p).href);
 const {resolveAll} = await imp('src/catalog/resolve-all.js');
@@ -19,9 +22,11 @@ const {riverZ} = await imp('src/compiler/astra.js');
 const sim = await imp('src/astra/traffic-simulation.js');
 const {roadSurfaces, surfaceIndex, buildPedestrianGraph, walkBetween, segDistance} = await mine('src/roads/pedestrian.js');
 const {insideLandscape} = await imp('src/compiler/landscape.js');
-const town = compileWorld(resolveAll(JSON.parse(readFileSync(root + 'src/catalog/bounds.json'))), 831);
+const catalog = resolveAll(JSON.parse(readFileSync(root + 'src/catalog/bounds.json')));
+const town = compileWorld(catalog, 831);
 if (mutate) mutate(town);
 const surfaces = roadSurfaces(town), index = surfaceIndex(surfaces), graph = buildPedestrianGraph(town);
+mutateGraph?.(graph);
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 const r1 = (p) => p.map((v) => +v.toFixed(1));
 // Regional pieces remember their chain so consecutive samples are "connected".
@@ -31,7 +36,7 @@ const findings = [];
 const add = (category, at, detail, status = 'open', reason = '') => {
   const near = findings.find((f) => f.category === category && dist(f.at, at) < 10 && f.status === status);
   if (near) { near.count++; return; }
-  findings.push({id: `${category}-${findings.length + 1}`, category, at: r1(at), detail, status, reason, count: 1});
+  findings.push({id: `${category}-${findings.length + 1}`, category, at: r1(at), detail, status, reason, count: 1, ...(ROAD_RULE[category] && {rule: ROAD_RULE[category]})});
 };
 const district = (p) => town.districts.reduce((a, b) => (dist(b.center, p) < dist(a.center, p) ? b : a)).id;
 const connectedAt = (A, B) => { const pts = []; for (const p of [A.a, A.b]) if (segDistance(p, B.a, B.b) < .1) pts.push(p); for (const p of [B.a, B.b]) if (segDistance(p, A.a, A.b) < .1) pts.push(p); return pts; };
@@ -105,15 +110,18 @@ for (const r of town.roads) {
     if (axis && best <= axis.hw * 1.6 + .5) add('path-on-road', at, `${r.kind} connector (${r.owner || r.external || 'town'}) meets the road axis, ${best.toFixed(1)} m under asphalt`, 'justified', 'Graph join at the road axis; walkers are clipped to the kerb and the path is drawn beneath the asphalt');
     else add('path-on-road', at, `${r.kind} path (${r.owner || r.external || 'town'}) runs ${best.toFixed(1)} m on asphalt`); }
 }
-// 6) Disconnected districts / walk network.
+// 6) Town design rules and disconnected districts / walk network.
+auditPedestrianRules(graph, add);
+if (existsSync(root + 'src/astra/fair-lot-plan.js')) auditFairLot(await imp('src/astra/fair-lot-plan.js'), add);
 {
   const seen = new Set([0]), q = [0]; for (let i = 0; i < q.length; i++) for (const n of town.edges[q[i]] || []) if (!seen.has(n)) { seen.add(n); q.push(n); }
+  auditTownLayout(town, catalog, seen, add);
   if (seen.size !== town.nodes.length) add('disconnected', town.nodes.find((_, i) => !seen.has(i)), `${town.nodes.length - seen.size} road-graph nodes unreachable`);
   const comp = new Int32Array(graph.nodes.length).fill(-1); let c = 0; const sizes = [];
   for (let i = 0; i < graph.nodes.length; i++) { if (comp[i] >= 0 || !graph.edges[i].length) continue; const qq = [i]; comp[i] = c; for (let k = 0; k < qq.length; k++) for (const e of graph.edges[qq[k]]) if (comp[e.to] < 0) { comp[e.to] = c; qq.push(e.to); } sizes.push([qq.length, graph.nodes[i].pos]); c++; }
-  sizes.sort((a, b) => b[0] - a[0]); for (const [size, pos] of sizes.slice(1)) add('disconnected', pos, `Walk network island of ${size} nodes`);
+  sizes.sort((a, b) => b[0] - a[0]); for (const [size, pos] of sizes.slice(1)) add('disconnected-sidewalk', pos, `Walk network island of ${size} nodes`);
   const origin = town.venues[0].entry;
-  for (const d of town.districts) { const v = town.venues.find((v) => v.district === d.id && v.entry) || {entry: d.center}; const w = walkBetween(graph, origin, v.entry); if (dist(w.at(-1).pos, v.entry) > 12) add('disconnected', d.center, `District ${d.name} not reachable on foot`); }
+  for (const d of town.districts) { const v = town.venues.find((v) => v.district === d.id && v.entry) || {entry: d.center}; const w = walkBetween(graph, origin, v.entry); if (dist(w.at(-1).pos, v.entry) > 12) add('disconnected-sidewalk', d.center, `District ${d.name} not reachable on foot`); }
 }
 // 7) Parked cars and props on a drive lane.
 const bays = sim.PARKING_BAYS ? sim.PARKING_BAYS.map((b) => ({c: b.center, id: b.id})) : [[-73, -16], [-69, -16], [-31, -33]].map(([x, z], i) => ({c: [x, z + .82], id: 'legacy-' + i}));
@@ -125,7 +133,11 @@ for (const b of bays) if (index.depth(b.c) > -.5) add('parked-on-lane', b.c, `Pa
 for (const s of [...sim.TRAFFIC_STOPS, ...sim.WEST_STOPS]) { const hw = Math.max(1.5, ...surfaces.filter((r) => segDistance(s.point, r.a, r.b) < .05).map((r) => r.hw)), post = sim.PARKING_BAYS ? [s.point[0] + s.side[0] * (hw + .22), s.point[1] + s.side[1] * (hw + .22)] : [s.point[0] + s.side[0] * 1.32, s.point[1] + s.side[1] * 1.32]; if (index.depth(post) > 0) add('prop-on-lane', post, `Bus stop post ${s.name} stands on the carriageway`); }
 const props = [...town.props.map((p) => ({pos: p.pos, r: .3, name: p.id || p.asset || 'prop'})), ...town.trees.map((p) => ({pos: p.pos, r: .4, name: 'tree'})), ...[...(town.modelPlacements || []), ...(town.districtFurniture || [])].map((p) => ({pos: p.pos, r: Math.min(p.size?.[0] || .6, p.size?.[2] || .6) / 2, name: p.id})), ...(town.landscape?.models || []).filter((m) => m.asset.includes('tree') || m.asset.includes('rock')).map((m) => ({pos: m.pos, r: .5 * m.scale, name: m.asset}))];
 for (const p of props) if (p.pos && index.depth(p.pos) > -p.r + .05) add('prop-on-lane', p.pos, `${p.name} on or overhanging the carriageway`);
-const summary = {}; for (const f of findings) { summary[f.category] ??= {open: 0, justified: 0}; summary[f.category][f.status]++; }
+const summary = Object.fromEntries(Object.keys(ROAD_RULE).map((category) => [category, {open: 0, justified: 0}]));
+for (const f of findings) {
+  summary[f.category] ??= {open: 0, justified: 0};
+  summary[f.category][f.status]++;
+}
 return {label, root, surfaces: surfaces.length, walkNodes: graph.nodes.length, crossings: graph.crossings.length, summary, findings, town, surfacesList: surfaces, props};
 }
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -150,5 +162,8 @@ if (args.includes('--shots')) {
   await browser.close();
   if (opt('--json')) writeFileSync(opt('--json'), JSON.stringify(out, null, 1));
 }
-console.log(JSON.stringify({label, summary, open: findings.filter((f) => f.status === 'open').length, justified: findings.filter((f) => f.status === 'justified').length}, null, 1));
+const open = findings.filter((f) => f.status === 'open');
+console.log(JSON.stringify({label, summary, open: open.length, justified: findings.length - open.length}, null, 1));
+for (const f of open) console.error([f.rule, f.category, f.at.join(', '), f.detail].filter(Boolean).join(' · '));
+if (open.length) process.exitCode = 1;
 }

@@ -1,3 +1,5 @@
+import { pedestrianGraph } from '../roads/pedestrian.js';
+import { midpoint } from '../roads/crosswalks.js';
 import * as THREE from 'three';
 import {place} from '../catalog/loader.js';
 import {toonMaterial} from '../toon.js';
@@ -48,7 +50,7 @@ export async function buildLandscape(scene,town) {
   const template=await place(asset),members=plan.models.filter(p=>p.asset===asset);template.updateMatrixWorld(true);
   const transform=new THREE.Object3D(),matrix=new THREE.Matrix4();
   template.traverse(part=>{if(!part.isMesh)return;const batch=new THREE.InstancedMesh(part.geometry,part.material,members.length);
-   members.forEach((p,i)=>{transform.position.set(p.pos[0],0,p.pos[1]);transform.rotation.y=p.rot;transform.scale.setScalar(p.scale);transform.updateMatrix();batch.setMatrixAt(i,matrix.multiplyMatrices(transform.matrix,part.matrixWorld));});
+   members.forEach((p,i)=>{transform.position.set(p.pos[0],p.y||0,p.pos[1]);transform.rotation.y=p.rot;transform.scale.setScalar(p.scale);transform.updateMatrix();batch.setMatrixAt(i,matrix.multiplyMatrices(transform.matrix,part.matrixWorld));});
    tagBatch(batch,members.map(p=>p.registryId));batch.castShadow=part.castShadow;batch.receiveShadow=true;scene.add(batch);
   });
  }
@@ -57,7 +59,8 @@ export async function buildLandscape(scene,town) {
  // joins; real road ends get a turning circle. Footpaths and sidewalks are
  // drawn from the pedestrian graph elsewhere, never down the road's middle.
  const routes=[],pad=(x,z,r,color,y,id)=>{const m=new THREE.Mesh(new THREE.CircleGeometry(r,28),toonMaterial(color));m.rotation.x=-Math.PI/2;m.position.set(x,y,z);m.receiveShadow=true;scene.add(tagObject(m,id));};
- const regional=town.roads.filter(r=>r.centerline);
+ const regional=town.roads.filter(r=>r.centerline),walk=pedestrianGraph(town);
+ const zebras=walk.crossings.map(([a,b])=>midpoint(walk.nodes[a].pos,walk.nodes[b].pos));
  for(const r of regional) {
   const points=r.centerline;routes.push({road:r,length:r.length});
   strip(points,REGIONAL.verge,'#c5b68f',.025,scene,r.registryId);strip(points,REGIONAL.width,'#76847b',.06,scene,r.registryId);
@@ -77,7 +80,7 @@ export async function buildLandscape(scene,town) {
   // Centre dashes every 5 m; fences sit outside the walking verge and stop
   // short of junctions and road ends so paths stay open.
   for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i],dx=b[0]-a[0],dz=b[1]-a[1],len=Math.hypot(dx,dz);if(!len)continue;const t=[dx/len,dz/len];
-   for(let d=(5-run%5)%5;d<len;d+=5){const along=run+d;const x=a[0]+t[0]*d,z=a[1]+t[1]*d;const m=box(x,.09,z,.11,.025,1.7,'#f0dfb0');m.rotation.y=Math.atan2(t[0],t[1]);
+   for(let d=(5-run%5)%5;d<len;d+=5){const along=run+d;const x=a[0]+t[0]*d,z=a[1]+t[1]*d;if(!zebras.some(([cx,cz])=>Math.hypot(cx-x,cz-z)<1.4)){const m=box(x,.09,z,.11,.025,1.7,'#f0dfb0');m.rotation.y=Math.atan2(t[0],t[1]);}
     if(along>9&&along<r.length-9&&Math.round(along)%10===0&&!bridged.has(i))for(const side of [-1,1]){const fx=x+t[1]*REGIONAL.fence*side,fz=z-t[0]*REGIONAL.fence*side;if(town.roads.some(o=>o!==r&&o.kind!=='world-link'&&distanceToSegment([fx,fz],o.a,o.b)<o.width/2+1.2))continue;box(fx,.5,fz,.12,.9,.12,'#a99f83');const rail=box(fx,.88,fz,.12,.12,9.6,'#ded0ae');rail.rotation.y=Math.atan2(t[0],t[1]);}}
    run+=len;}
   kit.root.children.slice(start).forEach(o=>tagObject(o,r.registryId));

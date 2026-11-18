@@ -10,6 +10,7 @@ import {buildMidway} from './themepark-midway.js';
 import {createGuestSim,buildGuestCrowd} from './themepark-guests.js';
 import {parkNight,parkTime} from './themepark-assets.js';
 import {residentPoses,registerRidePoses} from './life/visuals.js';
+import {LOT_RESERVE} from './fair-lot-plan.js';
 
 export async function buildThemePark(scene,town){
  const root=new THREE.Group();root.name='Pinecrest Adventure Park';root.position.set(PARK_ORIGIN[0],0,PARK_ORIGIN[1]);scene.add(root);
@@ -42,6 +43,7 @@ export async function buildThemePark(scene,town){
   if(x>174&&z>-110&&z<10)continue;
   if(roadPoints.some(p=>Math.hypot(x-p[0],z-p[1])<6))continue;
   if(z>15||z<-95&&x<170)continue;
+  if(x>LOT_RESERVE.minX-3&&x<LOT_RESERVE.maxX+3&&z>LOT_RESERVE.minZ-3&&z<LOT_RESERVE.maxZ+3){random();random();continue;} // Funfair Parking (grok-fairlot); keep the rng in step
   const tree=pine.clone();tree.position.set(x,0,z);tree.rotation.y=random()*6.28;tree.scale.setScalar(.65+random()*.7);landKit.root.add(tree);
  }
  // Inside the fence: the Fairground pack on a 4 m midway grid, animated rides

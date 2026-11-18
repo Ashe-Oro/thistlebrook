@@ -18,6 +18,7 @@ import {compileAstra,distanceToSegment} from './astra.js';
 import {REGIONAL} from '../roads/regional.js';
 import {unifyStraightRuns} from '../roads/town-roads.js';
 import {planWater} from './water.js';
+import {planWoods,registerWoods} from './woods.js';
 import {addFairground,FAIR_VIEW} from './astra-fair.js';
 import {addHarbor,HARBOR_VIEWS} from '../astra/harbor-layout.js';
 export const WORLD_OFFSETS={harbor:[100,0],fair:[-140,0],airport:[0,-140],skatepark:[35,-58],'coral-coast':[160,150],roadster:[-140,-110],starbase:[80,230]};
@@ -99,10 +100,10 @@ export function compileWorld(catalog,seed=831,{capture=false}={}){
  town.modelPlacements=expansionModels(town,catalog);
  const stops=capture?[]:compileExpansionScenes(town,pointInWorld);
  if(!capture)stops.push(...compileAssetVignettes(town,catalog,pointInWorld));
- rebuildWorldGraph(town);planRegionalRoads(town);planLandscape(town);town.water=planWater(town);
+ rebuildWorldGraph(town);planRegionalRoads(town);planLandscape(town);town.water=planWater(town);planWoods(town);
  const stopNode=rebuildWorldGraph(town);
  for(const scene of stops)for(const slot of scene.slots){slot.node=stopNode([slot.approach[0],slot.approach[2]]);town.interactions.push(slot);}
- town.registry=buildRegistry(town,catalog);registerLandscape(town);addExpansionModels(town,catalog);addDistrictLandmarks(town,landmarks);addDistrictActivities(town);addParkActivities(town);addDistrictFurniture(town);includeLifePlacements(town);const errors=registryErrors(town);if(errors.length)throw Error(errors.join('; '));return finishWorld(town);
+ town.registry=buildRegistry(town,catalog);registerLandscape(town);registerWoods(town);addExpansionModels(town,catalog);addDistrictLandmarks(town,landmarks);addDistrictActivities(town);addParkActivities(town);addDistrictFurniture(town);includeLifePlacements(town);const errors=registryErrors(town);if(errors.length)throw Error(errors.join('; '));return finishWorld(town);
 }
 export function finishWorld(town){
  const points=[...town.outline,...town.regions.flatMap(r=>[[r.bounds.minX,r.bounds.minZ],[r.bounds.maxX,r.bounds.maxZ]])];town.worldOutline=town.landscape?[...MAINLAND,[390,390]]:points;
