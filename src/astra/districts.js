@@ -72,9 +72,9 @@ export async function buildDistricts(scene,town){
  const warmLights=[[-12,55],[24,55]].map(([z,x])=>{const light=new THREE.PointLight('#ffd19b',0,18,1.3);light.position.set(x,5,z);scene.add(light);return light;});
  const venueRecords=town.venues.map(v=>({type:'venue',name:v.name,data:v,bounds:new THREE.Box3(new THREE.Vector3(v.box.min[0],0,v.box.min[1]),new THREE.Vector3(v.box.max[0],v.height||2,v.box.max[1]))}));
  venueRecords.push(...downtown.landmarkRecords);
- return {actors,venueRecords,civic,downtown,stats:{sportsPlayers:6,playgroundChildren:1,musicians:3,eveningAudience:8,terraceVisitors:6,...civic.stats,...downtown.stats},update(t,hour,night,weekday){
-  civic.update(t,hour,night,weekday);
-  downtown.update(t,hour,night);
+ return {actors,venueRecords,civic,downtown,stats:{sportsPlayers:6,playgroundChildren:1,musicians:3,eveningAudience:8,terraceVisitors:6,...civic.stats,...downtown.stats},update(t,hour,night,weekday,weather){
+  civic.update(t,hour,night,weekday,weather);
+  downtown.update(t,hour,night,weather);
   warmLights.forEach(light=>light.intensity=night*26);
   const tx=1+Math.sin(t*.95)*9.2,tz=-44+Math.sin(t*1.9)*3;tennisBall.position.set(tx,.65+Math.abs(Math.cos(t*.95))*2.3,tz);tennisBall.visible=hour>6&&hour<21;
   for(const a of tennis){a.o.visible=hour>6&&hour<21;a.o.position.set(a.x+(a.n?10:-10),.22+Math.abs(Math.sin(t*6))*.03,tz);a.o.rotation.y=a.n?-Math.PI/2:Math.PI/2;a.o.rotation.z=Math.sin(t*.95+(a.n?Math.PI:0))*.1;}

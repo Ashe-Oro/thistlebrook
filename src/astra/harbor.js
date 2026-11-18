@@ -5,6 +5,7 @@ import { place } from '../catalog/loader.js';
 import { toonMaterial, toonVertexColorMaterial } from '../toon.js';
 import { harborGeometry, batchHarbor } from './harbor-geometry.js';
 import { createHarborLife } from './harbor-life.js';
+import { buildWatercraft } from './watercraft.js';
 
 // Saltwind's geometry and animation are deliberately independent of civic.js.
 export async function buildHarbor(scene,town) {
@@ -127,16 +128,9 @@ export async function buildHarbor(scene,town) {
     label(name,0,.96,3.1,1.6,.35,c,boat);boats.push({o:boat,x,z,phase:x,route:new THREE.CatmullRomCurve3([[x,0,z],[80,0,80],[85,0,101],[90+(x%3)*3,0,124]].map(p=>new THREE.Vector3(...p)))});
   }
   line([[72,.4,65],[74,-.05,64.5],[77,.2,63]],'#a18b66');line([[68,.4,57],[66,-.08,56.5],[63,.3,55]],'#a18b66');
-  // The small clinker-built rowboats are the owned Nature pack models.
-  const loader=createGLTFLoader();
-  const gltf=await loader.loadAsync(import.meta.env.BASE_URL+'licensed/nature/rowboat.glb');
-  const bounds=new THREE.Box3().setFromObject(gltf.scene),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
-  gltf.scene.traverse(o=>{if(o.isMesh){o.material=o.geometry.attributes.color?toonVertexColorMaterial():toonMaterial('#ac805a');o.castShadow=true;}});
-  const scale=4.4/Math.max(size.x,size.z);
-  for(const [x,z,rot] of [[49,59,.5],[45,51,-.7]]){
-    const boat=new THREE.Group(),model=gltf.scene.clone(true);model.scale.setScalar(scale);model.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);boat.add(model);boat.userData.ownedAsset='nature/rowboat';boat.userData.ownedPath='nature/rowboat.glb';boat.rotation.y=rot;boat.position.set(x,z>55?-.55:.05,z);
-    if(z>55){dynamic.add(boat);boats.push({o:boat,x,z,phase:4,baseY:-.55});}else root.add(boat);
-  }
+  // vehicle-variety: owned pack watercraft (rowboats, kayak, canoe, airboat,
+  // speedboat, floatplane) at documented berths, racks and water loops.
+  const watercraft=await buildWatercraft(dynamic,'harbor');
   tagDistrictModels(dynamic,town,'harbor');
   // Calm water marks, drifting seabirds and bobbing channel markers.
   for(let n=0;n<90;n++){
@@ -160,9 +154,9 @@ export async function buildHarbor(scene,town) {
   const life=await createHarborLife(dynamic,town);
   let lastT=0;
   return {
-    life, boats, beacon, pick:life.pick,
+    life, boats, watercraft, beacon, pick:life.pick,
     update(t,hour,night){
-      const dt=Math.max(0,t-lastT);lastT=t;life.update(dt,t,hour);
+      const dt=Math.max(0,t-lastT);lastT=t;life.update(dt,t,hour);watercraft.update(t,hour);
       for(const b of boats){if(b.route){const travel=hour<5||hour>=19?0:hour<7?(hour-5)/2:hour<17?1:(19-hour)/2;const p=b.route.getPointAt(travel),tangent=b.route.getTangentAt(travel);b.o.position.x=p.x;b.o.position.z=p.z;b.o.rotation.y=Math.atan2(tangent.x,tangent.z)+(hour>=17?Math.PI:0);}
       b.o.position.y=(b.baseY??-.25)+Math.sin(t*.8+b.phase)*.08;b.o.rotation.z=Math.sin(t*.65+b.phase)*.025;}
       for(const r of ripples){r.o.position.x=r.x+Math.sin(t*.23+r.n)*.45;r.o.scale.x=.6+Math.sin(t*.6+r.n)*.3;}
@@ -171,6 +165,6 @@ export async function buildHarbor(scene,town) {
       beacon.rotation.y=t*.2;beacon.visible=night>.25;lamp.visible=night>.2;beaconLight.intensity=night*5;lantern.material.emissive.setRGB(night*.9,night*.4,night*.09);
       for(const m of lamps){if(m.isLight)m.intensity=night*2.5;else m.visible=night>.2;}
     },
-    audit(){return {...life.audit(),boats:boats.length,lighthouseOn:beacon.visible,beaconAngle:beacon.rotation.y};},
+    audit(){return {...life.audit(),boats:boats.length+watercraft.boats.filter(b=>b.g.visible).length,watercraft:watercraft.audit(),lighthouseOn:beacon.visible,beaconAngle:beacon.rotation.y};},
   };
 }

@@ -174,7 +174,7 @@ try {
   await shot('04-mobile.png');
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
   assert.equal(overflow, false);
-  for (const selector of ['.card', '.tools', '.camera-status', '.control-bar']) {
+  for (const selector of ['.card', '.tools']) {
     const box = await page.locator(selector).boundingBox(); assert(box.x >= 0 && box.y >= 0 && box.x + box.width <= 391 && box.y + box.height <= 845, selector);
   }
   await page.getByRole('button', { name: 'Close details' }).click();

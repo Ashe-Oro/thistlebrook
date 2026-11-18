@@ -1,8 +1,0 @@
-/* Additive district controls; keep tabs reachable on smaller screens. */
-.astra-ui .view-tabs { max-width: calc(100vw - 32px); overflow-x: auto; }
-.astra-ui #fair-day { font-size: 12px; min-width: 36px; }
-@media (max-width: 600px) {
-  .astra-ui .view-tabs { justify-content: flex-start; max-width: calc(100vw - 95px); }
-  .astra-ui .control-bar { gap: 1px; }
-  .astra-ui #fair-day { min-width: 30px; }
-}

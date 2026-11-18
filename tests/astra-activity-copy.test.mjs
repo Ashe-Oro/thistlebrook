@@ -24,8 +24,8 @@ test('morning restocking is staggered and homes do not sell packed meals',()=>{
  assert(!life.registry.places.find(p=>p.name.includes('Washhouse')).capabilities.includes('buy'));
  const starts=[];
  for(const a of life.actors){
-  const snapshot=structuredClone(life.snapshot(a));snapshot.self.assets.inventory.meal=1;snapshot.self.needs.hunger=0;snapshot.self.needs.energy=90;
-  snapshot.self.job.shift=[16,22];snapshot.self.memory.lastBreak=0;
+  const snapshot=structuredClone(life.snapshot(a));snapshot.self.assets.inventory.meal=1;snapshot.self.needs.hunger=100;snapshot.self.needs.energy=90;
+  snapshot.self.job.shift=[16,22];snapshot.self.job.commute=0;snapshot.self.memory.lastBreak=0;
   snapshot.self.bills=[];snapshot.self.job.product=null;
   for(let h=7;h<=11;h+=.05){snapshot.clock.hour=h;const action=scriptedPlanner(snapshot);if(action?.reason==='Restock the lunch bag'){starts.push(h);break;}}
  }

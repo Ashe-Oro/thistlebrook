@@ -585,6 +585,7 @@ export function makeHills(extentScale = 1, occupied = []) {
     hill.position.set(h.x, h.y, h.z);
     hill.scale.set(extentScale, 0.5 * extentScale, extentScale);
     hill.receiveShadow = true;
+    hill.userData.scenery = hill.material.userData.scenery = true;
     g.add(hill);
   }
   return g;

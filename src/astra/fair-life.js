@@ -2,6 +2,7 @@ import {FAIR_SLOTS as SLOTS,fairApproach} from './registry/district-activities.j
 import * as THREE from 'three';
 import { place } from '../catalog/loader.js';
 import { shortestPath } from '../compiler/astra.js';
+import { weatherPlan } from './weather-plan.js';
 import { fairSchedule } from '../compiler/astra-fair.js';
 
 const ROLES = ['child','herbalist','carpenter','merchant','elder','baker','farmhand','shopkeeper'];
@@ -44,11 +45,12 @@ export async function createFairLife(scene,town) {
     route(p,[...back,v.entry]);p.phase=leaving?'leaving-activity':'returning';
     p.snack.visible=false;release(p);
   }
-  return {people,update(t,hour,day){
+  return {people,update(t,hour,day,weather){
     const dt=lastTime===null?0:Math.max(0,Math.min(t-lastTime,2));lastTime=t;schedule=fairSchedule(day,hour);
+    const plan=weatherPlan(weather);
     if(dt===0)return; // Pausing also freezes decisions and activity transitions.
     for(const p of people){
-      const wanted=p.n<schedule.visitors;
+      const wanted=p.n<Math.ceil(schedule.visitors*plan.fairAttendance);
       if(p.phase==='away'){
         if(!wanted)continue;p.wait=Math.max(0,p.wait-dt);if(p.wait>0)continue;
         p.object.position.set(gatePoint()[0],.15,gatePoint()[1]);p.object.visible=true;p.node=gate;p.phase='ready';
@@ -63,7 +65,7 @@ export async function createFairLife(scene,town) {
         if(p.wait<=0||!wanted||(!schedule.open&&!['fair-pond','fair-picnic'].includes(p.venue.id)))depart(p,!wanted);
         else continue;
       }
-      let remaining=dt*p.speed;
+      let remaining=dt*p.speed*plan.pace;
       while(p.path.length&&remaining>0){
         const target=p.path[0],dx=target[0]-p.object.position.x,dz=target[1]-p.object.position.z,d=Math.hypot(dx,dz),step=Math.min(d,remaining);
         if(d>.0001){p.object.position.x+=dx/d*step;p.object.position.z+=dz/d*step;p.object.rotation.y=Math.atan2(dx,dz);}
@@ -73,7 +75,7 @@ export async function createFairLife(scene,town) {
       p.object.rotation.z=p.path.length?Math.sin(t*8+p.n)*.03:0;
       if(!p.path.length){
         if(p.phase==='walking'){
-          p.node=p.venue.node;p.phase='activity';p.wait=DWELL[p.venue.id]+p.n%5*2;p.visits++;arrivals++;p.activity=ACTIVITIES[p.venue.id];
+          p.node=p.venue.node;p.phase='activity';p.wait=(DWELL[p.venue.id]+p.n%5*2)*(p.venue.id==='fair-picnic'?plan.fairAttendance:1);p.visits++;arrivals++;p.activity=ACTIVITIES[p.venue.id];
           p.object.rotation.y=p.venue.id==='fair-picnic'||p.venue.id==='fair-food'?Math.PI/2:Math.PI;
           p.snack.visible=['fair-picnic','fair-food'].includes(p.venue.id);
         }else if(p.phase==='returning'){p.phase='ready';}

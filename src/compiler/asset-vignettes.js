@@ -30,8 +30,8 @@ export function vignetteObstacles(town,catalog){
   town.gardens.map(g=>({min:[g.x-g.width/2,g.z-g.depth/2],max:[g.x+g.width/2,g.z+g.depth/2]})),
   town.modelPlacements.concat(districtFurniture(town),landmarks).map(p=>({min:[p.pos[0]-p.size[0]/2,p.pos[1]-p.size[2]/2],max:[p.pos[0]+p.size[0]/2,p.pos[1]+p.size[2]/2]})));
 }
-export function compileAssetVignettes(town,catalog,pointInWorld){
- const obstacles=vignetteObstacles(town,catalog),scenes=[];
+export function compileAssetVignettes(town,catalog,pointInWorld,reservations=[]){
+ const obstacles=vignetteObstacles(town,catalog).concat(reservations),scenes=[];
  const area=spec=>{const b=compileScene(spec.recipe).box;return (b.max[0]-b.min[0])*(b.max[1]-b.min[1]);};
  for(const spec of [...sceneData.vignettes].sort((a,b)=>area(b)-area(a))){
   const zone=zones[spec.district],district=town.districts.find(d=>d.id===spec.district);

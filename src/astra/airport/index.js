@@ -4,6 +4,7 @@ import { toonMaterial } from '../../toon.js';
 import { place } from '../../catalog/loader.js';
 import { AIRPORT, FLEET, sampleFlight, sampleHelicopter } from './traffic.js';
 import { makeAircraft, makeHelicopter } from './aircraft.js';
+import { boxOnRail } from '../../compiler/railway.js';
 export { AIRPORT } from './traffic.js';
 
 export async function buildAirport(scene,town) {
@@ -34,7 +35,9 @@ export async function buildAirport(scene,town) {
  box(75,5.4,-82,4.6,10.8,4.6,'#d1ba91');box(75,10.9,-82,7,2.7,6.5,'#4e7277');box(75,12.4,-82,7.8,.35,7.2,'#ece0bd');
  for(let n=0;n<4;n++)box(72.3+n*1.8,11.1,-78.7,.1,2.3,.12,'#d0c7a6');box(75,13.2,-82,.2,1.4,.2,'#6d786a');
  const radar=new THREE.Group();radar.position.set(75,14,-82);dynamic.add(radar);box(0,0,0,3,.6,.2,'#557b77',radar);
- box(78,2.4,-20,18,4.7,15,'#c4baa0');box(78,5,-20,19,.6,16,'#b67b5a');box(87.06,2,-20,.12,3.8,12,'#455f60');for(let n=0;n<9;n++)box(87.15,.4+n*.4,-20,.1,.08,12,'#78918a');label('CLOVER FLYING CLUB',78,4,-12.4,15,.9);
+ // railway-loop: with the Loop Line on the landside strip the club hangar is narrower (east of the track).
+ const hx=town.railway?81.25:78,hw=town.railway?11.5:18;
+ box(hx,2.4,-20,hw,4.7,15,'#c4baa0');box(hx,5,-20,hw+1,.6,16,'#b67b5a');box(87.06,2,-20,.12,3.8,12,'#455f60');for(let n=0;n<9;n++)box(87.15,.4+n*.4,-20,.1,.08,12,'#78918a');label('CLOVER FLYING CLUB',hx,4,-12.4,hw-3,.9);
  // Helipad and windsock clear of both fixed-wing movement lanes.
  box(80,.1,-102,17,.18,17,'#738a81');ring(80,.22,-102,6.7,.13,'#e9dfb9');label('H',80,.23,-102,5,5,'#738a81',true);
  box(137,2.5,-84,.16,5,.16,'#eee2be');const windsock=new THREE.Group();windsock.position.set(137,5,-84);dynamic.add(windsock);
@@ -58,6 +61,8 @@ export async function buildAirport(scene,town) {
  const tug=new THREE.Group();dynamic.add(tug);box(0,.6,0,1.25,.8,2,'#d9b05b',tug);box(0,1.2,-.4,1, .7,.9,'#608a90',tug);
  for(const z of [-2.4,-4]){box(0,.45,z,1.2,.2,1.4,'#576d68',tug);box(0,.8,z,1,.55,1.1,'#c7a781',tug);}for(const x of [-.65,.65])for(const z of [-.6,.6,-2.4,-4])box(x,.25,z,.18,.4,.4,'#354c4d',tug);
  await Promise.all(jobs);tagDistrictModels(staticRoot,town,'airport',[0,0]);
+ // railway-loop: landside props standing in the rail corridor are left out (flat paving stays under the ballast).
+ if(town.railway){staticRoot.updateMatrixWorld(true);const off=town.registryOffset||[0,-140],drop=[];for(const o of staticRoot.children){const b=new THREE.Box3().setFromObject(o);if(b.isEmpty()||b.max.y<.25)continue;if(boxOnRail(town.railway,[b.min.x+off[0],b.min.z+off[1]],[b.max.x+off[0],b.max.z+off[1]],.2))drop.push(o);}for(const o of drop)staticRoot.remove(o);}
  // Repeated markings, buildings and private props use shared instanced draws.
  staticRoot.updateMatrixWorld(true);const batches=new Map();staticRoot.traverse(o=>{if(!o.isMesh)return;const key=o.geometry.uuid+o.material.uuid;if(!batches.has(key))batches.set(key,{o,matrices:[],ids:[]});batches.get(key).matrices.push(o.matrixWorld.clone());batches.get(key).ids.push(o.userData.registryId);});for(const {o,matrices,ids}of batches.values()){const m=new THREE.InstancedMesh(o.geometry,o.material,matrices.length);matrices.forEach((v,i)=>m.setMatrixAt(i,v));m.userData.registryIds=ids;m.castShadow=o.castShadow;m.receiveShadow=o.receiveShadow;root.add(m);}
  let states=[];

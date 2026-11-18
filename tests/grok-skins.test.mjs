@@ -145,7 +145,7 @@ test(`${TOWN_RULE.skins} live switching restores every practical exactly and the
 test('main renders through the skin runtime; default path is renderer.render', () => {
  const main = readFileSync(new URL('../src/astra/main.js', import.meta.url), 'utf8');
  assert.match(main, /createSkinRuntime\(/); assert.match(main, /if\(render\)skins\.render\(night,elapsed,hour\);/);
- assert.match(main, /mountSkinPicker\(ui\.root,skins\)/); assert.match(main, /setSkin:id=>skins\.setSkin\(id\)\.id/);
+ assert.match(main, /mountSkinPicker\(lightControls\.section\('skin'\),skins\)/); assert.match(main, /setSkin:id=>skins\.setSkin\(id\)\.id/);
  const rt = readFileSync(new URL('../src/astra/skin/index.js', import.meta.url), 'utf8');
  assert.match(rt, /if \(P\) post\.render\(scene, camera, \{ night, time, hour \}\);\n  else renderer\.render\(scene, camera\);/);
  const lighting = readFileSync(new URL('../src/astra/lighting.js', import.meta.url), 'utf8');

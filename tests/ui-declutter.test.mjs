@@ -1,0 +1,94 @@
+// Ashe, Nov 18 9:51 AM: declutter the HUD. No "Your view"/share panel, no
+// control hint, no happenings box, no bottom control bar and no sound. The
+// top-right clock dropdown is the one place to set time, and it also holds
+// pace, weather and skin so those stay reachable.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { existsSync, readFileSync } from 'node:fs';
+import { extname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { TOWN_RULE } from '../src/compiler/town-rules.js';
+
+const root = fileURLToPath(new URL('..', import.meta.url));
+const read = (p) => readFileSync(join(root, p), 'utf8');
+const chrome = process.env.CHROME || '/usr/bin/google-chrome';
+
+test(`${TOWN_RULE.hud} removed HUD pieces have no markup, code or CSS left`, () => {
+  const ui = read('src/astra/ui.js'), cam = read('src/astra/camera-ui.js'), main = read('src/astra/main.js');
+  const css = ['style.css', 'camera.css', 'light-controls.css', 'weather.css'].map(f => read('src/astra/' + f)).join('\n');
+  for (const [src, name] of [[ui, 'ui.js'], [cam, 'camera-ui.js'], [main, 'main.js']]) {
+    for (const gone of [/YOUR VIEW/i, /share-view/, /camera-status/, /HAPPENINGS/i, /moment-title/, /control-bar/, /id="sound"|#sound/, /AudioContext/, /Scroll to get closer/i, /class="hint"|'\.hint'/, /id="day"|id="night"|school-time/]) {
+      assert.doesNotMatch(src, gone, `${name} still has ${gone}`);
+    }
+  }
+  for (const sel of ['.moment', '.control-bar', '.camera-status', '.share-view', '.camera-message', '.hint', '.transport', '.help'])
+    assert.doesNotMatch(css, new RegExp(sel.replace('.', '\\.') + '(?![\\w-])'), `dead CSS for ${sel}`);
+  for (const f of ['fair-ui.js', 'harbor-ui.js', 'coast-ui.js']) assert(!existsSync(join(root, 'src/astra', f)), `${f} is dead code`);
+  assert.doesNotMatch(read('src/astra/place-info.js'), /worldMoment/);
+});
+
+test('?weather= and ?skin= URL params are still read', () => {
+  const main = read('src/astra/main.js');
+  assert.match(main, /skinFromQuery\(q\)/);
+  assert.match(read('src/life/calendar.js'), /q\.get\('weather'\)/);
+  assert.match(main, /calendar\.weather/);
+});
+
+const types = { '.js': 'text/javascript', '.mjs': 'text/javascript' };
+test('the clock dropdown sets time, pace, weather and skin; removed pieces are absent in the DOM', { skip: !existsSync(chrome) && 'no Chrome' }, async () => {
+  const { chromium } = await import('playwright-core');
+  const browser = await chromium.launch({ executablePath: chrome, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    await page.route('http://ui.test/**', (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === '/') return route.fulfill({ contentType: 'text/html', body: `<!doctype html><script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/"}}</script><body></body>` });
+      // Vite turns CSS imports into style tags; in a raw browser they are empty modules.
+      if (path.endsWith('.css')) return route.fulfill({ contentType: 'text/javascript', body: '' });
+      const file = join(root, path);
+      if (!existsSync(file)) return route.fulfill({ status: 404, body: '' });
+      return route.fulfill({ contentType: types[extname(file)] || 'text/plain', body: readFileSync(file) });
+    });
+    await page.goto('http://ui.test/');
+    const result = await page.evaluate(async () => {
+      const { createUI } = await import('/src/astra/ui.js');
+      const { createLightControls } = await import('/src/astra/light-controls.js');
+      const { mountWeatherControl } = await import('/src/astra/weather.js');
+      const { mountSkinPicker } = await import('/src/astra/skin/picker.js');
+      const log = { hour: [], pause: 0, speed: 0, weather: [], skin: [] };
+      const ui = createUI({ districts: [], seed: 1 }, { zoom() {}, rotate() {}, view() {}, hour: h => log.hour.push(h), unfollow() {} });
+      const lc = createLightControls(ui.root, h => log.hour.push(h), { pause: () => log.pause++, speed: () => log.speed++ });
+      const show = mountWeatherControl(lc.section('weather'), 'clear', t => { log.weather.push(t); show(t); });
+      const listeners = [];
+      mountSkinPicker(lc.section('skin'), { list: () => [{ id: 'cel', label: 'Cel', swatch: ['#000', '#111', '#222'] }, { id: 'winter', label: 'Winter', swatch: ['#fff', '#eee', '#ddd'] }], skin: { id: 'cel', label: 'Cel' }, setSkin: id => log.skin.push(id), onChange: f => listeners.push(f), next() {} });
+      lc.update(10.4);
+      const q = s => document.querySelector(s);
+      const absent = ['.camera-status', '.share-view', '.hint', '.moment', '#moment-title', '.control-bar', '.transport', '#sound', '#day', '#night', '#school-time', '#help', '.help']
+        .filter(s => q(s));
+      const text = document.body.innerText;
+      const toggle = q('.top-right .clock .light-toggle');
+      toggle.click();
+      const opened = !q('#astra-light-picker').hidden;
+      q('#astra-light-picker [data-hour]').click();
+      const slider = q('#astra-hour'); slider.value = '900'; slider.dispatchEvent(new Event('input'));
+      q('#astra-light-picker #pause').click(); q('#astra-light-picker #speed').click();
+      const sel = q('#astra-light-picker #astra-weather'); sel.value = 'snow'; sel.dispatchEvent(new Event('change'));
+      q('#astra-light-picker [data-skin="winter"]').click();
+      lc.update(15);
+      return { absent, opened, log, hasHintText: /drag to pan|share view|your view|happenings/i.test(text),
+        clock: q('#astra-clock').textContent, weatherOptions: [...sel.options].map(o => o.value),
+        weatherInTopRightDropdown: !!q('#astra-light-picker #astra-weather'), outsideWeather: document.querySelectorAll('#astra-weather').length };
+    });
+    assert.deepEqual(result.absent, [], 'removed HUD pieces must not render');
+    assert.equal(result.hasHintText, false);
+    assert.equal(result.opened, true, 'clock dropdown opens');
+    assert.equal(result.log.hour.length, 2, 'preset and slider both set the time');
+    assert.equal(result.log.hour[1], 15);
+    assert.equal(result.clock, '3:00 pm');
+    assert.equal(result.log.pause, 1); assert.equal(result.log.speed, 1);
+    assert(result.weatherInTopRightDropdown && result.outsideWeather === 1, 'weather lives only in the clock dropdown');
+    assert(result.weatherOptions.includes('snow') && result.weatherOptions.includes('rain'));
+    assert.deepEqual(result.log.weather, ['snow']);
+    assert.deepEqual(result.log.skin, ['winter']);
+  } finally { await browser.close(); }
+});

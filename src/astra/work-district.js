@@ -36,12 +36,15 @@ export async function buildWorkDistrict(scene,town){
  label('WEST WORKS',-79,2.8,-70.7,8,1,'#8c7657');
  // The full track is reserved above all pedestrian routes.
  const rail=town.workRail;
+ // railway-loop: when the Loop Line exists it draws this track (src/astra/railway.js).
+ if(!town.railway){
  box((rail.minX+rail.maxX)/2,.12,rail.z,rail.maxX-rail.minX,.18,3.3,'#9b9f8f');
  for(let x=rail.minX+.5;x<rail.maxX;x+=1.1)box(x,.24,rail.z,.28,.16,2.6,'#8a785f');
  for(const z of [-.85,.85])box((rail.minX+rail.maxX)/2,.38,rail.z+z,rail.maxX-rail.minX,.13,.12,'#5b6866');
  for(const x of [rail.minX,rail.maxX]){box(x,.8,rail.z,.35,1,2.5,'#705f50');box(x,.9,rail.z,.4,.35,2.65,'#bf8664');}
+ }
  // Engine and two carriages form a reversible local shuttle.
- const train=new THREE.Group();train.position.z=rail.z;moving.add(train);
+ const train=new THREE.Group();train.position.z=rail.z;moving.add(train);train.visible=!town.railway;
  for(const x of [-7,0,7]){
   box(x,.85,0,6.3,.5,2.2,'#465750',train);box(x,2,0,6.1,1.9,2.15,x===7?'#547b69':'#c99b6d',train);box(x,3.05,0,6.5,.25,2.4,'#4b665d',train);
   for(const side of [-1,1]){for(let n=0;n<4;n++)box(x-2.15+n*1.42,2.35,side*1.09,.96,.76,.04,'#b6c9b7',train);box(x,1.44,side*1.1,6,.12,.05,'#f2d496',train);for(const wx of [-2.1,2.1]){const wheel=cylinder(x+wx,.65,side*1.06,.46,.23,'#3d4c47',train);wheel.rotation.x=Math.PI/2;wheels.push(wheel);}}
@@ -94,7 +97,7 @@ export async function buildWorkDistrict(scene,town){
  buildingBounds.push({x:-54,z:-47,bounds:new THREE.Box3(new THREE.Vector3(-60,0,-54),new THREE.Vector3(-48,6.5,-40))});
  for(const {x,z,bounds}of buildingBounds){const data=town.venues.find(v=>v.district==='works'&&x>=v.box.min[0]&&x<=v.box.max[0]&&z>=v.box.min[1]&&z<=v.box.max[1]);if(data)records.push({type:'venue',data,bounds});}
  const economy={produce:0,timber:0,shipped:0,collections:0,workers:0,staffed:{}};
- let lastTime=null,lastTrain=null,currentTrain=trainState(0,10),sawAngle=0;
+ let lastTime=null,lastTrain=null,currentTrain=trainState(0,10),sawAngle=0,trainSource=null;
  return {records,economy,update(t,hour,night,people=[]){
   // dt is derived from simulation time: paused scenes cannot generate goods.
   const dt=lastTime===null?0:Math.max(0,t-lastTime);lastTime=t;
@@ -102,14 +105,14 @@ export async function buildWorkDistrict(scene,town){
   const staffed={};for(const p of people)if(working&&p.workplace&&p.node===p.workplace.node&&!p.route.length&&p.actor?.action?.tool==='work'&&p.actor.action.target==='workspot:'+p.name){staffed[p.workplace.id]=(staffed[p.workplace.id]||0)+1;}
   economy.commuting=people.filter(p=>working&&p.actor?.action?.tool==='walkTo'&&p.actor.action.target==='workspot:'+p.name).length;economy.staffed=staffed;economy.workers=Object.values(staffed).reduce((a,b)=>a+b,0);
   economy.produce+=(staffed['work-farm']||0)*dt/12;economy.timber+=(staffed['work-timber']||0)*dt/18;
-  currentTrain=trainState(t,hour);
+  currentTrain=trainSource?trainSource(t,hour):trainState(t,hour);
   if(currentTrain.departed&&lastTrain?.atPlatform&&staffed['work-depot']){let capacity=8;for(let round=0;round<8&&capacity>0;round++)for(const type of ['produce','timber']){if(capacity&&economy[type]>=1){economy[type]--;economy.shipped++;capacity--;}}if(capacity<8)economy.collections++;}
   const travel=lastTrain?currentTrain.x-lastTrain.x:0;lastTrain=currentTrain;train.position.x=currentTrain.x;
   wheels.forEach(w=>w.rotation.y+=travel/.46);
   if(staffed['work-timber'])sawAngle+=dt*7;saw.rotation.y=sawAngle;
   crate.position.y=staffed['work-depot']?2.6+Math.sin(t*.7)*.8:2.6;
   passengers.forEach((p,n)=>{p.visible=currentTrain.open;p.rotation.y=currentTrain.atPlatform?Math.PI:Math.sin(t*.3+n)*.25;p.position.y=.76+(currentTrain.atPlatform?Math.abs(Math.sin(t*2+n))*.025:0);});
-  smoke.forEach((m,n)=>{const phase=(t*.3+n/5)%1;m.visible=currentTrain.open;m.position.set(currentTrain.x+9-phase*2,3.8+phase*3,rail.z);m.scale.setScalar(.4+phase);m.material.opacity=(1-phase)*.25;});
+  smoke.forEach((m,n)=>{const phase=(t*.3+n/5)%1;m.visible=currentTrain.open&&!town.railway;m.position.set(currentTrain.x+9-phase*2,3.8+phase*3,rail.z);m.scale.setScalar(.4+phase);m.material.opacity=(1-phase)*.25;});
   lamps.forEach(m=>m.visible=night>.2);
- },audit(){return {...economy,staffed:{...economy.staffed},train:{...currentTrain},sawAngle,crateY:crate.position.y};}};
+ },setTrainSource(fn){trainSource=typeof fn==='function'?fn:null;},audit(){return {...economy,staffed:{...economy.staffed},train:{...currentTrain},sawAngle,crateY:crate.position.y};}};
 }

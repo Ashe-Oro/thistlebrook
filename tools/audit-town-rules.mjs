@@ -150,3 +150,57 @@ export function auditFairLot(P, add, {carriageway = fairLotCarriageway(P)} = {})
     if (!used.has(c.id)) add('unconnected-crosswalk', center, `No Funfair Parking walk line uses zebra ${c.id}`);
   }
 }
+
+// TOWN-10 · rails are not walkways (plus the rail sides of TOWN-04/05/06).
+// `R` is src/compiler/railway.js of the audited tree.
+export function auditRailway(town, graph, index, R, add, {walkBetween, origin} = {}) {
+  const rail = town.railway; if (!rail) return;
+  const {RAIL, RAIL_RESERVED, polygonContains, crossingAt, nearRail} = R;
+  const visible = rail.samples.filter((q) => !q.tunnel);
+  const surface = visible.filter((q) => !(q.bridge && q.clearance >= 3 && q.y - q.ground >= 2.97));
+  // Loop closure and continuity: no stubs, no orphan pieces of the old works line.
+  rail.samples.forEach((q, i) => { const n = rail.samples[(i + 1) % rail.samples.length]; if (distance(q.p, n.p) > RAIL.sample * 1.6) add('rail-stub', q.p, `Track breaks for ${distance(q.p, n.p).toFixed(1)} m: the loop is not closed`); });
+  if (town.workRail) for (const x of [town.workRail.minX, town.workRail.maxX]) if (!nearRail(rail, [x, town.workRail.z])) add('rail-stub', [x, town.workRail.z], 'The West Works track ends off the loop (orphan stub)');
+  // Rails stay off land other lanes own (tunnel included).
+  for (const q of rail.samples) { const r = RAIL_RESERVED.find((a) => !(a.overpass && q.clearance >= 3 || a.offshore && q.offshore && q.bridge) && [[0, 0], [RAIL.half, 0], [-RAIL.half, 0], [0, RAIL.half], [0, -RAIL.half]].some(([dx, dz]) => polygonContains(a.area, [q.p[0] + dx, q.p[1] + dz]))); if (r) add('rail-reserved', q.p, `Track enters ${r.id}`); }
+  // Track on the ground: never floating, never in the river (TOWN-04).
+  for (const q of visible) {
+    if (!q.bridge && Math.abs(q.y - q.ground) > .03 || q.bridge && q.y < q.ground) add('rail-off-surface', q.p, `Track differs ${(q.y - q.ground).toFixed(2)} m from its support`);
+    if (q.wet && (!q.bridge || q.y < .1)) add('rail-off-surface', q.p, 'Track runs through water without a bridge');
+  }
+  // Rails own their corridor: no carriageway except at gated perpendicular crossings,
+  // no building, venue or hill in the ballast band.
+  for (const q of surface) {
+    const c = crossingAt(rail, q.p);
+    if (!c && index.depth(q.p) > -RAIL.half) add('rail-on-road', q.p, 'Track runs along or across a carriageway outside a level crossing');
+  }
+  for (const c of rail.crossings) if (!c.gated || Math.abs(90 - c.angle) > (RAIL.crossingAngleTolerance ?? 15)) add('rail-crossing', c.pos, `Level crossing ${c.gated ? 'meets the road at ' + c.angle + '°' : 'has no barriers'}`);
+  const permitted = new Set(['work-station', 'work-depot', ...rail.stations.map((s) => s.venue)]);
+  for (const place of [...town.buildings, ...town.venues]) {
+    if (!place.box || permitted.has(place.id)) continue;
+    const b = place.box, hit = surface.find((q) => q.p[0] > b.min[0] - RAIL.half && q.p[0] < b.max[0] + RAIL.half && q.p[1] > b.min[1] - RAIL.half && q.p[1] < b.max[1] + RAIL.half);
+    if (hit) add('rail-on-parcel', hit.p, `Track crosses ${place.name ?? place.id}`);
+  }
+  for (const h of town.landscape?.hills ?? []) { const hit = visible.find((q) => distance(q.p, h.pos) < h.radius + RAIL.half); if (hit) add('rail-blocked', hit.p, 'A hill sits on the track'); }
+  for (const m of [...(town.catalogScenes ?? []).flatMap((c) => c.members), ...town.props]) { if (m.pos && nearRail(rail, m.pos, .3)) add('rail-blocked', m.pos, `${m.asset ?? m.id ?? 'prop'} stands on the track`); }
+  for (const t of [...town.trees, ...(town.landscape?.models ?? [])]) { const hit = nearRail(rail, t.pos, .2); if (hit) add('rail-blocked', t.pos, `${t.asset ?? 'tree'} stands on the track`); }
+  // TOWN-10: no sidewalk or footpath edge runs on the rails outside a crossing.
+  graph.edges.forEach((links, u) => {
+    for (const e of links) {
+      if (u >= e.to) continue;
+      const a = graph.nodes[u].pos, b = graph.nodes[e.to].pos, n = Math.max(1, Math.ceil(distance(a, b) / .25));
+      for (let k = 0; k <= n; k++) {
+        const p = [a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n];
+        if (nearRail(rail, p, .25) && !crossingAt(rail, p)) { add('walk-on-rail', p, 'A sidewalk or footpath edge runs on the railway'); break; }
+      }
+    }
+  });
+  // TOWN-05: every station is a destination with a platform sign, lights and a walk link.
+  for (const st of rail.stations) {
+    const signs = st.furniture?.filter((f) => f.asset === 'station_nameboard').length ?? 0, lamps = st.furniture?.filter((f) => f.light).length ?? 0;
+    if (!signs || lamps < 2) add('station-orphan', st.centre, `${st.name} lacks a sign or platform lights`);
+    const v = town.venues.find((x) => x.id === st.venue), entry = v?.entry;
+    if (!entry) { add('station-orphan', st.centre, `${st.name} is not a destination`); continue; }
+    if (walkBetween && origin) { const t = graph.nearest(entry), w = walkBetween(graph, origin, entry); if (t < 0 || distance(graph.nodes[t].pos, entry) > .75 || !('cross' in w.at(-1))) add('station-orphan', entry, `${st.name} has no sidewalk link`); }
+  }
+}

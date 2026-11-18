@@ -7,7 +7,10 @@ import {districtKit} from './downtown-kit.js';
 import {tagObject,tagBatch} from './registry/render-tags.js';
 import {REGIONAL} from '../roads/regional.js';
 import {createRegionalTraffic} from '../roads/regional-traffic.js';
+import {residentPedestrian} from '../roads/walking.js';
 import {distanceToSegment} from '../compiler/astra.js';
+import {cruiserPose, waterlineAt} from './water-traffic-plan.js';
+import {hull} from './watercraft.js';
 
 function strip(points,width,color,y,parent,id) {
  const vertices=[],indices=[];
@@ -40,8 +43,8 @@ export async function buildLandscape(scene,town) {
  for(const h of plan.hills) {
   const start=kit.root.children.length;
   const g=new THREE.Mesh(h.mountain?new THREE.ConeGeometry(1,1,7):new THREE.IcosahedronGeometry(1,1),toonMaterial(h.mountain?'#8e9d7b':'#9eaf77'));
-  g.position.set(h.pos[0],h.mountain?h.height/2-.1:-h.height*.22,h.pos[1]);g.scale.set(h.radius,h.height,h.radius*.8);kit.root.add(g);
-  if(h.mountain){const cap=new THREE.Mesh(new THREE.ConeGeometry(1,1,7),toonMaterial('#d5d2af'));cap.position.set(h.pos[0],h.height*.85,h.pos[1]);cap.scale.set(h.radius*.3,h.height*.3,h.radius*.24);kit.root.add(cap);}
+  g.position.set(h.pos[0],h.mountain?h.height/2-.1:-h.height*.22,h.pos[1]);g.scale.set(h.radius,h.height,h.radius*.8);g.userData.scenery=g.material.userData.scenery=true;kit.root.add(g);
+  if(h.mountain){const cap=new THREE.Mesh(new THREE.ConeGeometry(1,1,7),toonMaterial('#d5d2af'));cap.position.set(h.pos[0],h.height*.85,h.pos[1]);cap.scale.set(h.radius*.3,h.height*.3,h.radius*.24);cap.userData.scenery=cap.material.userData.scenery=true;kit.root.add(cap);}
   kit.root.children.slice(start).forEach(o=>tagObject(o,h.registryId));
  }
  // Owned vegetation is instanced by source mesh. Every instance carries its own
@@ -63,6 +66,7 @@ export async function buildLandscape(scene,town) {
  const zebras=walk.crossings.map(([a,b])=>midpoint(walk.nodes[a].pos,walk.nodes[b].pos));
  for(const r of regional) {
   const points=r.centerline;routes.push({road:r,length:r.length});
+  if(r.mapleHollow)continue; // Maple Hollow streets are dressed by maple-hollow.js (sidewalks, kerbs, no rural fences)
   strip(points,REGIONAL.verge,'#c5b68f',.025,scene,r.registryId);strip(points,REGIONAL.width,'#76847b',.06,scene,r.registryId);
   for(const [i,end] of r.ends.entries()){const p=end.pos;
    if(end.terminus&&!end.touches){pad(p[0],p[1],REGIONAL.turnRadius+1.2,'#c5b68f',.024,r.registryId);pad(p[0],p[1],REGIONAL.turnRadius,'#76847b',.059,r.registryId);}
@@ -88,6 +92,7 @@ export async function buildLandscape(scene,town) {
  // Vehicles come from the pure regional simulation; render only mirrors it.
  const traffic=createRegionalTraffic(town),vehicles=[];
  for(const v of traffic.vehicles){
+  if(v.mapleHollow)continue; // family cars and the school bus are drawn by maple-hollow.js
   const g=new THREE.Group();scene.add(g);g.name=`Regional ${v.kind==='bus'?'shuttle':'car'} · ${v.regionalId}`;
   const bus=v.kind==='bus',w=v.width,l=v.length,col=bus?'#d8b36f':['#c87e62','#80ada3','#ebdfbc'][v.regionalId%3];
   box(0,.65,0,w,.8,l,col,g);box(0,1.3,-.2,w*.86,.7,l*.65,'#52777b',g);box(0,1.7,-.2,w*.9,.15,l*.68,col,g);
@@ -102,17 +107,20 @@ export async function buildLandscape(scene,town) {
   if(sail){b(0,4.2,0,.12,8,.12,'#b59c72');const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute([0,1,.1,0,8,.1,0,1,3.2],3));geo.computeVertexNormals();const m=new THREE.Mesh(geo,new THREE.MeshToonMaterial({color:'#f4e5bf',side:THREE.DoubleSide}));g.add(m);}
   tagObject(g,id);return g;
  }
- const ferry=boat('landscape:ferry'),sails=[boat('landscape:sail-0',true),boat('landscape:sail-1',true)];
+ // vehicle-variety: the ferry is the owned Vice Beach motor yacht on the
+ // documented harbor-to-coast timetable (water-traffic-plan.js CRUISER).
+ const ferry=new THREE.Group();scene.add(ferry);ferry.add(await hull('yacht'));tagObject(ferry,'landscape:ferry');
+ const sails=[boat('landscape:sail-0',true),boat('landscape:sail-1',true)];
  const ferryRoute=curve([[180,78],[185,95],[187,133],[207,187],[270,190],[315,164],[322,127],[319,84]]),ferryLength=ferryRoute.getLength();
  kit.bake();
  let lastT=0;
  let others=()=>[];
- return {vehicles,routes,sea,traffic,setOtherVehicles(fn){others=fn;},update(t,hour,people){
+ return {vehicles,routes,sea,traffic,setOtherVehicles(fn){others=fn;},update(t,hour,people,railTravellers=[]){
   clock.value=t;const dt=Math.max(0,Math.min(.8,t-lastT));lastT=t;
-  const walkers=(people||[]).map(p=>({x:p.object.position.x,z:p.object.position.z}));
-  traffic.update(dt,hour,walkers,others());
+  const walkers=(people||[]).filter(p=>p.object.visible!==false).map(p=>residentPedestrian(p.actor,p.walkPace));
+  traffic.update(dt,hour,[...walkers,...railTravellers],others());
   for(const v of vehicles){v.object.position.set(v.sim.position[0],.1,v.sim.position[1]);v.object.rotation.y=Math.atan2(v.sim.direction[0],v.sim.direction[1]);}
-  const u=(t/95)%2,f=u<1?u:2-u,p=ferryRoute.getPointAt(f),tangent=ferryRoute.getTangentAt(f);ferry.position.copy(p);ferry.position.y=-.1+Math.sin(t)*.05;ferry.rotation.y=Math.atan2(tangent.x,tangent.z)+(u<1?0:Math.PI);
+  const pose=cruiserPose(hour??10);ferry.position.set(pose.pos[0],waterlineAt(pose.pos)+Math.sin(t)*.05,pose.pos[1]);ferry.rotation.y=pose.yaw;ferry.userData.state=pose.state;
   sails.forEach((s,i)=>{const a=t*.015+i*2;s.position.set(340+i*18+Math.sin(a)*12,-.1,94+i*65+Math.cos(a)*24);s.rotation.y=Math.atan2(Math.cos(a)*12,-Math.sin(a)*24);});
- },audit(){return {ground:plan.outline,ownedPlacements:plan.models.length,hills:plan.hills.length,roads:routes.length,vehicles:vehicles.map(v=>({road:v.road,position:v.object.position.toArray(),distance:v.sim.s,routeGroup:v.routeGroup})),ferry:ferry.position.toArray(),ferryRouteLength:ferryLength,ocean:1};}};
+ },audit(){return {ground:plan.outline,ownedPlacements:plan.models.length,hills:plan.hills.length,roads:routes.length,vehicles:vehicles.map(v=>({road:v.road,position:v.object.position.toArray(),distance:v.sim.s,routeGroup:v.routeGroup})),ferry:ferry.position.toArray(),ferryState:ferry.userData.state,ferryRouteLength:ferryLength,ocean:1};}};
 }

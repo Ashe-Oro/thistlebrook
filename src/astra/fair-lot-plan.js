@@ -43,6 +43,14 @@ export const CROSSWALKS = [
   {id: 'A0', min: [PROMENADE.min[0], AISLES.A0.min[1]], max: [PROMENADE.max[0], AISLES.A0.max[1]]},
   {id: 'A1', min: [PROMENADE.min[0], AISLES.A1.min[1]], max: [PROMENADE.max[0], AISLES.A1.max[1]]},
 ];
+// The Funfair approach road is also a 'park' footpath in the residents' walk
+// graph: residents walk its centre line while lot cars keep to a lane 1.25 m
+// off it. Turning in across that walk line is a crossing: lot cars give way to
+// anyone near it and never stop on it. tests/vehicle-variety.test.mjs keeps
+// this copy in step with the compiled town.
+export const PARK_PATH = Object.freeze({width: 2, points: [[211.86, 14.03], [213.66, 12.96], [215.15, 11.88], [216.08, 11], [216.87, 10.06], [217.55, 9.07], [218.16, 8.05], [218.74, 7.02], [219.34, 6], [220, 5], [220, 0]]});
+export const parkPathFootprints = (pad = 0) => PARK_PATH.points.slice(1).map((b, i) => { const a = PARK_PATH.points[i], L = Math.hypot(b[0] - a[0], b[1] - a[1]); return {c: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], d: [(b[0] - a[0]) / L, (b[1] - a[1]) / L], hl: L / 2 + pad, hw: WALK_LINE + pad}; });
+const WALK_LINE = .3; // a walker's half-width either side of the centre line
 // Planter islands close each double row; slots 0 and 19.
 export const PLANTERS = [];
 for (const [z0, z1] of [[9, 16.2], [20.6, 27.8]]) for (const k of [0, 19]) PLANTERS.push({min: [slotX(k) - BAY_W / 2 + .12, z0 + .15], max: [slotX(k) + BAY_W / 2 - .12, z1 - .15], tree: [slotX(k), (z0 + z1) / 2]});

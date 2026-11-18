@@ -5,6 +5,8 @@ import { place } from '../catalog/loader.js';
 import { toonMaterial } from '../toon.js';
 import { ROSTER, KID_SCALE, ballgameState } from './ballgame.js';
 import { pedestrianGraph, walkBetween } from '../roads/pedestrian.js';
+import { planSchool, createSchoolDay, schoolWalkers, HOPSCOTCH } from './school-plan.js';
+import { createVillagerMixer } from '../life/villager-mixer.js';
 
 // Town-scale facilities have explicit parcels and entrances in the compiler.
 // This module only furnishes them: it never invents another navigation layout.
@@ -42,7 +44,13 @@ export async function buildCivic(scene,town){
  box(0,1.75,3.22,1.7,.7,.03,'#70918a',bus);box(0,1.55,-3.22,1.5,.6,.03,'#789c92',bus);
  for(const x of [-1.05,1.05])for(const z of [-2.1,2.1]){const wheel=cylinder(x,.5,z,.46,.22,'#46524e',bus);wheel.rotation.z=Math.PI/2;}
  label('ASTRA SCHOOL BUS',0,1,3.25,1.8,.28,'#cda34c',bus);
- for(let n=0;n<8;n++)jobs.push(player(['child','shopkeeper','herbalist','carpenter'][n%4],-2,-54.5,n%3===0?.85:1).then(o=>students.push({o,n})));
+ // school-day: Room 4's pupils and Ms Hart follow the weekday timetable in
+ // school-plan.js. Outside they walk the sidewalk graph; in class they are
+ // indoors (school-interior.js draws the classroom).
+ const schoolGraph=pedestrianGraph(town),schoolPlan=planSchool(town,schoolGraph,walkBetween);
+ const schoolDay=createSchoolDay(schoolPlan);
+ for(const [n,p] of [...schoolPlan.students,schoolPlan.teacher].entries())jobs.push(place('townsfolk-'+p.look,{scale:p.scale,animated:true}).then(o=>{tagObject(o,'built:school-0');o.visible=false;dynamic.add(o);students.push({o,n,id:p.id,mixer:createVillagerMixer(o,n+20),last:null});}));
+ assembly='built:playground-1';for(let k=0;k<HOPSCOTCH.squares;k++){const [hx,hz]=HOPSCOTCH.origin,double=k===2||k===4;for(const side of double?[-1,1]:[0])box(hx+side*HOPSCOTCH.size*.52,.155,hz-.6-k*HOPSCOTCH.size,HOPSCOTCH.size*.9,.012,HOPSCOTCH.size*.9,k%2?'#efe3c3':'#e9d6ae');}
  // Baseball: grass outfield fan, four bases, pitching mound and backstop.
  assembly='built:baseball-0';const home=[-22,-73],fan=[home];for(let n=0;n<=48;n++){const a=-Math.PI*.75+n/48*Math.PI*.5;fan.push([home[0]+Math.cos(a)*24,home[1]+Math.sin(a)*24]);}polygon(fan,.08,'#87a66e');
  assembly='built:baseball-1';const diamond=[[-22,-73],[-14,-81],[-22,-89],[-30,-81]];polygon(diamond,.12,'#caab80');polygon(diamond.map(([x,z])=>[-22+(x+22)*.74,-81+(z+81)*.74]),.14,'#90ac75');
@@ -101,16 +109,20 @@ export async function buildCivic(scene,town){
  for(let n=0;n<8;n++)jobs.push(player(['elder','merchant','herbalist','child','innkeeper','shopkeeper','farmhand','carpenter'][n],-57,-6,1.02).then(o=>gatherers.push({o,n})));
  // All static furnishing, private models included, is batched by geometry.
  await Promise.all(jobs);tagComponents(root,town,'civic.js');tagComponents(dynamic,town,'civic.js');root.updateMatrixWorld(true);const batches=new Map();root.traverse(o=>{if(!o.isMesh)return;const k=o.geometry.uuid+o.material.uuid;if(!batches.has(k))batches.set(k,{o,matrices:[],ids:[]});batches.get(k).matrices.push(o.matrixWorld.clone());batches.get(k).ids.push(o.userData.registryId);});for(const {o,matrices,ids}of batches.values()){const m=new THREE.InstancedMesh(o.geometry,o.material,matrices.length);tagBatch(m,ids);matrices.forEach((v,i)=>m.setMatrixAt(i,v));m.castShadow=o.castShadow;m.receiveShadow=o.receiveShadow;scene.add(m);}root.traverse(o=>{if(o.isLine){const c=o.clone();c.applyMatrix4(o.parent.matrixWorld);scene.add(c);}});
- let baseballManaged=false,lastGame=null;
+ let baseballManaged=false,lastGame=null,lastSchool=null,lastT=null;
  const fieldLights=[new THREE.PointLight('#ffe5b5',0,45,1.3),new THREE.PointLight('#d5edf1',0,35,1.3)];fieldLights[0].position.set(30,10,-84);fieldLights[1].position.set(-57,5,-6);fieldLights.forEach(l=>scene.add(l));
- return {setActivityOwner(type,managed){if(type==='baseball')baseballManaged=managed;},audit:()=>({students:students.map(a=>a.o.position.toArray()),football:football.map(a=>a.o.position.toArray()),baseball:baseballBall.position.toArray(),ballgame:lastGame&&{phase:lastGame.phase,kids:lastGame.kids.filter(k=>k.visible).map(k=>({role:k.role,position:[k.pos[0],k.y,k.pos[1]],activity:k.activity}))},fountain:drops.map(d=>d.m.position.toArray())}),stats:{students:8,baseballPlayers:ROSTER.length,footballPlayers:10,stadiumSpectators:12,fountainNeighbours:8},update(t,hour,night,weekday=4){
+ return {setActivityOwner(type,managed){if(type==='baseball')baseballManaged=managed;},school:{plan:schoolPlan,graph:schoolGraph,update:schoolDay.update,get state(){return schoolDay.state;},get pedestrians(){return schoolWalkers(schoolDay.state);}},audit:()=>({students:students.filter(a=>a.o.visible).map(a=>a.o.position.toArray()),school:lastSchool&&{session:lastSchool.session.id,occupancy:lastSchool.occupancy},football:football.map(a=>a.o.position.toArray()),baseball:baseballBall.position.toArray(),ballgame:lastGame&&{phase:lastGame.phase,kids:lastGame.kids.filter(k=>k.visible).map(k=>({role:k.role,position:[k.pos[0],k.y,k.pos[1]],activity:k.activity}))},fountain:drops.map(d=>d.m.position.toArray())}),stats:{students:schoolPlan.students.length,baseballPlayers:ROSTER.length,footballPlayers:10,stadiumSpectators:12,fountainNeighbours:8},update(t,hour,night,weekday=4,weather='clear'){
   fieldLights[0].intensity=night*55;fieldLights[1].intensity=night*9;
   for(const {m,a,phase}of drops){const u=(t*.5+phase)%1;m.position.set(-57+Math.cos(a)*u*1.9,2+Math.sin(u*Math.PI)*.7-u*1.4,-6+Math.sin(a)*u*1.9);}
-  students.forEach(({o,n})=>{o.visible=hour>=7&&hour<18;const u=(t*.055+n/8)%1,d=u<.5?u*2:(1-u)*2;o.position.set(-2+d*18,.18+Math.abs(Math.sin(t*7+n))*.04,-54.5+(n%2?-.42:.42));o.rotation.y=u<.5?Math.PI/2:-Math.PI/2;});
+  const school=schoolDay.update(hour,weekday);lastSchool=school;const dt=Math.max(0,Math.min(.1,t-(lastT??t)));lastT=t;
+  const people=[...school.students,school.teacher];
+  students.forEach(a=>{const p=people.find(q=>q.id===a.id),out=p&&(p.where==='town'||p.where==='yard')&&p.pos;a.o.visible=!!out;if(!out){a.last=null;return;}
+   const moved=a.last?Math.hypot(p.pos[0]-a.last[0],p.pos[1]-a.last[1]):0;a.last=p.pos;a.o.position.set(p.pos[0],.16,p.pos[1]);a.o.rotation.y=p.heading;
+   if(a.mixer)a.mixer.update({clip:p.clip==='Play'?'Play':p.moving?'Walk':p.clip,locomotion:p.moving},{dt,distance:p.moving?Math.min(moved,.6):0,facing:p.heading,immediate:moved>3});});
   const cycle=t%12;football.forEach(({o,n})=>{o.visible=hour>=8&&hour<22;const side=n<5?-1:1,x=30+side*(5+Math.sin(cycle*.5+n)*4),z=-84+(n%5-2)*2.7+Math.sin(t+n)*.6;o.position.set(x,.18+Math.abs(Math.sin(t*7+n))*.07,z);o.rotation.y=side<0?Math.PI/2:-Math.PI/2;});footballBall.visible=hour>=8&&hour<22;footballBall.position.set(30+Math.sin(t*.8)*9,1+Math.abs(Math.cos(t*.8))*3,-84+Math.sin(t*.4)*3);footballBall.rotation.x=t*4;
   const game=ballgameState(hour,t,weekday,kidWalk);lastGame=game;
   baseball.forEach(({o,n,bat})=>{const k=game.kids[n];o.visible=k.visible;if(!k.visible)return;o.position.set(k.pos[0],k.y,k.pos[1]);o.rotation.y=k.heading;if(bat)bat.rotation.set(0,0,.6+k.swing*1.9);});
   baseballBall.visible=game.ball.visible;baseballBall.position.set(...game.ball.pos);
-  gatherers.forEach(({o,n})=>{o.visible=hour>=6&&hour<23;const a=n/8*Math.PI*2+Math.sin(t*.15+n)*.08,r=3.7+(n%2)*.6;o.position.set(-57+Math.sin(a)*r,.18+Math.sin(t*2+n)*.015,-6+Math.cos(a)*r);o.rotation.y=a+Math.PI+Math.sin(t+n)*.12;});
+  gatherers.forEach(({o,n})=>{o.visible=hour>=6&&hour<23&&(weather!=='rain')&&(weather!=='snow'||n%2===0);const a=n/8*Math.PI*2+Math.sin(t*.15+n)*.08,r=3.7+(n%2)*.6;o.position.set(-57+Math.sin(a)*r,.18+Math.sin(t*2+n)*.015,-6+Math.cos(a)*r);o.rotation.y=a+Math.PI+Math.sin(t+n)*.12;});
  }};
 }

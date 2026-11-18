@@ -9,7 +9,7 @@ import {createCoastRoutes,createCoastWalkers} from '../src/astra/coast-life-plan
 const catalog=resolveAll(JSON.parse(readFileSync(new URL('../src/catalog/bounds.json',import.meta.url))));
 test('coast venues join the existing town and remain on the enlarged island',()=>{
  for(const seed of [0,42,831,9999]){
-  const town=compileAstra(catalog,seed),venues=town.venues.filter(v=>v.district==='coral-coast');assert.equal(venues.length,COAST_VENUE_COUNT);
+  const town=compileAstra(catalog,seed),venues=town.venues.filter(v=>v.district==='coral-coast' && v.type!=='station');assert.equal(venues.length,COAST_VENUE_COUNT);
   for(const v of venues){for(const corner of [v.box.min,v.box.max])assert(pointInTown(corner,town));const path=shortestPath(town,town.buildings[0].node,v.node);assert.equal(path.at(-1),v.node);assert(path.length>2);}
  }
 });

@@ -46,12 +46,12 @@ export default {
   tint: [1.06, .98, .86],      // multiplier on the kept colour
   tooth: .08,                  // world-space grain (0 = smooth)
   wrap: { lo: .36, hi: .64, floor: .42, foliageFloor: .30 },   // soft light: band start/end, shadow floor
-  side: { left: '#ffcf8a', right: '#d9603a', strength: .18, day: .4 }, // camera-fixed side lights (day = share kept by day)
+  side: { left: '#ffcf8a', right: '#d9603a', strength: .18, day: .4, space: 'world' }, // side lights; space 'world' (default 'view') locks colours to the mesh
   rim: .06,                    // cut-edge rim, coloured by the side lights
   windows: { colors: ['#ffb347', '#ffcf6a', '#ff8c3a'], split: [.5, .85], emit: [1.0, 2.2], albedo: .6, dayFloor: 0 },
   wet: null,                   // { amount: 1, darken: .55 } -> wet grey ground (pairs with post.reflections)
   leaves: null,                // { colors: [3 hexes], amount, ground, groundColor } -> recolour green foliage
-  snow: null,                  // { color, amount, road, slush } -> snow on up-facing surfaces
+  snow: null,                  // { color, shadow, highlight, amount, road, slush, expose, lip, track }
  },
 
  practicals: null,             // null -> untouched; or any of:

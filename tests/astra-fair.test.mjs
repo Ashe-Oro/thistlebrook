@@ -17,7 +17,7 @@ test('weekend afternoon and evening peak, quiet mornings, and closing boundaries
   assert.equal(fairSchedule(4,18).concert,true);assert.equal(fairSchedule(5,21.5).concert,false);
 });
 test('six park destinations are on the island and reachable from every town district',()=>{
-  const town=compileAstra(catalog,831),fair=town.venues.filter(v=>v.district==='fair');
+  const town=compileAstra(catalog,831),fair=town.venues.filter(v=>v.district==='fair' && v.type!=='station');
   assert.equal(fair.length,6);
   for(const v of fair){
     assert(pointInTown(v.pos,town));

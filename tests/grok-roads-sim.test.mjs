@@ -8,6 +8,6 @@ import {simulateDay} from '../tools/sim-collisions.mjs';
 test(`${TOWN_RULE.walking} a full day has no car-car, car-person or person-on-road events`, {timeout: 3600000}, async () => {
   const r = await simulateDay({hours: 24});
   assert(r.counts.samples > 5000 && r.vehicles > 20 && r.residents > 20, 'the day actually ran');
-  assert.deepEqual({carCar: r.counts.carCar, carPerson: r.counts.carPerson, personOnRoad: r.counts.personOnRoad, unsafeCrossing: r.counts.unsafeCrossing},
-    {carCar: 0, carPerson: 0, personOnRoad: 0, unsafeCrossing: 0}, JSON.stringify(r.firsts));
+  const {samples, ...incidents} = r.counts;
+  assert(Object.values(incidents).every((count) => count === 0), JSON.stringify(r.firsts));
 });

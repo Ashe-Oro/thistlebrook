@@ -1,6 +1,6 @@
 export const CLIP = Object.freeze({
   idle: 'Idle', look: 'Look Around', walk: 'Walk', left: 'Turn Left', right: 'Turn Right',
-  wave: 'Wave', sit: 'Sit', eat: 'Eat', seatedEat: 'Seated Eat', counter: 'Counter',
+  wave: 'Wave', sit: 'Sit', eat: 'Eat', seatedEat: 'Seated Eat', seatedChat: 'Seated Chat', counter: 'Counter',
   work: 'Work', read: 'Read', fish: 'Fish', hike: 'Hike', play: 'Play',
 });
 export const GREET_RANGE = 2.6;
@@ -18,7 +18,9 @@ export function animationPlan({ tool, place, slot, position, role, moving, greet
   const activity = place?.interaction?.activity;
   const kind = place?.kind || place?.type;
   const idle = variant % 3 === 0 ? CLIP.look : CLIP.idle;
-  if (greeting || tool === 'talkTo') return { clip: CLIP.wave, locomotion: !!moving };
+  if (greeting || tool === 'talkTo') return seat && !moving
+    ? { clip: CLIP.seatedChat, seatHeight: slot.seatHeight }
+    : { clip: CLIP.wave, locomotion: !!moving };
   if (moving) {
     const trail = ['hill', 'trail', 'hill-path'].includes(kind);
     return { clip: turn ? (turn < 0 ? CLIP.right : CLIP.left) : role === 'hiker' && trail ? CLIP.hike : CLIP.walk, locomotion: true };
@@ -31,7 +33,7 @@ export function animationPlan({ tool, place, slot, position, role, moving, greet
   if (role === 'child' && tool === 'visit' && activity === 'play' && slot) return { clip: CLIP.play };
   const counter = slot?.kind === 'counter' || place?.points?.some(point => point === 'counter' || point.kind === 'counter') ||
     ['bakery', 'market', 'store', 'tavern', 'fish-market'].includes(kind);
-  if (tool === 'eat' && (slot || counter)) return { clip: CLIP.eat };
+  if (tool === 'eat') return { clip: CLIP.eat };
   if (['work', 'buy', 'sell', 'payBill'].includes(tool) && counter) return { clip: CLIP.counter };
   if (tool === 'work' || slot?.animation === 'work') return { clip: CLIP.work };
   if (tool === 'visit' && (!activity || activity === 'browse')) return { clip: variant % 2 ? idle : CLIP.read };
@@ -64,7 +66,7 @@ export function legAngles(upper, lower, drop, forward) {
 export function animationRuleErrors(sample) {
   const errors = [];
   const { clip, slot, position, hipsY, hipsAboveSeat, tPose, rootTravel, stanceSlip, soleError } = sample;
-  if (clip === CLIP.sit || clip === CLIP.seatedEat) {
+  if (clip === CLIP.sit || clip === CLIP.seatedEat || clip === CLIP.seatedChat) {
     if (!documentedSeat(slot, position)) errors.push('Sit requires a reserved, documented seat');
     else if (!Number.isFinite(hipsY) || !Number.isFinite(hipsAboveSeat) || Math.abs(hipsY - hipsAboveSeat - slot.seatHeight) > .04) errors.push('Seated hips miss the seat');
   }

@@ -96,9 +96,9 @@ export async function districtCrowd(scene, people) {
     batches.push({mesh,members,local:new THREE.Matrix4().makeTranslation(0,1.28,.1)});
   }
   const transform=new THREE.Object3D(),matrix=new THREE.Matrix4();
-  return {people,update(t,hour){
+  return {people,update(t,hour,sheltering=()=>false){
     people.forEach(p=>{
-      p.visible=p.period==='night'?(hour>=17||hour<1):p.period==='game'?(hour>=18&&hour<22):hour>=7&&hour<19;
+      p.visible=!sheltering(p)&&(p.period==='night'?(hour>=17||hour<1):p.period==='game'?(hour>=18&&hour<22):hour>=7&&hour<19);
       const pose=p.motion(t);p.position=pose;
       transform.position.set(pose.x,pose.y,pose.z);transform.rotation.set(0,pose.yaw||0,pose.lean||0);
       transform.scale.setScalar(p.visible?p.scale||.9:0);transform.updateMatrix();

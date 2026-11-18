@@ -7,7 +7,7 @@
 // people, take turns through shared ground (apron, west-aisle merge, a bay
 // mouth), and never start a manoeuvre with a shuttle due at the road end.
 import {footprintsOverlap, pointInFootprint} from '../roads/collisions.js';
-import {BAYS, CAR, CROSSWALKS, PROMENADE, ROAD_LENGTH, ROUTE_REGIONS, SEAMS, SPAWN_S, WALKWAY, carFootprint, inRect, lanePoint, rectFootprint, samplePath, shuttlePose} from './fair-lot-plan.js';
+import {BAYS, CAR, CROSSWALKS, PROMENADE, ROAD_LENGTH, ROUTE_REGIONS, SEAMS, SPAWN_S, WALKWAY, carFootprint, inRect, lanePoint, rectFootprint, samplePath, shuttlePose, parkPathFootprints} from './fair-lot-plan.js';
 
 export const STYLES = [
   {id: 'hatch', colors: ['#c87e62', '#80ada3', '#ebdfbc', '#d8b36f', '#7f93b5', '#b45e57']},
@@ -120,21 +120,35 @@ export function createFairLotSim({hour = 10, seed = 831} = {}) {
     const shut = shuttles().filter((b) => dist(b.position, car.p) < look + 7);
     const held = [...locks].filter(([k, owner]) => owner !== car.id).map(([k]) => rectFootprint(regionOf(k)));
     if (otherApron(car).size && !owns(car, 'apron')) held.push(rectFootprint(ROUTE_REGIONS.apron));
-    const walking = [...walkers.map((w) => w.p), ...people.map((p) => [p.x, p.z])].filter((p) => dist(p, car.p) < look + 4);
+    // Town residents share this approach with lot cars. Leave room for them
+    // to keep walking along the park path while a car brakes or turns.
+    const walking = walkers.map(w => w.p).filter(p => dist(p, car.p) < look + 4);
+    const yielding = [];
+    for (const p of people) {
+      if (dist([p.x, p.z], car.p) >= look + 6) continue;
+      // The walker has already yielded. Keep body clearance, but allow the
+      // car to finish turning and release the footpath.
+      if (p.waitingForLocalTraffic) yielding.push([p.x, p.z]);
+      else for (const t of [0, .45, .9, 1.35]) walking.push([p.x + t * (p.vx || 0), p.z + t * (p.vz || 0)]);
+    }
     const cross = CROSSWALKS.filter((c) => crossings.get(c.id) > 0).map((c) => rectFootprint(c, .3));
     const blockedNow = (f) => held.filter((r) => footprintsOverlap(f, r)).length + cross.filter((r) => footprintsOverlap(f, r)).length;
     const base = blockedNow(footprintOf(car));
+    // Residents' walk line on the approach road: wait short of it while anyone is near the crossing point.
+    const onPath = (f) => parkPath.some((r) => footprintsOverlap(f, r)), pathBase = onPath(footprintOf(car));
     for (let d = .3; d <= look; d += .3) {
       const q = samplePath(car.path, car.s + d), f = carFootprint(q.p, q.h, .15);
       let hit = near.some((o) => footprintsOverlap(f, footprintOf(o, .15))) || shut.some((b) => footprintsOverlap(f, {c: b.position, d: b.direction, hl: b.length / 2 + .3, hw: b.width / 2 + .3}));
-      if (!hit && walking.some((p) => pointInFootprint(p, f, .4))) { hit = true; if (car.status !== 'Yielding to pedestrian') events.pedestrianYields++; car.status = 'Yielding to pedestrian'; }
+      if (!hit && (walking.some(p => pointInFootprint(p, f, .4)) || yielding.some(p => pointInFootprint(p, f, .13)))) { hit = true; if (car.status !== 'Yielding to pedestrian') events.pedestrianYields++; car.status = 'Yielding to pedestrian'; }
       if (!hit && blockedNow(f) > base) hit = true;
+      if (!hit && !pathBase && onPath(f) && walking.some((p) => dist(p, q.p) < 6)) { hit = true; if (car.status !== 'Yielding to pedestrian') events.pedestrianYields++; car.status = 'Yielding to pedestrian'; }
       if (hit) return keepClear(car, Math.min(clear, Math.max(0, d - .3)));
     }
     return keepClear(car, clear);
   }
   // Never come to rest on a crosswalk: stop short of it unless already on it.
-  const zebra = CROSSWALKS.map((c) => rectFootprint(c, .6));
+  const parkPath = parkPathFootprints(.25);
+  const zebra = [...CROSSWALKS.map((c) => rectFootprint(c, .6)), ...parkPathFootprints(.45)];
   function keepClear(car, clear) {
     const left = car.path.length - car.s; if (clear >= left - 1e-6) return clear;
     if (zebra.some((z) => footprintsOverlap(footprintOf(car), z))) return clear;
@@ -245,6 +259,14 @@ export function createFairLotSim({hour = 10, seed = 831} = {}) {
       for (const car of [...cars]) stepCar(car, step, people);
       for (const w of [...walkers]) stepWalker(w, step, people);
       schedule(hour, people, step);
+    },
+    clearWalk(from, to) {
+      if (to[0] < 190 || to[0] > 270 || to[1] < -12 || to[1] > 42) return true;
+      const midpoint = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2];
+      return !cars.some(car => {
+        const body = footprintOf(car);
+        return !pointInFootprint(from, body, .25) && [midpoint, to].some(p => pointInFootprint(p, body, .35));
+      });
     },
     /** Every car, parked or moving, for rendering and collision checks. */
     vehicles() {

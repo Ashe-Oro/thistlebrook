@@ -4,6 +4,8 @@ import {readFileSync} from 'node:fs';
 import {resolveAll} from '../src/catalog/resolve-all.js';
 import {compileAstra,distanceToSegment} from '../src/compiler/astra.js';
 import {createTrafficSimulation,sampleLane} from '../src/astra/traffic-simulation.js';
+import {TOWN_RULE} from '../src/compiler/town-rules.js';
+import {crossingClear,footprint,pointInFootprint} from '../src/roads/collisions.js';
 const catalog=resolveAll(JSON.parse(readFileSync(new URL('../src/catalog/bounds.json',import.meta.url))));
 const town=compileAstra(catalog,831);
 const simulate=(s,seconds,people=[])=>{for(let t=0;t<seconds;t+=.05)s.update(.05,people);};
@@ -15,6 +17,22 @@ test('all lane routes stay on real motor roads, away from school paths and river
   assert(p[1]<6,'Traffic must not drive onto wooden footbridges');
  }
  for(const seed of [0,7,42,99])assert.doesNotThrow(()=>createTrafficSimulation(compileAstra(catalog,seed)));
+});
+test('the town bus clears the sidewalk at the downtown jog',()=>{
+ const {vehicles}=createTrafficSimulation(town),bus=vehicles.find(v=>v.kind==='bus'&&v.route==='town');
+ const sidewalk=Array.from({length:41},(_,i)=>[-36.2486+i*.1,-13.3806+i*.00625]);
+ for(let distance=0;distance<bus.path.length;distance+=.05){
+  const pose=sampleLane(bus.path,distance);
+  if(pose.position[0]<-40||pose.position[0]>-29)continue;
+  const busFootprint=footprint({...bus,...pose});
+  assert(!sidewalk.some(point=>pointInFootprint(point,busFootprint,.25)),`bus encroaches on the sidewalk at ${pose.position}`);
+ }
+});
+test('a pedestrian waits for a vehicle turning onto the crossing',()=>{
+ const curb=[4,-2],farCurb=[4,2];
+ const vehicle={kind:'bus',length:4.4,width:1.6,position:[0,0],direction:[0,-1],speed:1};
+ assert.equal(crossingClear(curb,farCurb,[{...vehicle,positionAhead:d=>[0,-d]}]),true);
+ assert.equal(crossingClear(curb,farCurb,[{...vehicle,positionAhead:d=>[Math.max(0,d-1),-1]}]),false);
 });
 test('both buses repeatedly serve all nine stops, deliveries continue and every vehicle moves',()=>{
  const s=createTrafficSimulation(town),before=s.vehicles.map(v=>v.distance);simulate(s,900);
@@ -29,7 +47,7 @@ test('bus dwells at a stop and then departs; stationary cars do not creep when t
  simulate(s,3);assert.equal(bus.distance,distance);const frozen=s.audit();s.update(0);assert.deepEqual(s.audit(),frozen);
  simulate(s,8);assert(bus.distance>distance+1);
 });
-test('cars and bicycles brake for a pedestrian in their lane and resume when it clears',()=>{
+test(`${TOWN_RULE.yield}: cars and bicycles brake for a pedestrian in their lane and resume when it clears`,()=>{
  for(const kind of ['car','cycle']){
   const s=createTrafficSimulation(town),v=s.vehicles.find(v=>v.kind===kind);
   // An isolated straight road separates pedestrian priority from queues.

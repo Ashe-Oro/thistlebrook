@@ -5,6 +5,7 @@ import { districtKit } from './downtown-kit.js';
 import { toonMaterial } from '../toon.js';
 import { COAST_BLOCKS, COAST_REAR, COAST_COURTS, COAST_UMBRELLAS, shoreX } from './coast-plan.js';
 import { createCoastLife } from './coast-life.js';
+import { buildWatercraft } from './watercraft.js';
 
 export async function buildCoast(scene,town) {
   const root=new THREE.Group();root.name='Coral Coast';scene.add(root);
@@ -144,8 +145,10 @@ export async function buildCoast(scene,town) {
   }
   for(const v of town.venues.filter(v=>v.district==='coral-coast'))selectables.push({type:'venue',data:v,bounds:new THREE.Box3(new THREE.Vector3(v.box.min[0],0,v.box.min[1]),new THREE.Vector3(v.box.max[0],v.height||5,v.box.max[1]))});
   const life=await createCoastLife(root,town);
-  return {selectables,life,audit:()=>({...life.audit(),beachUmbrellas:{total:beachCanopies.length,open:beachCanopies.filter(m=>m.scale.x===1).length}}),update(t,night,hour){
-    kit.update(night);life.update(t,hour);
+  // vehicle-variety: speedboat, kayaks and canoe outside the swim line.
+  const watercraft=await buildWatercraft(root,'coast');
+  return {selectables,life,watercraft,audit:()=>({...life.audit(),watercraft:watercraft.audit(),beachUmbrellas:{total:beachCanopies.length,open:beachCanopies.filter(m=>m.scale.x===1).length}}),update(t,night,hour,weather){
+    kit.update(night);life.update(t,hour,weather);watercraft.update(t,hour);
     for(const canopy of beachCanopies){const open=hour>=7&&hour<19;canopy.scale.set(open?1:.12,open?1:2.8,open?1:.12);canopy.position.y=open?3.15:2.5;}
     for(const {mesh,band}of waves){const phase=(t*.15+band/4)%1,attr=mesh.geometry.attributes.position;for(let n=0;n<=120;n++){const z=-110+n,xx=shoreX(z)+9*(1-phase)+Math.sin(z*.28+t*.8)*.24;attr.setXYZ(n*2,xx,.1,z);attr.setXYZ(n*2+1,xx+.16+Math.sin(z*.19+band)**2*.16,.105,z);}attr.needsUpdate=true;mesh.material.opacity=Math.sin(phase*Math.PI)*(.7-night*.3);}
   }};

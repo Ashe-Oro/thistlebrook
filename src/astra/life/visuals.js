@@ -78,10 +78,20 @@ let ridePoses=null;
 export function registerRidePoses(provider){ridePoses=provider;}
 export function activityPose(actor,place,t){
  const slot=place?.interaction?.slots.find(s=>s.id===actor.context.location.slot);
- const pose={position:actor.context.location.position,facing:actor.facing,seated:slot?.kind==='seat'&&actor.action?.tool!=='walkTo',height:slot?.seatHeight,lean:0,bat:false,run:false};
+ const pose={indoors:!!actor.action?.sleeping,position:actor.context.location.position,facing:actor.facing,seated:slot?.kind==='seat'&&actor.action?.tool!=='walkTo',height:slot?.seatHeight,lean:0,bat:false,run:false};
  if(place?.interaction?.ride&&ridePoses&&slot&&actor.action&&actor.action.tool!=='walkTo'&&Number.isFinite(t)){
   const ride=ridePoses(place.interaction.ride,slot.seat??0,t,t-(actor.action.elapsed||0));
   if(ride){pose.position=ride.position;pose.height=ride.height;pose.facing=ride.facing;pose.seated=true;pose.riding=true;}
+ }
+ // Maple Hollow yards (opus-suburb): swings swing, hoops bounce, sprinklers get run through.
+ const yard=place?.interaction?.yard;
+ if(yard&&slot&&actor.action&&actor.action.tool!=='walkTo'&&Number.isFinite(t)){
+  const k=actor.index*1.7,f=[Math.sin(slot.facing),Math.cos(slot.facing)],p=slot.position;
+  if(slot.id.startsWith('swing')){const a=Math.sin(t*2.3+k);pose.position=[p[0]+f[0]*a*.42,p[1]+f[1]*a*.42];pose.seated=true;pose.height=.42+(1-Math.cos(a*.9))*.55;pose.lean=-a*.18;}
+  else if(slot.id==='treehouse'){pose.lift=1.3;pose.facing=slot.facing+Math.sin(t*.4+k)*.8;}
+  else if(slot.id.startsWith('hoop')){const u=(t*.9+k)%2;pose.lift=u<.35?Math.sin(u/.35*Math.PI)*.38:0;pose.run=u>1.2&&u<1.6;}
+  else if(slot.id.startsWith('sprinkler')){const a=t*1.6+k;pose.position=[p[0]+Math.cos(a)*.9,p[1]+Math.sin(a)*.9];pose.facing=Math.atan2(-Math.sin(a),Math.cos(a));pose.run=true;}
+  else if(slot.id==='pool'){pose.lift=-.18+Math.sin(t*2+k)*.04;}
  }
  if(place?.interaction?.activity==='baseball'&&actor.game?.ready){
   const f=baseballFrame(place.interaction,actor.game.elapsed);pose.position=f.positions[slot.role];pose.run=slot.role==='batter'&&f.running||slot.role==='fielder'&&(actor.game.elapsed%36>3&&actor.game.elapsed%36<6||actor.game.elapsed%36>8.4&&actor.game.elapsed%36<11);

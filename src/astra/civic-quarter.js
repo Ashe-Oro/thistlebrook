@@ -145,7 +145,6 @@ export async function buildCivicQuarter(scene,town) {
   const parkLoop=[[-70,-54],[-70,-66],[-48,-66],[-48,-42],[-70,-42],[-70,-54]];
   return {venueRecords,stats:{facilities:4,park:1,localPeople:actors.length,vehicles:5},
     audit:()=>({state:{...state},engine:engine.o.position.toArray(),delivery:delivery.o.position.toArray(),people:actors.map(a=>({name:a.name,position:a.o.position.toArray(),visible:a.o.visible})),ducks:ducks.map(a=>a.o.position.toArray())}),
-    moment(){return state.phase==='responding'?['A call for Station 01','The engine is on its way to the neighbourhood post.']:state.phase==='assisting'?['A little help, right on time','The crew has the bin fire under control.']:state.storyTime?['Three o’clock means story time','Little readers gather in Willow Park.']:state.deliveryActive?['The morning rounds','Fresh supplies for the clinic. Fresh chapters at the library.']:['A town that looks after its own','The park grows quiet. Station 01 stays ready.'];},
     update(t,hour,night){
       state=civicLifeState(t,hour);move(engine.o,FIRE_ROUTE,state.fireProgress,state.phase==='returning');
       engine.beacons.forEach((m,n)=>m.material.color.set((state.phase==='responding'||state.phase==='assisting')&&Math.sin(t*8+n*Math.PI)>0?'#fff3ca':n?'#6c9fbf':'#bd634f'));

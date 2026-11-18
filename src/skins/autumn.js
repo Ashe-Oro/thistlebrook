@@ -31,7 +31,7 @@ export default {
   tint: [1.06, .98, .86],
   tooth: .08,
   wrap: { lo: .36, hi: .64, floor: .42, foliageFloor: .30 },
-  side: { left: '#ffcf8a', right: '#d9603a', strength: .18, day: .4 },
+  side: { left: '#ffcf8a', right: '#d9603a', strength: .18, day: .4, space: 'world' },
   rim: .06,
   windows: { colors: ['#ffb347', '#ffcf6a', '#ff8c3a'], split: [.5, .85], emit: [1.0, 2.2], albedo: .6, dayFloor: 0 },
   wet: null,

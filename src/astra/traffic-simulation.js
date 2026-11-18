@@ -1,5 +1,7 @@
 // Pure road-following simulation. No renderer, assets, timers or global random.
 import { distanceToSegment } from '../compiler/astra.js';
+import { FOOTPRINT } from './traffic-fleet.js';
+import { MAPLE_HOLLOW_BAYS, MAPLE_HOLLOW_CROSSWALKS } from './maple-hollow-plan.js';
 const length = (a,b) => Math.hypot(b[0]-a[0],b[1]-a[1]);
 const mix = (a,b,t) => a.map((v,i)=>v+(b[i]-v)*t);
 const unit = (a,b) => { const d=length(a,b); return [(b[0]-a[0])/d,(b[1]-a[1])/d]; };
@@ -19,30 +21,69 @@ export const CROSSWALKS = [
  {point:[-61,4]}, {point:[-22,-25]},
  {point:[1,-33]}, {point:[28,-33]},
  {point:[22,-7]}, {point:[46,-1]},
+ // Maple Hollow (opus-suburb): bus stops and the school-edge stop.
+ ...MAPLE_HOLLOW_CROSSWALKS,
 ];
 // Parked cars sit in marked bays beside the street, beyond the sidewalk, never
 // on a drive lane (grok-roads). yaw is the car's heading; length runs along it.
+const CAR=FOOTPRINT.car;
 export const PARKING_BAYS = [
- {id:'high-street-west-1',center:[-73,-12.8],yaw:Math.PI/2,length:1.85,width:.88,road:[-73,-16]},
- {id:'high-street-west-2',center:[-70.4,-12.8],yaw:Math.PI/2,length:1.85,width:.88,road:[-70.4,-16]},
- {id:'campus-lane',center:[-31,-29.8],yaw:Math.PI/2,length:1.85,width:.88,road:[-31,-33]},
+ {id:'high-street-west-1',center:[-73,-12.8],yaw:Math.PI/2,length:CAR.length,width:CAR.width,road:[-73,-16]},
+ {id:'high-street-west-2',center:[-70.4,-12.8],yaw:Math.PI/2,length:CAR.length,width:CAR.width,road:[-70.4,-16]},
+ {id:'campus-lane',center:[-31,-29.8],yaw:Math.PI/2,length:CAR.length,width:CAR.width,road:[-31,-33]},
+ // vehicle-variety: a residential curb bay on Willowbank's west lane and a
+ // short row south of Market Street, each 1.7 m beyond the carriageway edge,
+ // clear of sidewalks, crossings, junctions, parcels and props (audit-roads).
+ {id:'willowbank-west',center:[-19,-7],yaw:0,length:CAR.length,width:CAR.width,road:[-22,-7]},
+ {id:'market-south-1',center:[7,-18.2],yaw:Math.PI/2,length:CAR.length,width:CAR.width,road:[7,-15]},
+ {id:'market-south-2',center:[9.4,-18.2],yaw:Math.PI/2,length:CAR.length,width:CAR.width,road:[9.4,-15]},
+ {id:'market-south-3',center:[11.8,-18.2],yaw:Math.PI/2,length:CAR.length,width:CAR.width,road:[11.8,-15]},
+ // Maple Hollow driveways (opus-suburb): one family car per bay, nose to the street.
+ ...MAPLE_HOLLOW_BAYS,
 ];
+// One documented cycle corridor: Civic Avenue (4.2 m) carries marked cycle
+// strips beside the West Loop lanes from Sunbeam Lane to the Civic Green bend.
+// Cyclists on that stretch ride the strip, outside the car lane.
+export const CYCLE_STRIPS = [
+ {id:'civic-avenue-north',name:'Civic Avenue cycle strip',a:[-80,-33],b:[-80,-77],offset:1.55,width:.6},
+ {id:'civic-avenue-west',name:'Civic Avenue cycle strip',a:[-80,-77],b:[-99,-77],offset:1.55,width:.6},
+];
+const onStrip=(a,b)=>CYCLE_STRIPS.find(s=>length(s.a,a)<.01&&length(s.b,b)<.01);
 // Only roads wide enough for two small town vehicles, north of the footbridges.
 export const motorRoads = town => town.roads.filter(r=>!r.owner && r.kind!=='pedestrian' && r.width>=2.4 && Math.min(r.a[1],r.b[1])<4.01).map(r=>({...r,a:[r.a[0],Math.min(4,r.a[1])],b:[r.b[0],Math.min(4,r.b[1])]})).filter(r=>length(r.a,r.b)>.01);
-export function makeLane(points,offset=.7) {
+export function makeLane(points,offset=.7,segmentOffset=null) {
  const corners=points.map((p,i)=>{
   const a=unit(points[mod(i-1,points.length)],p),b=unit(p,points[(i+1)%points.length]);
   const dot=a[0]*b[0]+a[1]*b[1],f=offset/(1+dot);
   if(dot<-.99)throw Error('Traffic routes cannot reverse at a junction');
-  return [p[0]-(a[1]+b[1])*f,p[1]+(a[0]+b[0])*f];
+  const oa=segmentOffset?.(points[mod(i-1,points.length)],p)??offset,ob=segmentOffset?.(p,points[(i+1)%points.length])??offset;
+  if(oa===offset&&ob===offset)return [p[0]-(a[1]+b[1])*f,p[1]+(a[0]+b[0])*f];
+  // Different offsets either side of the corner: intersect the two offset lines.
+  const det=b[0]*a[1]-a[0]*b[1],w=[-b[1]*ob+a[1]*oa,b[0]*ob-a[0]*oa];
+  if(Math.abs(det)<1e-6)return [p[0]+w[0]/2-a[1]*oa,p[1]+w[1]/2+a[0]*oa];
+  const s=(-w[0]*b[1]+b[0]*w[1])/det;
+  return [p[0]-a[1]*oa+a[0]*s,p[1]+a[0]*oa+a[1]*s];
  });
  const samples=[];
- corners.forEach((p,i)=>{
-  const prev=corners[mod(i-1,corners.length)],next=corners[(i+1)%corners.length];
+ for(let i=0;i<corners.length;i++){
+  const p=corners[i],prev=corners[mod(i-1,corners.length)],next=corners[(i+1)%corners.length];
+  // Blend a short lateral jog as one curve, so a long bus stays clear of the
+  // sidewalk while its front swings onto the next parallel street.
+  const after=corners[(i+2)%corners.length],incoming=unit(prev,p),outgoing=unit(next,after);
+  if(i+1<corners.length&&length(p,next)<1.1&&incoming[0]*outgoing[0]+incoming[1]*outgoing[1]>.999){
+   const span=3.2;
+   const enter=mix(p,prev,Math.min(span/length(p,prev),.3)),leave=mix(next,after,Math.min(span/length(next,after),.3));
+   for(let k=0;k<=16;k++){
+    const t=k/16,a=mix(enter,p,t),b=mix(p,next,t),c=mix(next,leave,t);
+    samples.push(mix(mix(a,b,t),mix(b,c,t),t));
+   }
+   i++;
+   continue;
+  }
   const r=Math.min(.7,length(prev,p)*.3,length(p,next)*.3);
-  const enter=mix(p,prev,r/length(prev,p)),leave=mix(p,next,r/length(p,next));
+  const enter=mix(p,prev,r/length(prev,p)),leave=mix(p,next,r/length(next,p));
   for(let k=0;k<=8;k++){const t=k/8;samples.push(mix(mix(enter,p,t),mix(p,leave,t),t));}
- });
+ }
  const cumulative=[0];for(let i=0;i<samples.length;i++)cumulative.push(cumulative.at(-1)+length(samples[i],samples[(i+1)%samples.length]));
  return {points:samples,cumulative,length:cumulative.at(-1)};
 }
@@ -67,15 +108,20 @@ export function createTrafficSimulation(town) {
   const a=points[i],b=points[(i+1)%points.length];for(let d=0;d<=length(a,b);d+=.25){const p=mix(a,b,d/length(a,b));if(!roads.some(r=>distanceToSegment(p,r.a,r.b)<.02))throw Error(`Traffic route leaves the roads at ${p}`);}
  }
  const routes=Object.fromEntries(Object.entries(loops).flatMap(([id,p])=>[[id,makeLane(p)],[id+'-reverse',makeLane([...p].reverse())]]));
+ // Cyclists use the marked strip where one exists (CYCLE_STRIPS).
+ // The strip ends where Civic Avenue narrows (x = -99), so that point joins the cycle's route.
+ const cycleLoop=[...loops.station].reverse();cycleLoop.splice(cycleLoop.findIndex(p=>p[0]===-80&&p[1]===-77)+1,0,[-99,-77]);
+ routes['station-reverse-cycle']=makeLane(cycleLoop,.7,(a,b)=>onStrip(a,b)?.offset);
  const vehicles=[],events={busArrivals:[],deliveries:0,pedestrianYields:0,junctionYields:0,laps:0};
- function add(kind,route,fraction,stops=[]){const path=routes[route],id=vehicles.length;const v={id,kind,route,path,distance:path.length*fraction,speed:0,maxSpeed:kind==='cycle'?1.8:kind==='bus'?2.5:3.1+(id%3)*.2,length:kind==='bus'?3.2:kind==='van'?2.2:kind==='cycle'?1.45:1.85,width:kind==='cycle'?.45:kind==='bus'?.98:.88,wait:0,status:'Cruising',stops:stops.map(s=>({...s,distance:nearestDistance(path,s.point)})),lastStop:null,stoppedAt:null,visits:0};Object.assign(v,sampleLane(path,v.distance));vehicles.push(v);return v;}
+ function add(kind,route,fraction,stops=[]){const path=routes[route],id=vehicles.length;const v={id,kind,route,path,distance:path.length*fraction,speed:0,maxSpeed:kind==='cycle'?1.8:kind==='bus'?2.5:3.1+(id%3)*.2,length:FOOTPRINT[kind].length,width:FOOTPRINT[kind].width,wait:0,status:'Cruising',stops:stops.map(s=>({...s,distance:nearestDistance(path,s.point)})),lastStop:null,stoppedAt:null,visits:0};Object.assign(v,sampleLane(path,v.distance));vehicles.push(v);return v;}
  add('bus','town',.025,TRAFFIC_STOPS.map(s=>({...s,dwell:7})));
  for(const [route,fractions] of Object.entries({shops:[.05,.56],west:[.27],north:[.14,.62],east:[.25,.7],'north-reverse':[.36],'shops-reverse':[.75],'west-reverse':[.6]}))for(const f of fractions)add('car',route,f);
  add('van','west',.72,[{id:'florist',name:'Florist delivery',point:[-39,-15],dwell:5}]);
  add('van','east',.02,[{id:'quay-delivery',name:'Quay delivery',point:[46,-11],dwell:6}]);
  add('bus','station',.025,WEST_STOPS.map(s=>({...s,dwell:7})));
- for(const f of [.25,.6,.85])add('car','station',f);add('cycle','station-reverse',.3);
+ for(const f of [.25,.6,.85])add('car','station',f);add('cycle','station-reverse-cycle',.3);
  add('cycle','shops',.32);add('cycle','north',.87);add('cycle','east-reverse',.43);
+ for(const v of vehicles)v.positionAhead=distance=>sampleLane(v.path,v.distance+distance).position;
  const junctionPoints=town.nodes.filter(p=>{const arms=new Set();for(const r of roads)if(distanceToSegment(p,r.a,r.b)<.02)for(const end of [r.a,r.b])if(length(p,end)>.02){const u=unit(p,end);arms.add(u.map(v=>Math.round(v)).join(','));}const u=[...arms].map(s=>s.split(',').map(Number));return arms.size>=3||(arms.size===2&&u[0][0]*u[1][0]+u[0][1]*u[1][1]>-.5);})
   .filter((p,i,a)=>a.findIndex(q=>length(p,q)<2)===i).map(point=>({point,owner:null}));
  // Short connecting streets are one junction zone. Reserving their corners
@@ -95,7 +141,16 @@ export function createTrafficSimulation(town) {
    let clearance=Infinity,reason='Cruising';const ahead=(point)=>{const dx=point[0]-v.position[0],dz=point[1]-v.position[1];return {along:dx*v.direction[0]+dz*v.direction[1],across:Math.abs(dx*v.direction[1]-dz*v.direction[0])};};
    // Look down the lane, including predicted pedestrian positions. Residents
    // keep right of way even away from a painted crossing.
-   for(const p of pedestrians){for(const horizon of [0,.45]){const q=[p.x+(p.vx||0)*horizon,p.z+(p.vz||0)*horizon],a=ahead(q);if(a.along>-.1&&a.along<8&&a.across<v.width/2+.28){const gap=a.along-v.length/2-.4;if(gap<clearance){clearance=gap;reason='Yielding to pedestrian';}}}}
+   for(const p of pedestrians){
+    const width=p.crossing?2.8:v.width/2+.28,buffer=p.crossing?1.45:.4;
+    for(const horizon of [0,.45]){
+     const a=ahead([p.x+(p.vx||0)*horizon,p.z+(p.vz||0)*horizon]);
+     if(a.along>-.1&&a.along<8&&a.across<width){
+      const gap=a.along-v.length/2-buffer;
+      if(gap<clearance){clearance=gap;reason='Yielding to pedestrian';}
+     }
+    }
+   }
    for(const other of vehicles){if(other===v)continue;
     if(other.path===v.path){const gap=mod(other.distance-v.distance,v.path.length)-(v.length+other.length)/2-.6;if(gap<clearance){clearance=gap;reason='Following traffic';}}
     const a=ahead(other.position),alignment=v.direction[0]*other.direction[0]+v.direction[1]*other.direction[1];

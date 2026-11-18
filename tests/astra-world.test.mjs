@@ -1,3 +1,4 @@
+import {MAPLE_HOLLOW_RESIDENTS} from '../src/astra/maple-hollow-plan.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -7,9 +8,9 @@ import {createWorldRegistry,shortestRoutes,registryErrors} from '../src/astra/re
 import {createLife} from '../src/astra/life/runtime.js';
 import {placeInfo} from '../src/astra/place-info.js';
 const catalog=resolveAll(JSON.parse(readFileSync(new URL('../src/catalog/bounds.json',import.meta.url))));
-const ids=['harbor','fair','outskirts','airport','skatepark','themepark','coral-coast','roadster','starbase'];
-test('all eighteen districts share a connected graph and valid registry over varied seeds',()=>{
- for(const seed of [0,1,42,831,9999]){const t=compileWorld(catalog,seed);assert.equal(t.districts.length,18);assert(checkWorld(t).ok);assert.deepEqual(registryErrors(t),[]);for(const id of ids)assert(t.districts.some(d=>d.id===id));const r=createWorldRegistry(t);for(const home of t.buildings){const paths=shortestRoutes(t,home.node);for(const venue of t.venues)assert.equal(paths.path(venue.node).at(-1),venue.node);}for(const id of ids)assert(r.findAll({district:id,capability:'walkTo'}).length>0);assert.equal(t.registry.places.filter(p=>p.type==='building').reduce((n,p)=>n+p.occupants.length,0),40);}
+const ids=['harbor','fair','outskirts','airport','skatepark','themepark','coral-coast','roadster','starbase','maple-hollow'];
+test('all nineteen districts (Maple Hollow is the nineteenth) share a connected graph and valid registry over varied seeds',()=>{
+ for(const seed of [0,1,42,831,9999]){const t=compileWorld(catalog,seed);assert.equal(t.districts.length,19);assert(checkWorld(t).ok);assert.deepEqual(registryErrors(t),[]);for(const id of ids)assert(t.districts.some(d=>d.id===id));const r=createWorldRegistry(t);for(const home of t.buildings){const paths=shortestRoutes(t,home.node);for(const venue of t.venues)assert.equal(paths.path(venue.node).at(-1),venue.node);}for(const id of ids)assert(r.findAll({district:id,capability:'walkTo'}).length>0);assert.equal(t.registry.places.filter(p=>p.type==='building').reduce((n,p)=>n+p.occupants.length,0),40+MAPLE_HOLLOW_RESIDENTS.length);} // every resident has one home; Maple Hollow adds its households
 });
 test('resident routing reaches remote public entrances without teleporting or entering the launch range',()=>{
  const t=compileWorld(catalog,831),life=createLife(t,{hour:16,brain:()=>null}),targets=['harbor-market','fair-wheel','outskirts-dock','airport-terminal','skatepark','pinecrest','coast-beach','roadster-arena','starbase-garden'];

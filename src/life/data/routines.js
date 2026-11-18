@@ -37,7 +37,7 @@ export const VARIATIONS = [
  {weekdays:['sat','sun'],hour:14,place:'plaza',tool:'visit',activity:'weekend gathering'},
  {weather:['rain','fog'],hour:16,place:'tavern',tool:'visit',activity:'sheltering with neighbours'},
 ];
-export const AMBIENT = {clear:['Lovely light on the roofs today.','A fine day for a walk.'],rain:['Come warm up at the inn.','The gardens needed this rain.'],fog:['Mind the lane in this mist.','Listen! The mill is turning.'],overcast:['Looks like a quiet afternoon.','Shall we meet after work?']};
+export const AMBIENT = {clear:['Lovely light on the roofs today.','A fine day for a walk.'],rain:['Come warm up at the inn.','The gardens needed this rain.'],fog:['Mind the lane in this mist.','Listen! The mill is turning.'],snow:['Snow on the roofs already.','Come inside and warm up.'],overcast:['Looks like a quiet afternoon.','Shall we meet after work?']};
 // Canonical names from INTERFACES.md; aliases disappear with the registry fallback.
 export const PLACE_ALIASES = [
  ['baker','bakery','cv-bakery','The Flour & Fern'],

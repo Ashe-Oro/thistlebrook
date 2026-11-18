@@ -50,10 +50,11 @@ function trailLines(){
   {id:'descent',name:'Knob descent',points:Object.assign([...switchback(knobFoot,cairn,{half:6}).reverse(),...smooth([knobFoot,[-118,72.5],[-114.5,67]],.5).slice(1)],{dense:true})},
   {id:'river',name:'Willow River trail',points:[[-77.6,21],[-82,22.6],[-86.8,24.6],[-91.5,26],[-96,30],[-100,37],[-104,44.5]]},
   {id:'pond-link',name:'Pond path',points:[[-104,44.5],[-107,52],[-110,59],[-114.5,67]]},
+  {id:'south',name:'Pinewood South Trail',points:[[-104,119],[-103,102],[-101,88],[-104,79],[-114.5,67]]},
   {id:'meadow-link',name:'Meadow cut',points:[[-104,44.5],[-110,38],[-117,30],[-122.5,23.5],foot]},
  ];
 }
-export const TRAILHEADS=[{id:'north',name:'Pinewood Trailhead',pos:[-104,-30],trail:'north',sign:[-102,-27.4]},{id:'river',name:'Willow River Trailhead',pos:[-77.6,21],trail:'river',sign:[-78.6,22.6]}];
+export const TRAILHEADS=[{id:'north',name:'Pinewood Trailhead',pos:[-104,-30],trail:'north',sign:[-102,-27.4]},{id:'river',name:'Willow River Trailhead',pos:[-77.6,21],trail:'river',sign:[-78.6,22.6]},{id:'south',name:'Pinewood South Trailhead',pos:[-104,119],trail:'south',sign:[-101.5,119]}];
 // Hiker routes: lists of [trail, reversed]. 'outback' routes return the same way.
 export const ROUTES=[
  {id:'summit',kind:'outback',start:'north',legs:[['north',0],['switchbacks',0]],rest:'lookout'},

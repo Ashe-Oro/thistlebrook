@@ -36,6 +36,8 @@ Funfair Parking sits outside the town pedestrian graph, so `auditFairLot` (`tool
 
 The skatepark and Roadster tests sample the track and ramp surfaces. The road audit checks placement elevations for ground props and raised scene props.
 
+Driveway parking is allowed when the car fits entirely on its documented paved bay and clears buildings, props, sidewalks, footpaths and crossings. The road audit checks each driveway bay against its pavement, oriented building footprints and walking routes.
+
 ## TOWN-05 · Structures have a connection
 
 2026-11-17
@@ -75,3 +77,85 @@ The skin tests check the cel default, per-skin data files and live switching bac
 > Sit only at a reserved, documented seat. Seated hips meet the seat. Walk cycles play in place and the planted foot stays on the walking surface.
 
 The road audit checks reserved seat anchors, bind poses, root motion and planted-foot drift. The animation tests inject off-seat sitting, floating hips, a bind pose and a skating step.
+
+## TOWN-10 · Rails are not walkways
+
+2026-11-17
+
+> Pedestrians never walk on tracks; the railway owns its corridor and only meets streets at gated, perpendicular level crossings.
+
+The road audit (`auditRailway` in `tools/audit-town-rules.mjs`) checks every sidewalk and footpath edge against the visible track outside level-crossing decks (`walk-on-rail`), track crossing carriageways at grade outside level crossings (`rail-on-road`), crossing angle and barriers (`rail-crossing`), parcels, hills and trees on the line, and land other lanes own (`rail-reserved`). The rail sides of TOWN-04 (floating track, track in water without a bridge), TOWN-05 (stations need a sign, lights and a sidewalk link) and TOWN-06 (closed loop, no orphan works stub) are checked there too. `npm run sim:collisions` counts people on the rails (`personOnRail`) and train contacts over a full day; `tests/railway-loop.test.mjs` injects each fault and expects it to fail.
+
+Maple Hollow Drive joins Airport Road, whose northbound approach has a gated, perpendicular crossing on the Grand Loop. `tests/maple-hollow.test.mjs` checks that connection and that Maple's local traffic turns before the Airport Road junction.
+
+## TOWN-11 · Boats stay in the water, at a berth or on a beach rack
+
+2026-11-17
+
+> Boats stay in the water or at a documented berth or beach rack. Hulls never sit on roads, quays or sand (except a documented kayak/canoe rack) and never clip docks, pilings or seawalls.
+
+`src/astra/water-traffic-plan.js` lists every hull, berth, rack and route. `watercraftFindings` samples every hull at every quarter hour against the mainland and harbor land, the Gullwatch pier, the T-head, the breakwater and the lighthouse, the Shell Cove and Coral Coast swimming lines, and every road and walk. It also checks hull-to-hull overlaps. The road audit reports these as `boat-placement` and `boat-clash`. Its tests inject a yacht on the quay, a hull through the pier and a kayak on a carriageway, and each one has to fail.
+
+## TOWN-12 · No two matching cars side by side
+
+2026-11-17
+
+> No two cars that share a look — the same pack model and the same body colour — travel or park side by side.
+
+`assignFleet` and `parkedFleet` (`src/astra/traffic-fleet.js`) pick looks so that consecutive vehicles on a route, and parked cars whose bays are within 4 m, never share a look. `tests/vehicle-variety.test.mjs` checks the compiled seed-831 fleet and neighbouring bays, and treats two identical neighbouring looks as a failure.
+
+## TOWN-13 · Vehicles give way to people on paths
+
+2026-11-17
+
+> Lot cars and other vehicles give way to people on paths and walk lines, and they never come to rest on a residents' walk line or a zebra.
+
+The fair-lot simulator (`src/astra/fair-lot-sim.js`) stops a car short of the Funfair approach walk line while anyone is near the crossing, and `keepClear` will not leave a car resting on that line or a zebra. Town traffic (`src/astra/traffic-simulation.js`) counts `pedestrianYields` the same way. `tests/grok-fairlot.test.mjs` and `tests/astra-traffic.test.mjs` require yields to happen and reject a car that stays on the walk line.
+
+Regional drivers yield while a pedestrian is in either lane of a marked crossing. `tests/maple-hollow.test.mjs` exercises that yield on both halves of a zebra.
+
+## TOWN-14 · Distant scenery colours stay world-locked
+
+2026-11-18
+
+> Distant scenery colours are world-locked and don't shift with camera movement.
+
+Backdrop hills, landscape mountains and theme-park peaks are tagged `userData.scenery`. Their skin side lights and rims use world-space normals, never the camera's left/right. Autumn and winter set `side.space: 'world'` so the rest of those skins stay locked too. Neon may keep camera-fixed side lights on buildings, but tagged scenery is still world-locked. `tests/town-scenery.test.mjs` checks the tags, the shader path, and that a fixed world normal keeps the same side-light contribution from three camera yaws.
+
+## TOWN-15 · Snow scenes keep contour
+
+2026-11-18
+
+> Snow scenes keep contour: value bands and shadow hue, never flat white.
+
+The winter skin lays cool blue-violet shadow snow, a mid band and a slightly warm highlight, with slope-worn patches, crease AO, a lip on downward edges, slushy tyre tracks on roads and only a light dusting on dark evergreens. Measurable targets live in `docs/WINTER-LOOK.md` and `src/astra/skin/winter-look.js`: snow-pixel luminance spread of at least 0.22, at least three value bands in a top-down sample, and no more than 12% of snow pixels near pure white. `tests/winter-look.test.mjs` checks the skin data, the shader, and a headless histogram of a synthetic isometric snow field, and will also fail a captured winter still that breaks the same numbers.
+
+## TOWN-16 · The HUD stays decluttered
+
+2026-11-18
+
+> Declutter the UI: no "Your view"/share panel, no "drag to pan" hint, no happenings box, no bottom control bar, no sound control. The top-right clock and its dropdown are the single place to set time.
+
+Ashe asked at 9:51 AM ET on 18 Nov 2026. The town view keeps only the masthead, the explore menu, the top-right clock and the small map tools (zoom, turn, home). The clock's dropdown holds the time presets and slider, pause and speed, weather and skin, so those features stay reachable; `?weather=` and `?skin=` URL params still work. There is no sound in the town, so there is no sound toggle. `tests/ui-declutter.test.mjs` fails if any removed piece comes back in markup, code or CSS, and drives the real UI modules in headless Chrome to prove the dropdown sets time, pace, weather and skin.
+
+## TOWN-17 · The main line must circle the town
+
+2026-11-18
+
+> The main line must circle the town: the closed path encloses at least 80% of the district centroids (West Works, downtown, civic/school, airport, harbor/coast, woods, fair/outskirts, and Maple Hollow when that parcel is present), and each service train has at least six coaches or wagons.
+
+The centreline must be at least 1,773 m long. The road audit and railway tests check its length, the enclosed district centres, and the number of coaches and wagons in the service consist. The locomotive and tender are excluded from that count.
+
+## TOWN-18 · Major places need a named rail stop
+
+2026-11-18
+
+> Every listed major point of interest has a station or halt within 60 m by pedestrian path, and that stop has a named platform sign.
+
+The road audit and railway tests measure the walk from each inventoried entrance to its platform on the sidewalk graph. They also check the named sign. Maple Hollow enters the inventory when its parcel is present.
+
+## Rules in progress on other lanes
+
+These are already Ashe's rules. Their checks land with the lanes building those features.
+
+- **Villager needs** (`village/life-needs`) and **school day** (`village/school-day`) had not added new town rules at the time of this audit.

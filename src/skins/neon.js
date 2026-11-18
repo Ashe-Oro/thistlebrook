@@ -32,7 +32,7 @@ export default {
   tint: [.84, .82, 1.10],      // multiplier on the kept colour
   tooth: .10,                  // world-space paper/plaster grain
   wrap: { lo: .30, hi: .74, floor: .40, foliageFloor: .30 },
-  side: { left: cyan, right: magenta, strength: .9, day: .3 },  // camera-fixed side lights
+  side: { left: cyan, right: magenta, strength: .9, day: .3, space: 'view' },  // camera-fixed on buildings; scenery still world-locked
   rim: .12,
   windows: { colors: [cyan, magenta, acid], split: [.45, .85], emit: [1.4, 2.4], albedo: .55, dayFloor: .55 },
   wet: { amount: 1, darken: .55 },

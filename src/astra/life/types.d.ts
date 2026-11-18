@@ -30,6 +30,7 @@ export interface Interaction {
   approach: Vec2[];
   slots: InteractionSlot[];
   hours: [number, number];
+  residents?: string[];
   /** Optional baseball coordinates; bases ordered home, first, second, third. */
   game?: { bases: Vec2[]; mound: Vec2; field: Vec2 };
 }
@@ -37,6 +38,8 @@ export interface Place {
   id: string; name: string; node: number; pos: Vec2;
   kind: string; district?: string; capabilities: ToolName[]; hours: [number, number];
   interaction?: Interaction;
+  sellsMeals?: boolean;
+  servesFood?: boolean;
   /** Render adapter hint for the two small furnishings supplied by this module. */
   furnishing?: 'picnic' | 'chess';
 }
@@ -50,22 +53,28 @@ export interface Relationship { id: string; familiarity: number; sharedActivitie
 export interface ScheduleBlock { start: number; end: number; label: string; target: string; tool: ToolName }
 export interface ResidentContext {
   id: string; name: string;
-  job: { title: string; workplace: string; wage: number; product: string | null; shift: [number, number] };
+  district?: string;
+  kid?: boolean;
+  commute?: { stop: string; school: string; leave: number; missed: number; afternoon: number; missedPm: number };
+  job: { title: string; workplace: string; wage: number; product: string | null; shift: [number, number]; commute: number };
   personality: { pace: number; curiosity: number; sociability: number; favourite: ActivityType };
   money: number; bills: Bill[];
   assets: { home: string; inventory: Record<string, number> };
   relationships: Relationship[];
   needs: { energy: number; hunger: number; recreation: number };
+  sleep: [number, number];
   schedule: ScheduleBlock[];
-  memory: { day: number; worked: number; lastMeal: number; lastBreak: number; lastLeisure: number; lastPurchase: number; lastSale: number; visited: string[] };
+  memory: { day: number; worked: number; lastMeal: number; lastBreak: number; lastLeisure: number; lastPurchase: number; lastSale: number; visited: string[]; blocked: Record<string, number>; rode?: Partial<Record<'morning' | 'afternoon', number>> };
   location: { node: number; position: Vec2; place: string | null; slot: string | null };
 }
-export interface PlaceView extends Place { freeSlots: string[]; participants: string[]; distance: number }
+export interface PlaceView extends Place { freeSlots: string[]; participants: string[]; distance: number; weatherAllowsVisit?: boolean; weatherSlotOpen?: boolean }
 export interface PlanningContext {
   self: ResidentContext;
   clock: { day: number; hour: number; elapsed: number };
   places: PlaceView[];
   neighbours: { id: string; name: string; place: string | null; activity: ActivityType | null }[];
+  weather?: string;
+  transit?: boolean;
   passing: boolean;
   greetingTarget: string | null;
 }

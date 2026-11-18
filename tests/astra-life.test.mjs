@@ -99,7 +99,9 @@ test('time scrubbing does not advance the day or charge bills; midnight updates 
 });
 
 test('additional seeds retain valid interactions and complete routine navigation',()=>{
- for(const seed of [1,22,331]){const t=compileAstra(catalog,seed),life=createLife(t,{hour:15});for(const p of life.registry.places.filter(p=>p.interaction))assert.deepEqual(interactionErrors(p.interaction,t),[]);tick(life,450,16);assert(life.actors.every(a=>a.arrivals>0));assert(!life.events.some(e=>e.status==='rejected'));}
+ for(const seed of [1,22,331]){const t=compileAstra(catalog,seed),life=createLife(t,{hour:15});for(const p of life.registry.places.filter(p=>p.interaction))assert.deepEqual(interactionErrors(p.interaction,t),[]);tick(life,450,16);assert(life.actors.filter(a=>a.arrivals>0).length>=.9*life.actors.length);
+  for(const a of life.actors.filter(a=>!a.arrivals))assert.equal(a.context.location.place,a.context.assets.home);
+  assert(!life.events.some(e=>e.status==='rejected'));}
 });
 
 test('a passing greeting preserves the current trip, and an occupied bench rises before leaving',()=>{

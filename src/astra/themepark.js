@@ -30,9 +30,9 @@ export async function buildThemePark(scene,town){
  for(let i=0;i<140;i++){const p=road.getPointAt(i/140),t=road.getTangentAt(i/140),dash=landKit.box(p.x,.075,p.z,.12,.025,.8,'#efdeb1');dash.rotation.y=Math.atan2(t.x,t.z);if(i>15&&i<103&&i%2===0){const x=p.x+t.z*3.1,z=p.z-t.x*3.1;landKit.box(x,.55,z,.13,1,.13,'#b5aa8d');const rail=landKit.box(x,.9,z,.14,.14,2.6,'#dfceb0');rail.rotation.y=Math.atan2(t.x,t.z);}}
  const mountainGeo=new THREE.ConeGeometry(1,1,7,1),rockGeo=new THREE.IcosahedronGeometry(1,0);
  for(const [x,z,w,h]of PARK_MOUNTAINS){
-  const m=new THREE.Mesh(mountainGeo,toonMaterial('#929c80'));m.position.set(x,h/2-.2,z);m.scale.set(w,h,w*.8);m.rotation.y=x;landKit.root.add(m);
-  const cap=new THREE.Mesh(mountainGeo,toonMaterial('#d9d9be'));cap.position.set(x,h*.84,z);cap.scale.set(w*.33,h*.33,w*.8*.33);cap.rotation.y=x;landKit.root.add(cap);
-  for(let i=0;i<6;i++){const a=i/6*Math.PI*2,r=new THREE.Mesh(rockGeo,toonMaterial('#9caa88'));r.position.set(x+Math.sin(a)*w*.8,2,z+Math.cos(a)*w*.65);r.scale.set(4,3,4);landKit.root.add(r);}
+  const m=new THREE.Mesh(mountainGeo,toonMaterial('#929c80'));m.position.set(x,h/2-.2,z);m.scale.set(w,h,w*.8);m.rotation.y=x;m.userData.scenery=m.material.userData.scenery=true;landKit.root.add(m);
+  const cap=new THREE.Mesh(mountainGeo,toonMaterial('#d9d9be'));cap.position.set(x,h*.84,z);cap.scale.set(w*.33,h*.33,w*.8*.33);cap.rotation.y=x;cap.userData.scenery=cap.material.userData.scenery=true;landKit.root.add(cap);
+  for(let i=0;i<6;i++){const a=i/6*Math.PI*2,r=new THREE.Mesh(rockGeo,toonMaterial('#9caa88'));r.position.set(x+Math.sin(a)*w*.8,2,z+Math.cos(a)*w*.65);r.scale.set(4,3,4);r.userData.scenery=r.material.userData.scenery=true;landKit.root.add(r);}
  }
  // Owned pine trees are shared/instanced at bake time. Canopies clear the road.
  const pine=await place('cv-tree-pine');

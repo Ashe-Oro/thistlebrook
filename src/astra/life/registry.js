@@ -3,6 +3,10 @@ import { riverZ, pointInTown } from '../../compiler/astra.js';
 
 import {TOOLS,ACTIVITIES,ANIMATIONS,distance,isOpen,interactionErrors} from '../registry/interaction-schema.js';
 export {TOOLS,ACTIVITIES,ANIMATIONS,distance,isOpen,interactionErrors};
+// Only these existing food businesses sell a packed meal. A broad registry
+// buy capability can cover other goods, so life uses its own meal metadata.
+const mealShop = building => building.shop==='grocer' ||
+ /Flour & Fern|Copper Kettle|Thistlebrook Provisions|Corner Cup Café|Sunrise Bakehouse|Moonrise Gelateria|The Nightjar/.test(building.name);
 const point = p => Array.isArray(p)&&p.length===2&&p.every(Number.isFinite);
 
 // Exact AABB segment test. Bench spurs are accepted only with visible clearance;
@@ -94,5 +98,14 @@ export function buildLifeRegistry(town,extraPlaces=[]) {
  const cafe=town.buildings.find(b=>b.name==='Corner Cup Café');
  const counter=places.find(p=>p.id===cafe?.key);
  if(counter){counter.interaction=cafeFrontage(cafe);counter.points=['counter'];}
+ for(const p of places){
+  const building=town.buildings.find(b=>b.key===p.id);
+  p.sellsMeals=Boolean(building&&mealShop(building)&&p.capabilities.includes('buy')&&(!p.interaction||p.interaction.tools.includes('buy')));
+  p.servesFood=p.sellsMeals||p.kind==='home'||p.interaction?.activity==='picnic';
+  if(!p.sellsMeals)p.capabilities=p.capabilities.filter(tool=>tool!=='buy');
+  // Packed lunch can be eaten during a shift at the existing workplace entry
+  // or workforce reservation. Interaction tools still control authored props.
+  if(p.capabilities.includes('work')&&!p.interaction&&!p.capabilities.includes('eat'))p.capabilities=[...p.capabilities,'eat'];
+ }
  return {version:1,places,rejected};
 }

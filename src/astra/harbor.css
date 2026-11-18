@@ -1,8 +1,0 @@
-@media (min-width: 1151px) and (max-width: 1450px) {
-  .astra-ui .view-tabs { top: 104px; }
-}
-@media (max-width: 600px) {
-  .astra-ui .control-bar { gap: 1px; padding: 6px; }
-  .astra-ui .control-bar button { min-width: 30px; }
-  .astra-ui .control-bar .divider { margin: 0 3px; }
-}

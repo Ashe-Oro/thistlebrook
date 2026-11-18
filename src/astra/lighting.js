@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { LIGHT_KEYS, sampleLightCycle, lightPeriod } from './light-cycle.js';
+import { weatherPlan } from './weather-plan.js';
 import { patchSkinShader } from './skin/material.js';
 
 // Astra-only lighting. No shared catalog/toon factory, district, asset or
@@ -48,7 +49,8 @@ export function createAstraLighting({ scene, camera, controls, renderer, town })
      // Analytic three-band ramp: crisp, with only a derivative-wide edge to
      // avoid flickering as normals cross a band. Retain the darker leaf ramp.
      const foliage = material.gradientMap?.image?.data?.[0] < 60;
-     if (styled) { patchSkinShader(shader, { foliage }); return; }
+     const scenery = !!material.userData.scenery;
+     if (styled) { patchSkinShader(shader, { foliage, scenery }); return; }
      shader.fragmentShader = shader.fragmentShader.replace('#include <gradientmap_pars_fragment>', `
       vec3 getGradientIrradiance(vec3 normal, vec3 lightDirection) {
        float n = dot(normal, lightDirection) * .5 + .5;
@@ -60,7 +62,7 @@ export function createAstraLighting({ scene, camera, controls, renderer, town })
        return band * mix(uAstraShade, vec3(1.0), lit);
       }`);
     };
-    material.customProgramCacheKey = () => `${previousKey}|astra-light-v1${styled ? '|skin-styled' : ''}`;
+    material.customProgramCacheKey = () => `${previousKey}|astra-light-v1${styled ? '|skin-styled' : ''}${material.userData.scenery ? '|scenery' : ''}`;
     material.needsUpdate = true;
    }
   });
@@ -127,15 +129,29 @@ export function createAstraLighting({ scene, camera, controls, renderer, town })
  }
  scene.add(lanterns);
 
- const direction = new THREE.Vector3();
+ const direction = new THREE.Vector3(), weatherColor = new THREE.Color();
  const state = { hour: 10.4, night: 0, period: 'Daylight', shadowSpan: 0 };
- function update(hour) {
+ function update(hour, weather = 'clear') {
   const { hour: h, index, from, to, blend } = sampleLightCycle(hour, KEYS);
   const lerp = i => THREE.MathUtils.lerp(from[i], to[i], blend);
   const color = (target, i) => target.copy(colors[index][i]).lerp(colors[index + 1][i], blend);
   color(backdropUniforms.top.value, 0); color(backdropUniforms.bottom.value, 1);
   color(fill.color, 2); color(fill.groundColor, 3); color(key.color, 4); color(ink, 5);
   fill.intensity = lerp(7); key.intensity = lerp(8);
+  const plan = weatherPlan(weather);
+  if (plan.sky) {
+   weatherColor.set(plan.sky).multiplyScalar(1 - lerp(9)*.78);
+   backdropUniforms.top.value.lerp(weatherColor, plan.skyMix);
+   backdropUniforms.bottom.value.lerp(weatherColor, plan.skyMix * .8);
+  }
+  if (plan.cool) {
+   weatherColor.set(plan.cool);
+   fill.color.lerp(weatherColor, plan.coolMix);
+   key.color.lerp(weatherColor, plan.coolMix);
+  }
+  if (plan.bounce) fill.groundColor.lerp(weatherColor.set(plan.bounce), .30);
+  if (plan.key !== 1) key.intensity *= THREE.MathUtils.lerp(plan.key, 1, lerp(9)*.64);
+  fill.intensity *= plan.fill;
   state.hour = h; state.night = lerp(9); state.period = lightPeriod(h);
   uniforms.uAstraNight.value = state.night;
   uniforms.uAstraShade.value.copy(dayShade).lerp(nightShade, state.night);

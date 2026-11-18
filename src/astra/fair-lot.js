@@ -1,3 +1,4 @@
+import {residentPedestrian} from '../roads/walking.js';
 // OWNER: grok-fairlot lane. Renders Funfair Parking from fair-lot-plan.js and
 // mirrors fair-lot-sim.js. Static ground is batched by colour, cars are one
 // instanced mesh per style and part, visitors one per townsfolk part.
@@ -174,7 +175,10 @@ export async function buildFairLot(scene, town, {hour = 10, seed = town?.seed ??
       kit.update(night);
       const dt = lastT === null ? 0 : Math.max(0, Math.min(.5, t - lastT)); lastT = t;
       const near = [];
-      for (const p of people) { const o = p.object?.position || p; if (o.x > 180 && o.x < 276 && o.z > -12 && o.z < 42) near.push({x: o.x, z: o.z}); }
+      for (const p of people) {
+        const o = p.object?.position ?? p;
+        if (o.x > 180 && o.x < 276 && o.z > -12 && o.z < 42) near.push(p.actor ? residentPedestrian(p.actor) : o);
+      }
       if (dt > 0) sim.update(dt, hour, near, t); else sim.update(1e-6, hour, near, t);
       render(t);
     },

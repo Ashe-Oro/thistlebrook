@@ -30,7 +30,9 @@ export function planLandscape(town) {
  const rng=makeRng(town.seed+7321),random=()=>rng.float(),roads=town.roads.filter(r=>r.kind==='world-link');
  const reserved=([x,z],margin=8)=>town.regions.some(({bounds:b})=>x>b.minX-margin&&x<b.maxX+margin&&z>b.minZ-margin&&z<b.maxZ+margin)
   || x>-154-margin&&x<73+margin&&z>-180-margin&&z<132+margin;
- const roadDistance=p=>Math.min(...town.roads.map(r=>r.centerline?separation(p,r.centerline):distanceToSegment(p,r.a,r.b)));
+ // Maple Hollow's roads are ignored here: the district sits inside the already
+ // reserved core box, and a new rejection would shift this seeded stream.
+ const roadDistance=p=>Math.min(...town.roads.filter(r=>!r.mapleHollow).map(r=>r.centerline?separation(p,r.centerline):distanceToSegment(p,r.a,r.b)));
  const hills=[],models=[];
  for(let i=0;i<240;i++) {
   const p=[-236+random()*520,-252+random()*620],radius=10+random()*16;

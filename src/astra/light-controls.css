@@ -16,3 +16,11 @@
 .light-range-ends{display:flex;justify-content:space-between;font-size:9px;color:#8a9381;margin-top:6px}
 @media(min-width:1151px) and (max-width:1450px){.top-right .weather{display:none}}
 @media(max-width:600px){.light-picker{right:20px;top:96px;width:min(318px,calc(100vw - 40px))}.clock{gap:7px}.clock .light-toggle{width:22px;padding:3px}.clock .light-toggle svg{display:block}.clock small{letter-spacing:1.1px}}
+.light-row{display:flex;align-items:center;gap:8px;margin-top:18px;font-size:11px}
+.light-row-label{flex:1;color:#5d6d5e}
+.light-pace button{min-width:36px;height:32px;border:1px solid #d9dfd0;border-radius:9px;background:none;display:grid;place-items:center;font-size:11px}
+.light-pace button:hover,.light-pace button[aria-pressed=true]{background:#edf0e5;border-color:#a8b69b}
+.light-pace svg{width:16px;height:16px}
+.light-picker .astra-weather{min-width:120px;height:32px;border:1px solid #d9dfd0;border-radius:9px;background:#fffdf6;padding:0 8px;font:inherit;color:#344c40}
+.light-skin{margin-top:14px}
+.light-picker .skin-picker{position:static;box-shadow:none;background:none;border:0;padding:0;justify-content:space-between}

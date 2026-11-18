@@ -58,6 +58,11 @@ const definitions = [
   [CLIP.sit, 3.4, sit],
   [CLIP.eat, 2.5, eat],
   [CLIP.seatedEat, 2.5, u => ({ ...sit(u), ...eat(u) })],
+  [CLIP.seatedChat, 1.25, u => {
+    const gesture = Math.sin(Math.PI * u);
+    return { ...sit(u), Head: [.12 * gesture, -.28 * gesture, 0],
+      LeftForeArm: [0, -.95, .85 * gesture], LeftArm: [-.35, -.28, -1.49 + .54 * gesture] };
+  }, false, true],
   [CLIP.counter, 2.25, counter],
   [CLIP.work, 2.4, u => ({ ...counter(u), Head: [.23, -.12, 0], Spine: [.24, .12 * Math.sin(2 * Math.PI * u), 0] })],
   [CLIP.read, 4.6, u => ({ Head: [.3 + .08 * Math.sin(2 * Math.PI * u), 0, 0],

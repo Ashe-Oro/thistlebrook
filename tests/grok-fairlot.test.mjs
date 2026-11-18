@@ -1,5 +1,6 @@
 // OWNER: grok-fairlot lane. Funfair Parking: layout, bays, walkway and a
 // simulated day of cars, shuttles and visitors with nothing touching.
+import {TOWN_RULE} from '../src/compiler/town-rules.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as P from '../src/astra/fair-lot-plan.js';
@@ -95,4 +96,26 @@ test('TOWN-01/02/03: lot walk lines stay off the asphalt except at curb-to-curb 
   assert(run({...P, CROSSWALKS: short}).includes('unconnected-crosswalk'));
   const bay = P.BAYS.find((b) => b.row === 'D2a'), cut = {...bay, walk: [bay.walk[0], [bay.walk[0][0], 10.5], ...bay.walk.slice(3)]};
   assert(run({...P, BAYS: [cut]}).includes('walk-on-road'));
+});
+
+test(`${TOWN_RULE.yield}: lot cars give way at the residents' walk line`, () => {
+  const sim = createFairLotSim({hour: 11, seed: 831}), dt = .2;
+  let t = 11 * 90;
+  const line = P.parkPathFootprints(.45);
+  for (let n = 0; n < 2 * 90 / dt; n++) {
+    t += dt;
+    const people = [];
+    for (const c of sim.cars) {
+      if (c.kind !== 'arrive' || !c.path) continue;
+      for (let d = 0; d <= 10; d += .5) {
+        const q = P.samplePath(c.path, Math.min(c.path.length, c.s + d));
+        if (line.some((z) => footprintsOverlap(P.carFootprint(q.p, q.h), z))) {
+          people.push({x: q.p[0], z: q.p[1], id: 'walker'});
+          break;
+        }
+      }
+    }
+    sim.update(dt, 11 + n * dt / 90, people, t);
+  }
+  assert(sim.audit().events.pedestrianYields > 0, `expected lot-car yields, got ${sim.audit().events.pedestrianYields}`);
 });

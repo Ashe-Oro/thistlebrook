@@ -8,12 +8,12 @@
 import {readFileSync, writeFileSync, mkdirSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {ROAD_RULE} from '../src/compiler/town-rules.js';
-import {auditPedestrianRules, auditTownLayout, auditFairLot} from './audit-town-rules.mjs';
+import {auditPedestrianRules, auditTownLayout, auditFairLot, auditRailway} from './audit-town-rules.mjs';
 import {existsSync} from 'node:fs';
 const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const here = new URL('..', import.meta.url).pathname;
 /** Audit seed 831. Mutation hooks let tests inject faults before checking. */
-export async function runAudit({root = here, label = 'after', mutate = null, mutateGraph = null, mutateAnimations = null} = {}) {
+export async function runAudit({root = here, label = 'after', mutate = null, mutateGraph = null, mutateAnimations = null, mutateBoats = null, mutateStreets = null, mutateSchool = null} = {}) {
 root = root.replace(/\/$/, '') + '/';
 const imp = (p) => import(pathToFileURL(root + p).href), mine = (p) => import(pathToFileURL(here + p).href);
 const {resolveAll} = await imp('src/catalog/resolve-all.js');
@@ -116,7 +116,27 @@ if (existsSync(root + 'tools/audit-villager-anims.mjs')) {
   const {auditVillagerAnimations} = await imp('tools/audit-villager-anims.mjs');
   auditVillagerAnimations(town, add, mutateAnimations);
 }
+if (town.railway) {
+  auditRailway(town, graph, index, await imp('src/compiler/railway.js'), add, {walkBetween, origin: town.venues[0].entry});
+  const {grandLoopReview} = await imp('src/astra/railway-plan.js');
+  if (grandLoopReview) {
+    const review = grandLoopReview(town, graph);
+    const at = town.railway.stations[0].centre;
+    if (review.length < 1773) add('grand-loop', at, `Main line is only ${review.length.toFixed(1)} m`);
+    if (review.enclosed < .8) add('grand-loop', at, `Main line encloses only ${(100 * review.enclosed).toFixed(1)}% of the named districts`);
+    if (review.trailing < 6) add('grand-loop', at, `The service train has only ${review.trailing} coaches and wagons`);
+    for (const stop of review.stops) if (!stop.linked || !stop.sign || stop.distance > 60) {
+      add('rail-poi-access', stop.origin ?? at, `${stop.id}: ${stop.linked ? stop.distance.toFixed(1) + ' m walk' : 'no pedestrian path'}${stop.sign ? '' : ', no platform sign'}`);
+    }
+  }
+}
 if (existsSync(root + 'src/astra/fair-lot-plan.js')) auditFairLot(await imp('src/astra/fair-lot-plan.js'), add);
+// Thistlebrook High school day: pupil routes (TOWN-01), classroom furniture (TOWN-04), seats (TOWN-09).
+if (existsSync(root + 'src/astra/school-plan.js')) {
+  const school = await imp('src/astra/school-plan.js'), plan = school.planSchool(town, graph, walkBetween);
+  mutateSchool?.(plan, school);
+  for (const f of school.schoolFindings(plan, index)) add(f.category, f.at, f.detail);
+}
 {
   const seen = new Set([0]), q = [0]; for (let i = 0; i < q.length; i++) for (const n of town.edges[q[i]] || []) if (!seen.has(n)) { seen.add(n); q.push(n); }
   auditTownLayout(town, catalog, seen, add);
@@ -128,15 +148,77 @@ if (existsSync(root + 'src/astra/fair-lot-plan.js')) auditFairLot(await imp('src
   for (const d of town.districts) { const v = town.venues.find((v) => v.district === d.id && v.entry) || {entry: d.center}; const w = walkBetween(graph, origin, v.entry); if (dist(w.at(-1).pos, v.entry) > 12) add('disconnected-sidewalk', d.center, `District ${d.name} not reachable on foot`); }
 }
 // 7) Parked cars and props on a drive lane.
-const bays = sim.PARKING_BAYS ? sim.PARKING_BAYS.map((b) => ({c: b.center, id: b.id})) : [[-73, -16], [-69, -16], [-31, -33]].map(([x, z], i) => ({c: [x, z + .82], id: 'legacy-' + i}));
-for (const b of bays) if (index.depth(b.c) > -.5) add('parked-on-lane', b.c, `Parked car ${b.id} sits on the carriageway`);
-{ const {footprint, pointInFootprint} = await mine('src/roads/collisions.js');
-  const fps = sim.PARKING_BAYS ? sim.PARKING_BAYS.map((b) => ({id: b.id, c: b.center, f: footprint(b)})) : [];
-  for (const b of fps) for (let u = 0; u < graph.nodes.length; u++) { const hit = graph.edges[u].some((e) => { if (e.crossing) return false; const A = graph.nodes[u].pos, B = graph.nodes[e.to].pos, n = Math.max(1, Math.ceil(dist(A, B) / .2)); for (let k = 0; k <= n; k++) if (pointInFootprint([A[0] + (B[0] - A[0]) * k / n, A[1] + (B[1] - A[1]) * k / n], b.f, .45)) return true; return false; });
-    if (hit) { add('parked-on-path', b.c, `Parked car ${b.id} blocks a sidewalk or footpath`); break; } } }
+const staticBays = sim.PARKING_BAYS ?? [[-73, -16], [-69, -16], [-31, -33]].map(([x, z], i) => ({
+  center: [x, z + .82], id: 'legacy-' + i,
+}));
+const bays = [...staticBays.filter((b) => b.type !== 'driveway'), ...(town.mapleHollow?.bays ?? [])];
+for (const b of bays) if (index.depth(b.center) > -.5) add('parked-on-lane', b.center, `Parked car ${b.id} sits on the carriageway`);
+if (sim.PARKING_BAYS) {
+  const {footprint, footprintsOverlap, pointInFootprint} = await mine('src/roads/collisions.js');
+  const maple = town.mapleHollow;
+  const houses = new Map(), props = [];
+  if (maple) {
+    const {mapleModelFootprint, SCALE} = await imp('src/astra/maple-hollow-plan.js');
+    for (const lot of maple.lots.filter((l) => l.house)) {
+      houses.set(lot.key, footprint(mapleModelFootprint(lot.house, lot.houseAt, lot.houseYaw, SCALE.house)));
+    }
+    for (const p of maple.props) {
+      const shape = mapleModelFootprint(p.model, p.pos, p.yaw, p.scale);
+      props.push({pos: p.pos, name: p.model, shape: shape && footprint(shape)});
+    }
+  }
+  const structures = [...town.buildings, ...town.venues].filter((v) => v.box).map((v) => ({
+    box: v.box, shape: houses.get(v.key), name: v.name || v.id,
+  }));
+  for (const g of town.gardens || []) structures.push({
+    box: {min: [g.x - g.width / 2, g.z - g.depth / 2], max: [g.x + g.width / 2, g.z + g.depth / 2]}, name: 'a garden bed',
+  });
+  for (const p of [...town.props, ...town.trees, ...town.supplemental]) {
+    if (p.pos) props.push({pos: p.pos, name: p.asset || p.id || 'a prop'});
+  }
+  for (const b of bays) {
+    const f = footprint(b);
+    const samples = [];
+    for (const a of [-1, -.5, 0, .5, 1]) for (const w of [-1, 0, 1]) {
+      samples.push([f.c[0] + f.d[0] * a * f.hl - f.d[1] * w * f.hw, f.c[1] + f.d[1] * a * f.hl + f.d[0] * w * f.hw]);
+    }
+    if (b.type === 'driveway') {
+      if (index.depth(f.c) <= -.5 && samples.some((p) => index.depth(p) > 0)) {
+        add('parked-on-lane', f.c, `Parked car ${b.id} extends onto the carriageway`);
+      }
+      const surface = maple.surfaces.find((s) => s.kind === 'driveway' && s.lot === b.lot);
+      const drive = surface && footprint({...surface, width: surface.size[0], length: surface.size[1]});
+      if (!drive || !samples.every((p) => pointInFootprint(p, drive, .01))) {
+        add('parked-off-driveway', f.c, `Parked car ${b.id} extends off its documented driveway`);
+      }
+    }
+    if (graph.edges.some((edges, u) => edges.some((e) => {
+      if (e.to <= u) return false;
+      const A = graph.nodes[u].pos, B = graph.nodes[e.to].pos, n = Math.max(1, Math.ceil(dist(A, B) / .2));
+      for (let k = 0; k <= n; k++) if (pointInFootprint([A[0] + (B[0] - A[0]) * k / n, A[1] + (B[1] - A[1]) * k / n], f, .45)) return true;
+      return false;
+    }))) add('parked-on-path', f.c, `Parked car ${b.id} blocks a sidewalk, footpath or crossing`);
+    const obstacle = structures.find(({shape, box}) => shape ? footprintsOverlap(f, shape, .05) :
+      samples.some((p) => p[0] > box.min[0] - .2 && p[0] < box.max[0] + .2 && p[1] > box.min[1] - .2 && p[1] < box.max[1] + .2))
+      ?? props.find(({shape, pos}) => shape ? footprintsOverlap(f, shape, .05) : pointInFootprint(pos, f, .25));
+    if (obstacle) add('parked-on-lot', f.c, `Parked car ${b.id} covers ${obstacle.name}`);
+  }
+}
 for (const s of [...sim.TRAFFIC_STOPS, ...sim.WEST_STOPS]) { const hw = Math.max(1.5, ...surfaces.filter((r) => segDistance(s.point, r.a, r.b) < .05).map((r) => r.hw)), post = sim.PARKING_BAYS ? [s.point[0] + s.side[0] * (hw + .22), s.point[1] + s.side[1] * (hw + .22)] : [s.point[0] + s.side[0] * 1.32, s.point[1] + s.side[1] * 1.32]; if (index.depth(post) > 0) add('prop-on-lane', post, `Bus stop post ${s.name} stands on the carriageway`); }
 const props = [...town.props.map((p) => ({pos: p.pos, r: .3, name: p.id || p.asset || 'prop'})), ...town.trees.map((p) => ({pos: p.pos, r: .4, name: 'tree'})), ...[...(town.modelPlacements || []), ...(town.districtFurniture || [])].map((p) => ({pos: p.pos, r: Math.min(p.size?.[0] || .6, p.size?.[2] || .6) / 2, name: p.id})), ...(town.landscape?.models || []).filter((m) => m.asset.includes('tree') || m.asset.includes('rock')).map((m) => ({pos: m.pos, r: .5 * m.scale, name: m.asset}))];
 for (const p of props) if (p.pos && index.depth(p.pos) > -p.r + .05) add('prop-on-lane', p.pos, `${p.name} on or overhanging the carriageway`);
+// 8) Street furniture and the cycle strip (TOWN-01/04), and boats (TOWN-11).
+if (existsSync(root + 'src/astra/street-plan.js')) {
+  const {planStreets, streetFindings} = await imp('src/astra/street-plan.js');
+  const traffic = sim.createTrafficSimulation(town), plan = planStreets(town, traffic);
+  mutateStreets?.(plan, town);
+  for (const f of streetFindings(town, traffic, plan)) add(f.category, f.at, f.detail);
+}
+if (existsSync(root + 'src/astra/water-traffic-plan.js')) {
+  const water = await imp('src/astra/water-traffic-plan.js');
+  const boats = mutateBoats ? (hour) => mutateBoats(water.watercraftAt(hour), hour, water) : water.watercraftAt;
+  for (const f of water.watercraftFindings({roads: water.boatKeepOut(town), boats})) add(f.category, f.at, f.detail);
+}
 const summary = Object.fromEntries(Object.keys(ROAD_RULE).map((category) => [category, {open: 0, justified: 0}]));
 for (const f of findings) {
   summary[f.category] ??= {open: 0, justified: 0};

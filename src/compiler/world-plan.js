@@ -19,8 +19,11 @@ import {REGIONAL} from '../roads/regional.js';
 import {unifyStraightRuns} from '../roads/town-roads.js';
 import {planWater} from './water.js';
 import {planWoods,registerWoods} from './woods.js';
+import {addRailway,railwayAccessReservations} from './railway.js';
 import {addFairground,FAIR_VIEW} from './astra-fair.js';
 import {addHarbor,HARBOR_VIEWS} from '../astra/harbor-layout.js';
+import {planRegionalLines} from '../roads/regional.js';
+import {addMapleHollow,flagMapleHollowRoads,finishMapleHollow,addMapleHollowPlaces,MAPLE_HOLLOW_VIEW} from '../astra/maple-hollow-plan.js';
 export const WORLD_OFFSETS={harbor:[100,0],fair:[-140,0],airport:[0,-140],skatepark:[35,-58],'coral-coast':[160,150],roadster:[-140,-110],starbase:[80,230]};
 export const move=(p,o)=>[p[0]+o[0],p[1]+o[1]];
 export const moveBox=(b,o)=>({min:move(b.min,o),max:move(b.max,o)});
@@ -68,7 +71,7 @@ export function adoptExtension(town,id,layout,{offset=[0,0],bounds,links=[],path
  if(town[planKey].nodes)for(const [key,index]of Object.entries(town[planKey].nodes)){const n=node(move(draft.nodes[index],offset));town[planKey].nodes[key]=n;town.expansionLocal[id].nodes[key]=n;}
  return region;
 }
-export const WORLD_VIEWS={...Object.fromEntries(Object.entries(STARBASE_VIEWS).map(([id,v])=>[id,{...v,x:v.x+80,z:v.z+230}])),roadster:{x:-205,z:-172,zoom:2.65},...Object.fromEntries(Object.entries(COAST_VIEWS).map(([id,v])=>[id,{...v,x:v.x+160,z:v.z+150} ])),...THEMEPARK_VIEWS,skatepark:{...SKATEPARK_VIEW,x:87,z:-109},airport:{x:104,z:-188,zoom:1.55},...OUTSKIRTS_VIEWS,fair:{...FAIR_VIEW,x:FAIR_VIEW.x-140},...Object.fromEntries(Object.entries(HARBOR_VIEWS).map(([id,v])=>[id==='beach'?'shell-cove':id,{...v,x:v.x+100}]))};
+export const WORLD_VIEWS={railway:{x:38,z:78,zoom:.245,rotation:0},...Object.fromEntries(Object.entries(STARBASE_VIEWS).map(([id,v])=>[id,{...v,x:v.x+80,z:v.z+230}])),roadster:{x:-205,z:-172,zoom:2.65},...Object.fromEntries(Object.entries(COAST_VIEWS).map(([id,v])=>[id,{...v,x:v.x+160,z:v.z+150} ])),...THEMEPARK_VIEWS,skatepark:{...SKATEPARK_VIEW,x:87,z:-109},airport:{x:104,z:-188,zoom:1.55},...OUTSKIRTS_VIEWS,fair:{...FAIR_VIEW,x:FAIR_VIEW.x-140},...Object.fromEntries(Object.entries(HARBOR_VIEWS).map(([id,v])=>[id==='beach'?'shell-cove':id,{...v,x:v.x+100}])),'maple-hollow':{...MAPLE_HOLLOW_VIEW}};
 export function compileWorld(catalog,seed=831,{capture=false}={}){
  const town=compileAstra(catalog,seed);unifyStraightRuns(town);town.regions=[];town.expansionLocal={};
  // The harbor approach squeezes between the bandstand and the farm fence, so it
@@ -99,14 +102,17 @@ export function compileWorld(catalog,seed=831,{capture=false}={}){
  const sn=rebuildWorldGraph(town)(sg.at(-1));town.venues.push({id:'starbase-garden',name:'Starbase Visitor Garden',district:'starbase',type:'spaceport',pos:sg.at(-1),entry:sg.at(-1),node:sn,height:5,box:{min:[171,312],max:[195,326]},story:'A public viewing garden beside Highway 4. Watch the launch tower, returning boosters and offshore recovery ship from outside the working range.'});
  town.modelPlacements=expansionModels(town,catalog);
  const stops=capture?[]:compileExpansionScenes(town,pointInWorld);
- if(!capture)stops.push(...compileAssetVignettes(town,catalog,pointInWorld));
- rebuildWorldGraph(town);planRegionalRoads(town);planLandscape(town);town.water=planWater(town);planWoods(town);
- const stopNode=rebuildWorldGraph(town);
+ // Maple is deterministic and needs to be present for the platform reservations.
+ addMapleHollow(town);
+ if(!capture)stops.push(...compileAssetVignettes(town,catalog,pointInWorld,railwayAccessReservations(town)));
+ rebuildWorldGraph(town);planRegionalRoads(town);flagMapleHollowRoads(town,planRegionalLines);planLandscape(town);town.water=planWater(town);planWoods(town);addRailway(town);
+ const stopNode=rebuildWorldGraph(town);finishMapleHollow(town,stopNode);
+ for(const st of town.railway.stations)if(!st.existing){const v=town.venues.find(p=>p.id===st.venue);v.node=st.node=stopNode(v.entry);}
  for(const scene of stops)for(const slot of scene.slots){slot.node=stopNode([slot.approach[0],slot.approach[2]]);town.interactions.push(slot);}
- town.registry=buildRegistry(town,catalog);registerLandscape(town);registerWoods(town);addExpansionModels(town,catalog);addDistrictLandmarks(town,landmarks);addDistrictActivities(town);addParkActivities(town);addDistrictFurniture(town);includeLifePlacements(town);const errors=registryErrors(town);if(errors.length)throw Error(errors.join('; '));return finishWorld(town);
+ town.registry=buildRegistry(town,catalog);registerLandscape(town);registerWoods(town);addExpansionModels(town,catalog);addDistrictLandmarks(town,landmarks);addDistrictActivities(town);addParkActivities(town);addDistrictFurniture(town);includeLifePlacements(town);addMapleHollowPlaces(town);const errors=registryErrors(town);if(errors.length)throw Error(errors.join('; '));return finishWorld(town);
 }
 export function finishWorld(town){
- const points=[...town.outline,...town.regions.flatMap(r=>[[r.bounds.minX,r.bounds.minZ],[r.bounds.maxX,r.bounds.maxZ]])];town.worldOutline=town.landscape?[...MAINLAND,[390,390]]:points;
+ const points=[...town.outline,...town.regions.flatMap(r=>[[r.bounds.minX,r.bounds.minZ],[r.bounds.maxX,r.bounds.maxZ]])];town.worldOutline=town.landscape?[...MAINLAND,[390,390],...(town.railway?.samples.map(q=>q.p)??[])]:points;
  town.worldBounds={minX:Math.min(...town.worldOutline.map(p=>p[0])),maxX:Math.max(...town.worldOutline.map(p=>p[0])),minZ:Math.min(...town.worldOutline.map(p=>p[1])),maxZ:Math.max(...town.worldOutline.map(p=>p[1]))};
  const seen=new Set([0]),queue=[0];for(let i=0;i<queue.length;i++)for(const n of town.edges[queue[i]])if(!seen.has(n)){seen.add(n);queue.push(n);}
  town.report={...town.report,districts:town.districts.length,venues:town.venues.length,connectedNodes:seen.size,ok:seen.size===town.nodes.length,errors:seen.size===town.nodes.length?[]:['Disconnected world graph']};const review=checkWorld(town);town.report.ok=review.ok;town.report.errors=review.errors;if(!review.ok)throw Error(review.errors.join('; '));return town;

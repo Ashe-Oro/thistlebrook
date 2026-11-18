@@ -1,6 +1,6 @@
 // OWNER: grok-skins lane (Grok). Skin "winter" — a snowy, cold village:
-// snow settles on every up-facing surface (roofs, ground, tree tops) in the
-// shader, roads keep a slushy grey, cold blue light with warm windows at night.
+// snow settles in cool shadow, mid and warm-highlight bands, with worn patches,
+// crease AO, roof lips and slushy tracks. Roads stay readable. Cold blue light, warm windows at night.
 const night0 = [0, '#0f1a30','#2c3d5c','#8fb0e0','#56657e','#a8c4ff','#1a2233', .85,.7,1, 60,100,45];
 export default {
  id: 'winter',
@@ -25,30 +25,30 @@ export default {
  shade: { day: '#b8c6e6', night: '#8ea4d8' },
  halos: { visible: false, color: '#ffc46b' },
  material: {
-  ramp: { shadow: '#26324a', mid: '#7f93ad', high: '#eef4fb' },
-  chroma: [.62, .55],
+  ramp: { shadow: '#1e2a40', mid: '#6d7e96', high: '#d5deea' },
+  chroma: [.68, .58],
   tint: [.92, .97, 1.08],
   tooth: .06,
-  wrap: { lo: .34, hi: .68, floor: .52, foliageFloor: .38 },
-  side: { left: '#bfe3ff', right: '#ffd6a8', strength: .10, day: .5 },
+  wrap: { lo: .28, hi: .66, floor: .32, foliageFloor: .22 },
+  side: { left: '#bfe3ff', right: '#ffd6a8', strength: .10, day: .5, space: 'world' },
   rim: .10,
   windows: { colors: ['#ffc46b', '#ffdb8a', '#ff9f4a'], split: [.5, .85], emit: [1.2, 2.6], albedo: .55, dayFloor: 0 },
   wet: null,
   leaves: null,
-  snow: { color: '#e4ebf4', amount: .9, road: .3, slush: '#8d95a3' },
+  snow: { color: '#c9d6e8', shadow: '#7d91b8', highlight: '#f3efe4', amount: .82, road: .5, slush: '#6e7686', expose: .28, lip: .55, track: .4 },
  },
  practicals: null,
  post: {
   tilt: { focusY: .47, band: .18, soft: .34, max: .55 },
   bloom: { threshold: .72, gain: .9, night: 1.3, nightLift: .2 },
-  haze: { start: .45, day: .14, night: .12, dayColor: '#dfe8f3', nightColor: '#1d2a44' },
+  haze: { start: .6, day: .06, night: .1, dayColor: '#d5deea', nightColor: '#1d2a44' },
   reflections: null,
   vignette: .28, grain: .007, aberration: 0,
   lut: {
    schedule: [[0, 'night'], [5, 'night'], [6.8, 'dusk'], [9, 'day'], [15, 'day'], [17.6, 'dusk'], [19.8, 'night'], [24, 'night']],
    protect: [[.09, .06]],
    grades: {
-    day:   { sat: .9, contrast: 1.08, shadow: '#2a3a55', shadowAmt: .30, high: '#e8f0ff', highAmt: .06, boost: 1.1 },
+    day:   { sat: .95, contrast: 1.16, shadow: '#243656', shadowAmt: .38, high: '#f0e6d4', highAmt: .10, boost: 1.0 },
     dusk:  { sat: .96, contrast: 1.06, shadow: '#2c2a4a', shadowAmt: .34, high: '#ffd2b0', highAmt: .18, boost: 1.2 },
     night: { sat: .86, contrast: 1.08, shadow: '#101a33', shadowAmt: .50, high: '#cfe2ff', highAmt: .10, boost: 1.35 },
    },

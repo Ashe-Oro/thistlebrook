@@ -3,7 +3,13 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { toonMaterial } from '../toon.js';
 import { place } from '../catalog/loader.js';
 import { createTrafficSimulation, PARKING_BAYS } from './traffic-simulation.js';
+import { batchInstances } from '../compiler/batches.js';
+import { instantiate } from '../catalog/loader.js';
+import { FLEET_MODELS, FOOTPRINT, LIVERY, assignFleet, parkedFleet, fitModel } from './traffic-fleet.js';
+import { planStreets, CLASS_STYLE, FURNITURE_MODELS } from './street-plan.js';
+import { loadPackGeometry, retintGeometry, toonModel, instancedModel } from './vehicle-models.js';
 import { distanceToSegment } from '../compiler/astra.js';
+import { residentPedestrian } from '../roads/walking.js';
 import { pedestrianGraph } from '../roads/pedestrian.js';
 import { midpoint, ZEBRA_HALF_WIDTH } from '../roads/crosswalks.js';
 
@@ -19,12 +25,29 @@ export async function createTraffic(scene,town,residents,world){
  };
  const streets=new THREE.Group(), walk=pedestrianGraph(town);
  const crossingCenters=walk.crossings.map(([a,b])=>midpoint(walk.nodes[a].pos,walk.nodes[b].pos));
- for(const r of simulation.roads){const dx=r.b[0]-r.a[0],dz=r.b[1]-r.a[1],len=Math.hypot(dx,dz),angle=Math.atan2(dx,dz);
-  const road=box(streets,(r.a[0]+r.b[0])/2,.185,(r.a[1]+r.b[1])/2,r.width-.12,.035,len,'#77867e');road.rotation.y=angle;
-  // Soft cream dashes make the road hierarchy legible from the town view.
-  for(let d=2;d<len-1;d+=3.5){const x=r.a[0]+dx*d/len,z=r.a[1]+dz*d/len;
-   if(simulation.junctions.some(j=>j.points.some(p=>Math.hypot(p[0]-x,p[1]-z)<2))||crossingCenters.some(([cx,cz])=>Math.hypot(cx-x,cz-z)<1.15))continue;
-   const dash=box(streets,x,.209,z,.065,.012,.9,'#e1d6b3');dash.rotation.y=angle;
+ // vehicle-variety: three street classes read from the asphalt tone, the
+ // markings and the kerbside furniture (street-plan.js).
+ const streetPlan=planStreets(town,simulation);
+ const classOf=r=>streetPlan.streets.find(s=>Math.hypot(s.a[0]-r.a[0],s.a[1]-r.a[1])<.01&&Math.hypot(s.b[0]-r.b[0],s.b[1]-r.b[1])<.01)?.cls||'town';
+ const clearOfJunctions=(x,z,pad=2)=>!simulation.junctions.some(j=>j.points.some(p=>Math.hypot(p[0]-x,p[1]-z)<pad))&&!crossingCenters.some(([cx,cz])=>Math.hypot(cx-x,cz-z)<1.15);
+ for(const r of simulation.roads){const dx=r.b[0]-r.a[0],dz=r.b[1]-r.a[1],len=Math.hypot(dx,dz),angle=Math.atan2(dx,dz),cls=classOf(r),style=CLASS_STYLE[cls],nx=-dz/len,nz=dx/len;
+  const road=box(streets,(r.a[0]+r.b[0])/2,.185,(r.a[1]+r.b[1])/2,r.width-.12,.035,len,style.asphalt);road.rotation.y=angle;
+  for(let d=1.5;d<len-1;d+=style.centre==='dash'?3.5:.9){const x=r.a[0]+dx*d/len,z=r.a[1]+dz*d/len;
+   if(!style.centre||!clearOfJunctions(x,z))continue;
+   if(style.centre==='dash'){const dash=box(streets,x,.209,z,cls==='avenue'?.08:.065,.012,cls==='avenue'?1.2:.9,style.dash);dash.rotation.y=angle;}
+   // The widest run (Civic Avenue, 4.2 m) takes a double centre line.
+   else for(const o of [-.11,.11]){const line=box(streets,x+nx*o,.209,z+nz*o,.06,.012,.92,'#e6c46a');line.rotation.y=angle;}
+  }
+  // Downtown avenues and the boulevard get solid edge lines inside the kerb.
+  if(style.edge)for(let d=.9;d<len-.4;d+=.9){const x=r.a[0]+dx*d/len,z=r.a[1]+dz*d/len;if(!clearOfJunctions(x,z,r.width/2+1.6))continue;for(const side of [-1,1]){const o=side*(r.width/2-.2),line=box(streets,x+nx*o,.208,z+nz*o,.055,.012,.92,style.edge);line.rotation.y=angle;}}
+ }
+ // Marked cycle strips (CYCLE_STRIPS): green surfacing, a white lane line and
+ // painted bicycle chevrons, both sides of Civic Avenue.
+ for(const st of streetPlan.strips){const dx=st.b[0]-st.a[0],dz=st.b[1]-st.a[1],len=Math.hypot(dx,dz),angle=Math.atan2(dx,dz),nx=-dz/len,nz=dx/len;
+  for(const side of [-1,1])for(let d=.45;d<len-.2;d+=.9){const x=st.a[0]+dx*d/len,z=st.a[1]+dz*d/len;if(!clearOfJunctions(x,z,2.4))continue;
+   const o=side*st.offset,strip=box(streets,x+nx*o,.206,z+nz*o,st.width,.012,.92,'#6fa883');strip.rotation.y=angle;
+   const lo=side*(st.offset-st.width/2-.05),line=box(streets,x+nx*lo,.211,z+nz*lo,.05,.012,.6,'#f0ead6');line.rotation.y=angle;
+   if(Math.round(d/.9)%6===0){const mark=box(streets,x+nx*o,.214,z+nz*o,.3,.012,.12,'#f0ead6');mark.rotation.y=angle;const tip=box(streets,x+nx*o+dx/len*.12,.214,z+nz*o+dz/len*.12,.12,.012,.12,'#f0ead6');tip.rotation.y=angle;}
   }
  }
  for(const [i,s] of simulation.stops.entries()){
@@ -37,7 +60,12 @@ export async function createTraffic(scene,town,residents,world){
  // Parking uses existing cul-de-sac paving, outside the moving lanes. These
  // positions do not reserve new land or collide with seeded building parcels.
  // Bays sit beyond the south sidewalk with a short dropped-kerb apron.
- for(const b of PARKING_BAYS){const [x,z]=b.center,edge=b.road[1]+1.5;box(streets,x,.2,z,3.2,.03,1.6,'#77867e');box(streets,x,.19,(edge+z-.8)/2,2.2,.03,Math.abs(z-.8-edge)+.05,'#a9a28f');for(const dx of [-1.5,1.5])box(streets,x+dx,.223,z,.055,.02,1.3,'#e4e4c8');box(streets,x,.223,z+.62,3,.02,.055,'#e4e4c8');}
+ for(const b of PARKING_BAYS){if(b.type==='driveway')continue;const [x,z]=b.center,u=[Math.sin(b.yaw),Math.cos(b.yaw)],dd=Math.hypot(x-b.road[0],z-b.road[1]),n=[(x-b.road[0])/dd,(z-b.road[1])/dd],ang=b.yaw;
+  const hw=Math.max(...simulation.roads.filter(r=>distanceToSegment(b.road,r.a,r.b)<.05).map(r=>r.width/2),1.3),at=(a,o)=>[x+u[0]*a+n[0]*o,z+u[1]*a+n[1]*o];
+  const pad=box(streets,x,.2,z,1.6,.03,3.2,'#77867e');pad.rotation.y=ang;pad.scale.set(1.6,.03,3.2);
+  const apronLen=dd-.8-hw,[ax,az]=at(0,-.8-apronLen/2),apron=box(streets,ax,.19,az,2.2,.03,apronLen+.05,'#a9a28f');apron.rotation.y=Math.atan2(n[0],n[1]);
+  for(const a of [-1.5,1.5]){const [lx,lz]=at(a,0),l=box(streets,lx,.223,lz,1.3,.02,.055,'#e4e4c8');l.rotation.y=ang;}
+  const [bx,bz]=at(0,.62),back=box(streets,bx,.223,bz,.055,.02,3,'#e4e4c8');back.rotation.y=ang;}
  const sign=new THREE.Group();sign.position.set(-75.3,0,-12.2);root.add(sign);box(sign,0,1,0,.07,1.8,.07,'#465e58');label(sign,'P',0,1.8,.02,.65,.65);
  // Draw the same sidewalk and crossing edges that the residents use.
  const paving='#d6ceb5', joints=new Map(), jointGeometry=new THREE.CylinderGeometry(1,1,.035,12);
@@ -73,30 +101,14 @@ export async function createTraffic(scene,town,residents,world){
  }
  // Collapse street geometry by material; no per-dash draw calls.
  streets.updateMatrixWorld(true);const batches=new Map();streets.traverse(o=>{if(!o.isMesh)return;const geometries=batches.get(o.material)||[];geometries.push(o.geometry.clone().applyMatrix4(o.matrixWorld));batches.set(o.material,geometries);});
- for(const [mat,geometries] of batches){const m=new THREE.Mesh(mergeGeometries(geometries),mat);m.receiveShadow=true;root.add(m);geometries.forEach(g=>g.dispose());}
+ for(const [mat,geometries] of batches){const m=new THREE.Mesh(mergeGeometries(geometries),mat);m.receiveShadow=true;m.userData.weatherPaving=({'77867e':'road','d6ceb5':'sidewalk','a9a28f':'road'})[mat.color.getHexString()];root.add(m);geometries.forEach(g=>g.dispose());}
  jointGeometry.dispose();
- function vehicle(kind,color,route='town'){
-  const g=new THREE.Group(),len=kind==='bus'?3.2:kind==='van'?2.2:1.85,w=kind==='bus'?.98:.88;
-  box(g,0,.4,0,w,.38,len,color);box(g,0,.25,0,w+.04,.12,len-.1,'#3c514e');
-  if(kind==='bus'){
-   box(g,0,.92,-.05,w,1.04,len-.1,'#e7d6a4');box(g,0,1.47,-.05,w+.08,.12,len,'#346d6a');box(g,0,.55,0,w+.02,.24,len,'#458b83');
-   for(const side of [-1,1])for(let k=0;k<5;k++)box(g,side*(w/2+.007),1.08,-1.22+k*.53,.02,.44,.4,'#466568');
-   box(g,0,1.09,len/2,.78,.47,.025,'#466568');label(g,route==='station'?'2 • WEST LOOP':'1 • TOWN LOOP',0,1.39,len/2+.025,.88,.16);
-   const door=box(g,-w/2-.018,.78,1,.025,.9,.4,'#294e52');g.userData.door=door;
-   box(g,0,1.56,-.4,.6,.13,.7,'#d1d0b8');
-  }else if(kind==='van'){
-   box(g,0,.92,-.38,w,.9,1.3,'#e3dfcb');box(g,0,.87,.52,w*.9,.72,.8,color);
-   box(g,0,1,.94,w*.76,.36,.035,'#52767a');
-   for(const side of [-1,1]){const panel=label(g,'ASTRA POST',side*(w/2+.01),1,-.3,1.05,.22,'#e3dfcb','#356860');panel.rotation.y=side*Math.PI/2;}
-   const parcel=box(g,-.85,.35,-.45,.36,.32,.35,'#be8d55');parcel.visible=false;g.userData.parcel=parcel;
-  }else{
-   box(g,0,.7,-.12,w*.82,.47,1.03,color);box(g,0,.77,.405,w*.7,.28,.025,'#52767a');box(g,0,.77,-.645,w*.7,.26,.025,'#52767a');
-   for(const side of [-1,1])box(g,side*w*.42,.78,-.1,.02,.27,.75,'#52767a');box(g,0,.97,-.12,w*.83,.09,1.02,color);
-  }
-  const wheels=[];
-  for(const side of [-1,1])for(const z of [-len*.31,len*.31]){const m=new THREE.Mesh(wheelGeo,material('#293d3d'));m.rotation.z=Math.PI/2;m.position.set(side*w/2,.23,z);g.add(m);wheels.push(m);const hub=box(g,side*(w/2+.065),.23,z,.018,.13,.13,'#afbab0');hub.castShadow=false;}
-  for(const side of [-1,1]){box(g,side*w*.32,.5,len/2+.015,.16,.12,.025,'#ffe7a0');box(g,side*w*.32,.5,-len/2-.015,.15,.1,.025,'#b75442');}
-  g.userData.wheels=wheels;return g;
+ // Owned pack vehicles, re-tooned on load and fitted inside the simulation
+ // footprint (traffic-fleet.js). Body colours retint a cloned geometry.
+ async function packVehicle({model,colour},footprint){
+  const m=FLEET_MODELS[model],fit=fitModel(model,footprint),base=await loadPackGeometry(m.path);
+  const g=new THREE.Group(),geometry=m.retint&&colour!==LIVERY?retintGeometry(base,m.retint,colour):base;
+  g.add(toonModel(geometry,{scale:fit.scale,offset:fit.offset}));g.userData.fleet={model,colour,pack:m.pack,size:fit.size};return g;
  }
  async function bicycle(index){
   const g=new THREE.Group(),bike=await place('cv-bicycle',{scale:.68});g.add(bike);
@@ -108,27 +120,37 @@ export async function createTraffic(scene,town,residents,world){
   for(const x of [-.2,.2]){const arm=box(g,x,1.24,.17,.09,.36,.1,'#d8ac7e');arm.rotation.x=-.85;}
   const legs=[];for(const x of [-.13,.13])legs.push(box(g,x,.8,-.05,.12,.43,.15,'#3b575e'));g.userData.legs=legs;return g;
  }
- const colors=['#cd7358','#e9bd63','#82aa9d','#6e90a1','#e4dcc4'];
- const objects=await Promise.all(simulation.vehicles.map(async v=>{const g=v.kind==='cycle'?await bicycle(v.id):vehicle(v.kind,colors[v.id%colors.length],v.route);g.name=`traffic-${v.kind}-${v.id}`;root.add(g);return g;}));
- PARKING_BAYS.forEach((b,i)=>{const g=vehicle('car',colors[(i+1)%colors.length]);g.position.set(b.center[0],.22,b.center[1]);g.rotation.y=b.yaw;root.add(g);});
- const sync=()=>{simulation.vehicles.forEach((v,i)=>{const g=objects[i];g.position.set(v.position[0],.22,v.position[1]);g.rotation.y=Math.atan2(...v.direction);g.userData.wheels?.forEach(w=>w.rotation.x=v.distance/.22);g.userData.legs?.forEach((leg,k)=>leg.rotation.x=Math.sin(v.distance*5+k*Math.PI)*.65);if(g.userData.door)g.userData.door.scale.z=v.wait>0?.2:.4;if(g.userData.parcel)g.userData.parcel.visible=v.wait>0;});};
+ const fleet=assignFleet(simulation.vehicles),parked=parkedFleet(PARKING_BAYS);
+ const objects=await Promise.all(simulation.vehicles.map(async (v,i)=>{const g=v.kind==='cycle'?await bicycle(v.id):await packVehicle(fleet[i],FOOTPRINT[v.kind]);g.name=`traffic-${v.kind}-${v.id}`;root.add(g);return g;}));
+ const parkedObjects=await Promise.all(PARKING_BAYS.map(async (b,i)=>{if(b.type==='driveway')return null;const g=await packVehicle(parked[i],{length:b.length,width:b.width});g.name=`parked-${b.id}`;g.position.set(b.center[0],.215,b.center[1]);g.rotation.y=b.yaw;root.add(g);return g;}));
+ // Kerbside furniture and bus shelters, instanced per model.
+ const byModel=new Map();for(const it of streetPlan.items){if(!byModel.has(it.model))byModel.set(it.model,[]);byModel.get(it.model).push(it);}
+ const furniture=new THREE.Group();furniture.name='Street furniture';root.add(furniture);
+ await Promise.all([...byModel].map(async ([model,items])=>{const fm=FURNITURE_MODELS[model];
+  if(fm.catalog){const template=await instantiate(fm.catalog);furniture.add(batchInstances(template,items.map(it=>({pos:it.pos,rotY:it.yaw,scale:fm.scale}))));}
+  else furniture.add(await instancedModel(fm.path,items,{scale:fm.scale,y:0,name:model}));
+ }));
+ const sync=()=>{simulation.vehicles.forEach((v,i)=>{const g=objects[i];g.position.set(v.position[0],.215,v.position[1]);g.rotation.y=Math.atan2(...v.direction);g.userData.wheels?.forEach(w=>w.rotation.x=v.distance/.22);g.userData.legs?.forEach((leg,k)=>leg.rotation.x=Math.sin(v.distance*5+k*Math.PI)*.65);});};
  sync();
  const pickBounds=new THREE.Box3(),hitPoint=new THREE.Vector3();
- return {simulation,root,objects,pick(ray){
+ return {simulation,root,objects,parkedObjects,fleet,parked,streetPlan,pick(ray){
   let closest=null,best=Infinity;
   for(const [i,g] of objects.entries()){
    pickBounds.setFromObject(g);const hit=ray.intersectBox(pickBounds,hitPoint);if(!hit)continue;
    const distance=ray.origin.distanceTo(hit);if(distance>=best)continue;best=distance;
-   const v=simulation.vehicles[i],name=v.kind==='bus'?(v.route==='station'?'Thistlebrook West Loop':'Thistlebrook Town Loop'):v.kind==='van'?'Thistlebrook Post':v.kind==='cycle'?'Cycling through town':'Around-town drive';
-   const detail=v.kind==='bus'?(v.route==='station'?'Route 2 · ':'Route 1 · ')+v.stops.map(s=>s.name).join(' → '):v.kind==='van'?'Local delivery round':v.kind==='cycle'?'A ride through the neighbourhood':'Local traffic';
-   const story=v.kind==='bus'?'The town bus connects the shops, campus, quay and market. It pauses at each gold stop and gives people crossing the street time to pass.':v.kind==='van'?'Parcels travel by road to the shops and quay. The van pulls up for a short unloading stop before continuing its round.':'Following the streets, slowing for the neighbours and waiting a turn at the junctions.';
+   const v=simulation.vehicles[i],f=fleet[i],role=f.role,modelName=FLEET_MODELS[f.model]?.name;
+   const name=v.kind==='bus'?(v.route==='station'?'Thistlebrook West Loop':'Thistlebrook Town Loop'):role?.name||(v.kind==='cycle'?'Cycling through town':'Around-town drive');
+   const detail=v.kind==='bus'?(v.route==='station'?'Route 2 · ':'Route 1 · ')+v.stops.map(s=>s.name).join(' → '):role?.detail||(v.kind==='cycle'?(v.route.endsWith('cycle')?'Riding the Civic Avenue cycle strip':'A ride through the neighbourhood'):`Local traffic · ${modelName}`);
+   const story=v.kind==='bus'?'The town bus connects the shops, campus, quay and market. It pauses at each gold stop and gives people crossing the street time to pass.':role?.story||'Following the streets, slowing for the neighbours and waiting a turn at the junctions.';
    closest={type:'traffic',name,distance,bounds:pickBounds.clone(),object:g,data:{name,detail,story:story+' '+v.status+'.'}};
   }return closest;
  },update(dt){
-  const pedestrians=residents.people.map(p=>{const target=p.route.length?p.route[0].pos:null,x=p.object.position.x,z=p.object.position.z,d=target?Math.hypot(target[0]-x,target[1]-z):0,moving=d>.01&&p.actor.action?.tool==='walkTo',pace=p.context.personality.pace;return {x,z,vx:moving?(target[0]-x)/d*pace:0,vz:moving?(target[1]-z)/d*pace:0};});
+  const pedestrians=residents.people.filter(p=>!p.actor.riding).map(p=>residentPedestrian(p.actor,residents.life.walkPace(p.actor)));
+  if(world?.railway)pedestrians.push(...world.railway.service.pedestrians);
   const civic=world?.civicQuarter?.audit();if(civic){for(const p of civic.people)if(p.visible)pedestrians.push({x:p.position[0],z:p.position[2]});for(const p of [civic.engine,civic.delivery])pedestrians.push({x:p[0],z:p[2]});}
   // Kids walking to and from the ballgame are pedestrians too (civic.js / ballgame.js).
   for(const k of world?.districts?.civic?.audit?.().ballgame?.kids||[])pedestrians.push({x:k.position[0],z:k.position[2]});
+  pedestrians.push(...(world?.districts?.civic?.school?.pedestrians ?? []));
   simulation.update(dt,pedestrians);sync();
- },audit:()=>simulation.audit()};
+ },audit:()=>({...simulation.audit(),fleet:fleet.map(f=>({id:f.id,model:f.model,colour:f.colour})),parked:parked.map(p=>({...p})),streets:{classes:streetPlan.classes,furniture:streetPlan.items.length,shelters:streetPlan.items.filter(i=>i.kind==='shelter').map(i=>i.stop),strips:streetPlan.strips.map(s=>s.id)}})};
 }

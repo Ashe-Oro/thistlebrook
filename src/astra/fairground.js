@@ -213,7 +213,7 @@ export async function buildFairground(scene,town){
   const life=await createFairLife(scene,town);
   const lights=[[-64,-91],[-50,-68],[-67,-44],[-49,-46]].map(([x,z])=>{const l=new THREE.PointLight('#ffd498',0,17,1.6);l.position.set(x,5,z);scene.add(l);return l;});
   let lastTime=null,rideTime=0,schedule=fairSchedule(4,10);
-  return {life,wheel,carousel,stats:{fairVisitors:30,fairDucks:7,fairRiders:riders.length},update(t,hour,night,day=4){
+  return {life,wheel,carousel,stats:{fairVisitors:30,fairDucks:7,fairRiders:riders.length},update(t,hour,night,day=4,weather){
     const dt=lastTime===null?0:Math.max(0,t-lastTime);lastTime=t;schedule=fairSchedule(day,hour);if(schedule.open)rideTime+=dt;
     wheel.rotation.z=rideTime*.075;cabins.forEach(g=>g.rotation.z=-wheel.rotation.z);
     carousel.rotation.y=rideTime*.17;horses.forEach((h,n)=>h.position.y=1.35+Math.sin(rideTime*1.6+n)*.2);
@@ -223,6 +223,6 @@ export async function buildFairground(scene,town){
     ripples.forEach(({m,x,phase})=>{m.position.x=x+Math.sin(t*.4+phase)*.25;});
     musicians.forEach(({o,vendor,base},n)=>{o.visible=vendor?schedule.open:schedule.concert;o.rotation.z=Math.sin(t*2+n)*.035;o.position.y=base+Math.abs(Math.sin(t*2+n))*.025;});
     bulbs.forEach(b=>{b.visible=night>.12&&schedule.open;});lights.forEach(l=>l.intensity=night*(schedule.open?24:2));
-    life.update(t,hour,day);
+    life.update(t,hour,day,weather);
   },audit(){return {schedule,rideAngle:wheel.rotation.z,carouselAngle:carousel.rotation.y,ducks:ducks.map(d=>d.position.toArray()),...life.audit()};}};
 }

@@ -93,6 +93,8 @@ test(`${TOWN_RULE.walking} and ${TOWN_RULE.crosswalks} reject an asphalt shortcu
 test('town layout audit fails on buried props, orphan structures and cramped home lots', async () => {
   const r = await runAudit({mutate(town) {
     town.props[0].elevation = -.5;
+    const bay = town.mapleHollow.bays[0];
+    bay.center = town.mapleHollow.lots.find((l) => l.key === bay.lot).houseAt;
     town.catalogScenes.find((s) => s.id === 'stop-harbor').street = null;
     const homes = town.buildings.filter((b) => b.kind === 'home' && b.district === 'willowbank');
     homes[1].box = homes[0].box;
@@ -100,7 +102,7 @@ test('town layout audit fails on buried props, orphan structures and cramped hom
     homes.forEach((b) => { b.id = homes[0].id; });
   }});
   for (const [category, rule] of [
-    ['off-surface', TOWN_RULE.surface], ['orphan-structure', TOWN_RULE.access],
+    ['off-surface', TOWN_RULE.surface], ['parked-off-driveway', TOWN_RULE.surface], ['parked-on-lot', TOWN_RULE.surface], ['orphan-structure', TOWN_RULE.access],
     ['home-spacing', TOWN_RULE.homes], ['home-pad', TOWN_RULE.homes], ['home-variety', TOWN_RULE.homes],
   ]) assert(open(r, [category]).some((f) => f.rule === rule), category);
 });

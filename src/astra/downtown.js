@@ -18,8 +18,8 @@ const roles=['merchant','herbalist','shopkeeper','carpenter','farmhand','elder']
 /** Additive district layer: no changes to parcels, graph, camera, or residents. */
 export async function buildDowntown(scene,town) {
   const kit=districtKit(scene),{root,box,orb,drum,ring,wire,sign,pool}=kit;
-  const people=[],jobs=[],flags=[],steam=[],rooftops=[],landmarkRecords=[];
-  const addPerson=(role,period,motion,scale=.9)=>people.push({role,period,motion,scale});
+  const people=[],errands=[],jobs=[],flags=[],steam=[],rooftops=[],landmarkRecords=[];
+  const addPerson=(role,period,motion,scale=.9)=>{const person={role,period,motion,scale};people.push(person);return person;};
   const still=(x,y,z,yaw=0,phase=0)=>t=>({x,y:y+Math.sin(t*1.8+phase)*.025,z,yaw:yaw+Math.sin(t*.4+phase)*.1});
   const asset=(id,x,z,scale=1,rotY=0,parent=root)=>jobs.push(place(id,{x,z,scale,rotY}).then(o=>parent.add(o)));
   const group=(x,y,z,rot=0,parent=root)=>{const g=new THREE.Group();g.position.set(x,y,z);g.rotation.y=rot;parent.add(g);return g;};
@@ -124,7 +124,8 @@ export async function buildDowntown(scene,town) {
     pool(b.door[0],b.door[1],2.3,'#ffd19b');
   }
   // Errands happen on the existing sidewalks. A loop pauses at each shop.
-  for(let n=0;n<ERRAND_WALKERS;n++)addPerson(roles[n%roles.length],'day',t=>errandPose(n,t));
+  let weather='clear',weatherTime=0,lastTime=0;
+  for(let n=0;n<ERRAND_WALKERS;n++)errands.push(addPerson(roles[n%roles.length],'day',()=>errandPose(n,weatherTime,weather==='rain')));
 
   // Lantern Quay is one continuous pedestrian bar street, with lit entries,
   // terrace rooms and venue-specific rooftop silhouettes.
@@ -249,8 +250,9 @@ export async function buildDowntown(scene,town) {
   await Promise.all(jobs);kit.bake();
   const crowd=await districtCrowd(scene,people);
   const stats={shopLandmarks:rooftops.length,downtownVisitors:people.filter(p=>p.period==='day').length,quayNightVisitors:people.filter(p=>p.period==='night').length,fridaySupporters:people.filter(p=>p.period==='game').length};
-  return {stats,landmarkRecords,update(t,hour,night){
-    kit.update(night);crowd.update(t,hour);
+  return {stats,landmarkRecords,errands,update(t,hour,night,type='clear'){
+    weather=type;weatherTime+=(t-lastTime)*(type==='snow'?.8:1);lastTime=t;
+    kit.update(night);crowd.update(t,hour,p=>type==='rain'&&p.period!=='game'&&!errands.includes(p));
     flags.forEach(({flag,glow,x})=>{if(flag)flag.rotation.y=Math.sin(t*1.3+x)*.2;if(glow)glow.material.opacity=night*.65;});
     steam.forEach(({m,g,n})=>{const u=(t*.2+n/3)%1,p=g.getWorldPosition(new THREE.Vector3());m.position.set(p.x+u*.4,p.y+1.8+u*1.5,p.z);m.scale.setScalar(.12+u*.22);m.material.opacity=(1-u)*.4;});
   },audit(){return {stats,rooftops,visible:{day:people.filter(p=>p.period==='day'&&p.visible).length,night:people.filter(p=>p.period==='night'&&p.visible).length,game:people.filter(p=>p.period==='game'&&p.visible).length},sample:people.filter((p,i)=>i%20===0).map(p=>p.position)};}};

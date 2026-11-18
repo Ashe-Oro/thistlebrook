@@ -24,11 +24,26 @@ const segDist = (p, a, b) => { const dx = b[0] - a[0], dz = b[1] - a[1], t = Mat
 export function crossingClear(a, b, vehicles) {
   for (const v of vehicles) {
     const c = v.position, d = segDist(c, a, b);
-    if (d < v.length / 2 + 1.2) return false; // already on the crossing
-    if (d > 16) continue;
-    const toward = [((a[0] + b[0]) / 2) - c[0], ((a[1] + b[1]) / 2) - c[1]], dir = v.direction;
-    const approaching = dot(toward, dir) > 0, moving = (v.speed || 0) > .15;
-    if (approaching && (moving || d < 6)) return false;
+    // A parked car (a bay or a driveway) blocks only a crossing it actually stands on (opus-suburb).
+    if (v.parked) { if (d < v.width / 2 + .3) return false; continue; }
+    // A car that has stopped to let people cross waves them over, unless its bumper is
+    // within half a metre of the crossing (opus-suburb: a courtesy deadlock at the bus-stop crosswalks).
+    const speed = v.speed ?? v.speedNow ?? 0;
+    const waving = speed <= .15 && v.status === 'Yielding to pedestrian';
+    if (d < v.length / 2 + (waving ? .5 : 1.2)) return false; // already on the crossing
+    if (d > Math.max(16, speed * 5.5)) continue;
+    const toward = [((a[0] + b[0]) / 2) - c[0], ((a[1] + b[1]) / 2) - c[1]];
+    const approaching = dot(toward, v.direction) > 0;
+    // A vehicle may be facing away from the zebra before turning onto it.
+    if ((v.kind === 'cycle' || !approaching) && speed > .15 && v.positionAhead) {
+      const reach = v.kind === 'cycle' ? 12 : Math.max(5, speed * 5.5);
+      for (let distance = .5; distance <= reach; distance += .5) {
+        if (segDist(v.positionAhead(distance), a, b) < v.length / 2 + 1.2) return false;
+      }
+    }
+    // A bus dwelling at its stop with the doors open is about to pull away: treat it as moving (opus-suburb).
+    const moving = speed > .15 || v.doorOpen;
+    if (approaching && (moving || (d < 6 && !waving))) return false;
   }
   return true;
 }
