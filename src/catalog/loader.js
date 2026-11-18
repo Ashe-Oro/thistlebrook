@@ -2,6 +2,7 @@
 // come back as the same thing — a pivot Group at the entry's local origin,
 // already scaled into world units, front facing +Z, toon-shaded with outlines.
 import * as THREE from 'three';
+import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import { createGLTFLoader } from '../gltf-loader.js';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { toonMaterial, toonVertexColorMaterial, outlineMaterial } from '../toon.js';
@@ -83,7 +84,7 @@ function weldFoliage(geo) {
 // hull pushed along those normals cracks open at every hard edge. Weld by
 // position and recompute smooth normals for the hull only.
 const _hull = new WeakMap();
-function hullGeometry(geo) {
+function hullGeometry(geo, skinned = false) {
   if (_hull.has(geo)) return _hull.get(geo);
   const g = new THREE.BufferGeometry();
   // Copy positions into a plain attribute (glTF/Draco may hand us interleaved).
@@ -92,6 +93,7 @@ function hullGeometry(geo) {
   for (let i = 0; i < src.count; i++) { arr[i * 3] = src.getX(i); arr[i * 3 + 1] = src.getY(i); arr[i * 3 + 2] = src.getZ(i); }
   g.setAttribute('position', new THREE.BufferAttribute(arr, 3));
   if (geo.index) g.setIndex(geo.index);
+  if (skinned) for (const name of ['skinIndex', 'skinWeight']) g.setAttribute(name, geo.attributes[name]);
   const welded = mergeVertices(g, 1e-3);
   welded.computeVertexNormals();
   _hull.set(geo, welded);
@@ -112,7 +114,12 @@ function toonify(root, category) {
     m.castShadow = true;
     m.receiveShadow = true;
     if (foliage) m.userData.foliage = true; // post prepass: no crease ink in crowns
-    const edge =new THREE.Mesh(hullGeometry(m.geometry), null);
+    const hull = hullGeometry(m.geometry, m.isSkinnedMesh);
+    const edge = m.isSkinnedMesh ? new THREE.SkinnedMesh(hull, null) : new THREE.Mesh(hull, null);
+    if (m.isSkinnedMesh) {
+      edge.bind(m.skeleton, m.bindMatrix);
+      edge.boundingSphere = m.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 1, 0), 2);
+    }
     edge.userData.outline = true;
     edge.castShadow = false;
     m.add(edge);
@@ -125,20 +132,31 @@ function toonify(root, category) {
  * `params` overrides a builder entry's params (e.g. a path's length); `scale`
  * applies an extra uniform multiplier on top of the entry's world scale.
  */
-export async function instantiate(id, { params, scale = 1 } = {}) {
+export async function instantiate(id, { params, scale = 1, animated = false } = {}) {
   const e = getEntry(id);
   const pivot = new THREE.Group();
   pivot.name = id;
   pivot.userData.entry = e;
   let content;
   if (e.source === 'mesh') {
-    content = (await loadGLTF(e.path, e.tags.category)).clone(true);
+    if (animated && e.tags.style.includes('villager')) {
+      const riggedPath = e.path.replace('characters/', 'characters/rigged/');
+      const rigged = await loadGLTF(riggedPath, e.tags.category).catch(() => null);
+      if (rigged) content = cloneSkeleton(rigged);
+    }
+    content ??= (await loadGLTF(e.path, e.tags.category)).clone(true);
     content.scale.setScalar(e.scale);
     content.position.y = (e.yOffset || 0) * e.scale;
     if (e.yawOffset) content.rotation.y = e.yawOffset; // align door to +Z (dormant: all 0)
     // Outline thickness is applied in object space, so undo the kit scale.
     const mat = outlineMaterial((e.tags.style.includes('villager') ? 0.008 : OUTLINE_WORLD) / e.scale);
-    content.traverse((o) => { if (o.userData.outline) o.material = mat; });
+    content.traverse((o) => {
+      if (!o.userData.outline) return;
+      o.material = mat;
+      // SkeletonUtils clones every skinned mesh independently. The ink hull
+      // can use its cloned body's bone texture and pose update.
+      if (o.isSkinnedMesh) o.bind(o.parent.skeleton, o.parent.bindMatrix);
+    });
   } else {
     content = BUILDERS[e.builder]({ ...(e.params || {}), ...(params || {}) });
     if (e.scale !== 1) content.scale.setScalar(e.scale);
@@ -156,8 +174,8 @@ export async function instantiate(id, { params, scale = 1 } = {}) {
 }
 
 /** Instantiate and place at {x, z, rotY}, with optional params/scale override. */
-export async function place(id, { x = 0, z = 0, rotY = 0, params, scale = 1 } = {}) {
-  const obj = await instantiate(id, { params, scale });
+export async function place(id, { x = 0, z = 0, rotY = 0, params, scale = 1, animated = false } = {}) {
+  const obj = await instantiate(id, { params, scale, animated });
   obj.position.set(x, 0, z);
   obj.rotation.y = rotY;
   return obj;

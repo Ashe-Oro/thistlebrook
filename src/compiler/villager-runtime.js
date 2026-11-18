@@ -1,13 +1,19 @@
 import * as THREE from 'three';
+import { createVillagerMixer } from '../life/villager-mixer.js';
+import { CLIP } from '../life/animation-plan.js';
 import { instantiate } from '../catalog/loader.js';
 import { VILLAGERS } from '../catalog/villagers.js';
 import { toonMaterial } from '../toon.js';
 
 export function createVillagerAnimator(scene) {
   const people=[];
-  scene.traverse(o=>{if(o.userData.inst?.id.startsWith('edo-villager-'))people.push(o);});
+  scene.traverse(o=>{if(o.userData.inst?.id.startsWith('edo-villager-'))people.push({o,mixer:createVillagerMixer(o,people.length)});});
+  let previous;
   return seconds=>{
-    for(const o of people) {
+    const dt=previous===undefined?0:Math.max(0,Math.min(.25,seconds-previous));
+    previous=seconds;
+    for(const [i,{o,mixer}] of people.entries()) {
+      if(mixer){mixer.update({clip:i%3?CLIP.idle:CLIP.look},{dt});continue;}
       const m=o.userData.inst.motion;
       // A grounded, subtle weight shift; position is the compiler's position.
       o.rotation.z=Math.sin(seconds*1.25+m.phase)*.012;
@@ -29,7 +35,7 @@ export async function buildVillagerLineup(town,scene) {
   const ground=new THREE.Mesh(new THREE.PlaneGeometry(48,18),toonMaterial('#b6b59a'));
   ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
   return Promise.all(VILLAGERS.map(async(v,n)=>{
-    const obj=await instantiate(v.id);
+    const obj=await instantiate(v.id,{animated:true});
     const x=(n-5.5)*2.6;
     obj.position.set(x,0,0);
     const original=town.instances.find(i=>i.id===v.id);

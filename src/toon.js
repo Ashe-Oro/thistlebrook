@@ -89,6 +89,7 @@ export function outlineMaterial(thickness) {
   const mat = new THREE.ShaderMaterial({
     uniforms: { uThickness: { value: thickness }, uInk: { value: new THREE.Color(OUTLINE_INK) }, ...HULL_FADE },
     vertexShader: /* glsl */ `
+      #include <skinning_pars_vertex>
       uniform float uThickness, uFadeDist, uFadeMin;
       void main() {
         float k = 1.0;
@@ -101,8 +102,10 @@ export function outlineMaterial(thickness) {
           float depth = -(modelViewMatrix * samplePos).z;
           k = mix(1.0, uFadeMin, clamp((depth - uFadeDist) / uFadeDist, 0.0, 1.0));
         }
-        vec3 p = position + normalize(normal) * uThickness * k;
-        vec4 hullPos = vec4(p, 1.0);
+        vec3 transformed = position + normalize(normal) * uThickness * k;
+        #include <skinbase_vertex>
+        #include <skinning_vertex>
+        vec4 hullPos = vec4(transformed, 1.0);
         #ifdef USE_INSTANCING
           hullPos = instanceMatrix * hullPos;
         #endif

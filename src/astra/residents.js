@@ -2,6 +2,8 @@ import {bridgeDeck} from '../compiler/water.js';
 import {tagObject} from './registry/render-tags.js';
 import { SUNBEAM_RESIDENTS } from './sunbeam-layout.js';
 import * as THREE from 'three';
+import { createVillagerMixer } from '../life/villager-mixer.js';
+import { animationPlan } from '../life/animation-plan.js';
 import { place } from '../catalog/loader.js';
 import { TOWNSFOLK } from '../catalog/townsfolk.js';
 import { riverZ } from '../compiler/astra.js';
@@ -14,18 +16,35 @@ export async function createResidents(scene,town,options={}){
  const life=createLife(town,options),people=[];
  await Promise.all(life.actors.map(async(actor,n)=>{
   const terrace=SUNBEAM_RESIDENTS.find(p=>p.name===actor.context.name),model=terrace?TOWNSFOLK.find(m=>m.role===terrace.model):TOWNSFOLK[n%TOWNSFOLK.length];
-  const object=await place(model.id,{scale:1.12});scene.add(object);
-  const poses=residentPoses(object);
+  const object=await place(model.id,{scale:1.12,animated:true});scene.add(object);
+  const mixer=createVillagerMixer(object,n),poses=mixer?null:residentPoses(object);
   const bat=new THREE.Mesh(new THREE.CylinderGeometry(.065,.04,1.1,8),new THREE.MeshStandardMaterial({color:'#b99765',roughness:1}));bat.position.set(.5,1,.4);bat.rotation.z=-.65;bat.visible=false;bat.userData.lifeAccessory=true;object.add(bat);tagObject(object,actor.context.assets.home);
   const spot=town.workstations?.find(p=>p.name===actor.context.name);
-  people[n]={workplace:spot?{id:spot.venue,node:spot.node}:null,name:actor.context.name,role:actor.context.job.title,story:terrace?.story||'A day shaped by work, small errands and favourite places.',object,actor,poses,bat,home:actor.context.assets.home,node:actor.context.location.node,route:[],destination:null,visits:0,activity:actor.activity,context:actor.context};
+  people[n]={workplace:spot?{id:spot.venue,node:spot.node}:null,name:actor.context.name,role:actor.context.job.title,story:terrace?.story||'A day shaped by work, small errands and favourite places.',object,actor,mixer,poses,bat,model:model.id,lastTravel:0,home:actor.context.assets.home,node:actor.context.location.node,route:[],destination:null,visits:0,activity:actor.activity,context:actor.context};
  }));
  const visuals=buildLifeVisuals(scene,life),byId=new Map(life.registry.places.map(p=>[p.id,p]));
- function sync(t){
+ function sync(dt,t){
   for(const p of people){
    const a=p.actor,c=a.context,where=byId.get(c.location.place),pose=activityPose(a,where,t),o=p.object;
    p.node=c.location.node;p.route=a.route;p.destination=byId.get(a.action?.target||c.location.place)||null;p.visits=a.arrivals;p.activity=a.activity;
-   p.poses.setSeat(pose.seated);p.bat.visible=pose.bat;
+   p.bat.visible=pose.bat;
+   if(p.mixer){
+    const slot=where?.interaction?.slots.find(s=>s.id===c.location.slot);
+    const selected=byId.get(a.action?.target)||where;
+    const distance=a.travelled-p.lastTravel;
+    const movement=pose.run?Math.hypot(pose.position[0]-o.position.x,pose.position[1]-o.position.z):distance;
+    const plan=animationPlan({tool:a.action?.tool,place:selected,slot,position:c.location.position,
+     role:p.model.slice('townsfolk-'.length),moving:movement>0,greeting:a.greetingUntil>life.elapsed,variant:a.index});
+    if(pose.riding&&Number.isFinite(plan.seatHeight))plan.seatHeight=pose.height;
+    p.animation={plan,slot,position:c.location.position};
+    p.lastTravel=a.travelled;
+    const y=slot?.groundHeight??bridgeDeck(town,pose.position)??(Math.abs(pose.position[0]+57)<6.8&&Math.abs(pose.position[1]+6)<6.8?.19:.15);
+    o.position.set(pose.position[0],y,pose.position[1]);
+    o.rotation.set(0,pose.facing,0);
+    p.mixer.update(plan,{dt,distance:movement,facing:pose.facing});
+    continue;
+   }
+   p.poses.setSeat(pose.seated);
    let y=bridgeDeck(town,pose.position)??.15;
    const walking=a.action?.tool==='walkTo'||pose.run;
    if(pose.seated)y=pose.height+.08;
@@ -36,8 +55,8 @@ export async function createResidents(scene,town,options={}){
   }
   visuals.update();
  }
- sync(0);
- return {people,life,visuals,setHour:h=>life.setHour(h),update(dt,t,hour){life.update(dt,hour);sync(t);},pick(ray){
+ sync(0,0);
+ return {people,life,visuals,setHour:h=>life.setHour(h),update(dt,t,hour){life.update(dt,hour);sync(dt,t);},pick(ray){
   let result=null,best=Infinity;
   for(const p of people){const center=p.object.position.clone().add(new THREE.Vector3(0,.8,0)),sphere=new THREE.Sphere(center,.75),hit=ray.intersectSphere(sphere,new THREE.Vector3());if(hit){const d=ray.origin.distanceTo(hit);if(d<best){result=p;best=d;}}}
   return result;

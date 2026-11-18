@@ -60,7 +60,7 @@ export function buildTown(town, scene) {
     // Gates carry their gap width / swing as top-level instance fields.
     const params = paramsFor(inst);
     loads.push(
-      place(inst.id, { x, z, rotY: inst.rotY, params, scale: inst.scale || 1 })
+      place(inst.id, { x, z, rotY: inst.rotY, params, scale: inst.scale || 1, animated: inst.kind === 'villager' })
         .then((obj) => { if (inst.pavingWidth) obj.scale.x *= inst.pavingWidth / 5; obj.userData.inst = inst; scene.add(obj); return obj; }),
     );
   }

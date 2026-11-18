@@ -5,7 +5,12 @@ export function includeLifePlacements(town){
  const life=buildLifeRegistry(town),known=new Map(town.registry.places.map(p=>[p.id,p]));
  for(const p of life.places){
   const existing=known.get(p.id);
-  if(existing){if(existing.interaction?.controller)continue;existing.capabilities=[...p.capabilities];existing.hours=[...p.hours];continue;}
+  if(existing){if(existing.interaction?.controller)continue;existing.capabilities=[...p.capabilities];existing.hours=[...p.hours];
+   if(p.interaction&&!existing.interaction){
+    existing.interaction=p.interaction;
+    existing.interactionPoints=p.interaction.slots;
+   }
+   continue;}
   const district=p.district||town.districts.reduce((a,b)=>Math.hypot(a.center[0]-p.pos[0],a.center[1]-p.pos[1])<Math.hypot(b.center[0]-p.pos[0],b.center[1]-p.pos[1])?a:b).id;
   const r={...p,type:p.kind==='workplace'?'area':'prop',district,owner:'Thistlebrook town',occupants:[],entryPoints:[{node:p.node,position:[...town.nodes[p.node]],approach:p.interaction?.approach||[]}],interactionPoints:p.interaction?.slots||[],activity:{enabled:!!p.interaction,activity:p.interaction?.activity||'work',animation:p.interaction?.slots[0]?.animation||'idle',slots:p.interaction?.slots||[],reason:p.interaction?undefined:'An assigned workplace on the public graph'}};
   town.registry.places.push(r);known.set(r.id,r);

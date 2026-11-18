@@ -9,8 +9,9 @@ const call=(tool,target,reason,extra={})=>({tool,args:{...(target?{target}:{}),.
 /** Scripted brain: only returns tool-shaped requests. All state changes, paths,
  * reservations and money effects belong to the executor.
  * @type {import('./types').Brain} */
-export function scriptedPlanner({self,clock,places,passing}){
+export function scriptedPlanner({self,clock,places,passing,greetingTarget}){
  const {hour,elapsed,day}=clock;
+ if(greetingTarget)return hour>=7&&hour<20?call('talkTo',greetingTarget,'Say hello in passing'):null;
  const here=places.find(p=>p.id===self.location.place);
  /** @param {import('./types').PlaceView} p */
  const available=p=>isOpen(p.hours,hour)&&(!p.interaction||p.freeSlots.length>0||p.id===here?.id&&!!self.location.slot);

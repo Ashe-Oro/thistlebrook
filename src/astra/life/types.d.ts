@@ -67,6 +67,7 @@ export interface PlanningContext {
   places: PlaceView[];
   neighbours: { id: string; name: string; place: string | null; activity: ActivityType | null }[];
   passing: boolean;
+  greetingTarget: string | null;
 }
 /** Implement this pure function to replace the scripted planner. No renderer or mutable world is exposed. */
 export type Brain = (context: Readonly<PlanningContext>) => Action | null;

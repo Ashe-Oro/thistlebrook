@@ -9,6 +9,7 @@ export const TOWN_RULE = Object.freeze({
   roads: 'TOWN-06',
   homes: 'TOWN-07',
   skins: 'TOWN-08',
+  villagerAnimation: 'TOWN-09',
 });
 
 export const ROAD_RULE = Object.freeze({
@@ -20,6 +21,7 @@ export const ROAD_RULE = Object.freeze({
   'sidewalk-dead-end': TOWN_RULE.sidewalks,
   'disconnected-sidewalk': TOWN_RULE.sidewalks,
   'off-surface': TOWN_RULE.surface,
+  'villager-animation': TOWN_RULE.villagerAnimation,
   'orphan-structure': TOWN_RULE.access,
   'dead-end': TOWN_RULE.roads,
   stub: TOWN_RULE.roads,

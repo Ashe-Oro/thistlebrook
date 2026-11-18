@@ -1,3 +1,4 @@
+import { cafeFrontage, fountainBenches, playReservation } from './animation-places.js';
 import { riverZ, pointInTown } from '../../compiler/astra.js';
 
 import {TOOLS,ACTIVITIES,ANIMATIONS,distance,isOpen,interactionErrors} from '../registry/interaction-schema.js';
@@ -72,6 +73,8 @@ export function buildLifeRegistry(town,extraPlaces=[]) {
  });
  const incoming=[...catalogPlaces,...(town.registry?.places||[]),...extraPlaces,...(town.props||[]).filter(p=>p.interaction).map((p,n)=>({...p,id:p.key||`life:tagged:${n}`,name:p.name||p.id}))];
  const rejected=[];
+ places.push(...fountainBenches(town));
+ const play=playReservation(town);if(play)places.push(play);
  for(const record of incoming){
   // District controllers own these leases; town residents may visit the venue entrance.
   if(record?.interaction?.controller&&record.interaction.controller!=='life')continue;
@@ -88,5 +91,8 @@ export function buildLifeRegistry(town,extraPlaces=[]) {
   const copy={...(record.furnishing?{furnishing:record.furnishing}:{}),id:record.id,name:record.name||record.id,kind:record.kind||record.type||'prop',...(record.district?{district:record.district}:{}),pos:[...(point(record.pos)?record.pos:i.slots[0].position)],node:i.entryNode,hours:[...i.hours],capabilities:['walkTo',...i.tools],interaction:structuredClone(i)};
   if(index<0)places.push(copy);else places[index]=copy;
  }
+ const cafe=town.buildings.find(b=>b.name==='Corner Cup Café');
+ const counter=places.find(p=>p.id===cafe?.key);
+ if(counter){counter.interaction=cafeFrontage(cafe);counter.points=['counter'];}
  return {version:1,places,rejected};
 }

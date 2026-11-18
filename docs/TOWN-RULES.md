@@ -67,3 +67,11 @@ The road audit checks home footprints and front yards, model or facade variety w
 > The cel look is the default; skins are swappable data files.
 
 The skin tests check the cel default, per-skin data files and live switching back to the original cel appearance.
+
+## TOWN-09 · Villagers sit and walk on their surfaces
+
+2026-11-17
+
+> Sit only at a reserved, documented seat. Seated hips meet the seat. Walk cycles play in place and the planted foot stays on the walking surface.
+
+The road audit checks reserved seat anchors, bind poses, root motion and planted-foot drift. The animation tests inject off-seat sitting, floating hips, a bind pose and a skating step.

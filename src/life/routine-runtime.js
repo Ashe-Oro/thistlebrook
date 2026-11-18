@@ -17,7 +17,7 @@ export function installRoutines({town,people,social,api,q,stage}){
  const log=[];
  const world={registry:town.registry,graph:town.life.graph,destinations,placeTargets,contexts,economy,arrivalNode,
   arrived(id){const p=people.people.find(p=>p.i.id===id);return !p.path.length&&p.goal===contexts.get(id).destination;},
-  move(id,d){const p=people.people.find(p=>p.i.id===id);p.i.schedule=[{hour:0,node:d.node,activity:'walking'}];p.o.userData.speech=null;p.o.userData.tool=null;},
+  move(id,d){const p=people.people.find(p=>p.i.id===id);p.i.schedule=[{hour:0,node:d.node,activity:'walking'}];p.o.userData.speech=null;p.o.userData.tool=null;p.o.userData.destination=d.place;},
   act(id,tool,args){const p=people.people.find(p=>p.i.id===id);p.i.schedule[0].activity=args.activity??tool;p.o.userData.speech=args.text??contexts.get(id).schedule.find(b=>b.key===contexts.get(id).beat)?.text;
    p.o.userData.tool=tool;
   },

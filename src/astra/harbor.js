@@ -34,7 +34,7 @@ export async function buildHarbor(scene,town) {
   }
   // Quay wall with regularly spaced stone blocks and timber fenders.
   for(let x=53;x<88;x+=2.1){box(x,-.6,51,2,.9,1,'#a4ab99');box(x,-.02,51,2.1,.3,1.2,'#c6c7ae');}
-  for(const [x,z] of [[68,48],[72,54],[68,63],[74,59],[64,69],[85,45]]){
+  for(const [x,z] of [[68,48],[72,54],[68,63],[74,58.35],[64,69.95],[85,45]]){
     cylinder(x,.35,z,.22,.5,'#445d59');cylinder(x,.62,z,.32,.12,'#526b65');ring(x,.22,z,.46,.055,'#b69a6b');
   }
   // Fish market: a tiled roof, striped awning, cold counters and tiny silver catch.

@@ -26,7 +26,7 @@ test('registry is additive, JSON serializable, uniquely identified and has valid
  const bad=buildLifeRegistry(town,[tagged]);assert.equal(bad.rejected.length,1);assert(!bad.places.some(p=>p.id===tagged.id));
 });
 
-test('only the executor changes context; disabled or invalid actions have no effects',()=>{
+test('only the executor changes context; invalid actions have no effects',()=>{
  const life=createLife(town,{brain:()=>null}),a=life.actors[0],before=structuredClone(a.context);
  for(const action of [call('talkTo','resident:bram'),call('buy','missing'),call('work','parcel-12'),call('payBill','parcel-24',{bill:'household'}),call('teleport','parcel-1')])assert.equal(life.execute(a,action).ok,false);
  assert.deepEqual(a.context,before);assert.equal(a.action,null);
@@ -85,7 +85,7 @@ test('natural days are deterministic, exercise every enabled action and never te
    for(const e of life.events.filter(e=>e.id>lastId)){assert.notEqual(e.status,'rejected',e.detail);if(e.status==='completed')completed.add(e.tool);lastId=e.id;}
    const keys=[...life.reservations.keys()];assert.equal(new Set(keys).size,keys.length);
   }
-  assert.deepEqual([...completed].sort(),TOOLS.filter(t=>t!=='talkTo').sort());assert(activities.has('baseball')&&activities.has('life:chess'));assert.equal(life.day,1);
+  assert.deepEqual([...completed].sort(),[...TOOLS].sort());assert(activities.has('baseball')&&activities.has('life:chess'));assert.equal(life.day,1);
   return life.audit();
  }
  assert.deepEqual(simulate(),simulate());
@@ -100,4 +100,23 @@ test('time scrubbing does not advance the day or charge bills; midnight updates 
 
 test('additional seeds retain valid interactions and complete routine navigation',()=>{
  for(const seed of [1,22,331]){const t=compileAstra(catalog,seed),life=createLife(t,{hour:15});for(const p of life.registry.places.filter(p=>p.interaction))assert.deepEqual(interactionErrors(p.interaction,t),[]);tick(life,450,16);assert(life.actors.every(a=>a.arrivals>0));assert(!life.events.some(e=>e.status==='rejected'));}
+});
+
+test('a passing greeting preserves the current trip, and an occupied bench rises before leaving',()=>{
+ const life=createLife(town,{brain:()=>null}),[a,b]=life.actors;
+ assert(life.execute(a,call('walkTo','life:fountain-bench-1',{slot:'sit-1'})).ok);
+ const route=a.route;
+ b.context.location.position=a.context.location.position.map((value,i)=>value+(i===0?1.5:0));
+ assert(life.execute(a,call('talkTo',b.context.id)).ok);
+ assert(a.greetingUntil>life.elapsed&&b.greetingUntil>life.elapsed);
+ assert.equal(a.route,route);
+ assert(!life.execute(a,call('talkTo',b.context.id)).ok);
+ tick(life,250);
+ assert.equal(a.context.location.slot,'sit-1');
+ assert(life.execute(a,call('walkTo',a.context.assets.home)).ok);
+ const position=[...a.context.location.position];
+ life.update(.1);
+ assert.deepEqual(a.context.location.position,position);
+ life.update(.3);
+ assert.notDeepEqual(a.context.location.position,position);
 });

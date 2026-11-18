@@ -1,3 +1,4 @@
+import { CAFE_COUNTER } from './life/animation-places.js';
 import { tagObject, tagComponents, tagBatch } from './registry/render-tags.js';
 import * as THREE from 'three';
 import { place } from '../catalog/loader.js';
@@ -88,6 +89,13 @@ export async function buildCivic(scene,town){
   if(b.name!=='Thistlebrook Town Hall')for(let k=0;k<8;k++){assembly=`built:${b.key}-awning`;const awning=box(-2.2+k*.62,2.52,localFront+.38,.62,.1,1.2,k%2?'#efe0bd':color,o);awning.rotation.x=.13;}
   if(b.name==='Sole & Stitch'){assembly=`built:${b.key}-display`;box(1.7,.7,localFront+.55,1.2,.14,.7,'#9f8661',o);for(const x of [1.4,1.9]){box(x,.88,localFront+.65,.22,.24,.45,'#926b4d',o);box(x,1.05,localFront+.52,.22,.4,.19,'#926b4d',o);}}
   if(b.name==='Sunrise Bakehouse'){assembly=`built:${b.key}-display`;box(-1.65,.75,localFront+.5,1.25,.18,.7,'#b1986c',o);for(let k=0;k<4;k++){const loaf=orb(-2+k*.24,.96,localFront+.5,.16,'#dab374',o);loaf.scale.z=.28;}}
+  if(b.name==='Corner Cup Café'){
+   const {x,z,width,depth}=CAFE_COUNTER;
+   assembly=`built:${b.key}-awning`;
+   box(x,.55,z,width,.87,depth,'#50776a',o);
+   box(x,1.02,z,width+.12,.1,depth+.08,'#b89465',o);
+   for(const dx of [-.47,.4])cylinder(x+dx,1.12,z,.09,.12,'#ead7ad',o);
+  }
   if(b.name==='The Post Office')tagObject(box(1.6,.8,localFront+.5,.65,1.3,.65,'#658694',o),`built:${b.key}-display`);
  }
  for(let n=0;n<8;n++)jobs.push(player(['elder','merchant','herbalist','child','innkeeper','shopkeeper','farmhand','carpenter'][n],-57,-6,1.02).then(o=>gatherers.push({o,n})));

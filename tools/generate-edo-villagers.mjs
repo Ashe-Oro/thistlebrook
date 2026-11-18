@@ -5,12 +5,14 @@ import { fileURLToPath } from 'node:url';
 const root=fileURLToPath(new URL('../',import.meta.url));
 const basic='/workspace/threejs-assets/character-model-basic/x/character-model-basic-source-1.1.0';
 const wardrobe='/workspace/threejs-assets/character-model-basic-wardrobe/x/character-model-basic-wardrobe-source-1.0.0';
-const dest=root+'public/licensed/characters/';
+const rigged=process.argv.includes('--rigged');
+const dest=root+'public/licensed/characters/'+(rigged?'rigged/':'');
 await mkdir(dest,{recursive:true});
 const code=`
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { writeFileSync } from 'node:fs';
+${rigged?"import { riggedFigure, writeRiggedGlb } from '"+root+"tools/rigged-villager-export.mjs';":''}
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import draco3d from 'draco3dgltf';
@@ -41,23 +43,26 @@ for(const v of VILLAGERS){
  b.boneByShortName.RightForeArm.rotation.y=0.18;
  if(v.role==='elder') b.boneByShortName.Spine.rotation.x=0.14;
  b.group.updateMatrixWorld(true);b.skeleton.update();
+ const figure=new THREE.Group();figure.name=v.id;
+ if(!${rigged}){
  const g=b.mesh.geometry.clone(); const pos=g.attributes.position;const p=new THREE.Vector3();
  for(let i=0;i<pos.count;i++){p.fromBufferAttribute(pos,i);b.mesh.applyBoneTransform(i,p);pos.setXYZ(i,p.x,p.y,p.z);}
  g.deleteAttribute('skinIndex');g.deleteAttribute('skinWeight');g.computeVertexNormals();
  const colors=new Float32Array(pos.count*3);
  for(const group of g.groups){const c=b.mesh.material[group.materialIndex].color;for(let j=group.start;j<group.start+group.count;j++){const i=g.index?g.index.getX(j):j;colors.set(c.toArray(),i*3);}}
  g.setAttribute('color',new THREE.BufferAttribute(colors,3));g.clearGroups();
- const figure=new THREE.Group();figure.name=v.id;
  figure.add(new THREE.Mesh(g,new THREE.MeshStandardMaterial({vertexColors:true})));
+ }
  const add=(geo,color,x,y,z)=>{const m=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({color}));m.position.set(x,y,z);figure.add(m);return m;};
  const box=(w,h,d,c,x,y,z)=>add(new THREE.BoxGeometry(w,h,d),c,x,y,z);
  const rod=(a,b,r=.018,c='#695137')=>{const A=new THREE.Vector3(...a),B=new THREE.Vector3(...b);const m=add(new THREE.CylinderGeometry(r,r,A.distanceTo(B),8),c,...A.clone().add(B).multiplyScalar(.5).toArray());m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),B.sub(A).normalize());return m;};
  const U=b.U,M=b.metrics;
  // Headless export uses small geometry facial marks instead of a canvas face.
  const fy=(M.headBottom+b.cfg.headH*.52)*U,fz=b.cfg.headD*U/2+.008;
+ const face=(...args)=>{const mark=box(...args);mark.userData.face=true;return mark;};
  const headPose=new THREE.Matrix4().multiplyMatrices(b.boneByShortName.Head.matrixWorld,b.skeleton.boneInverses[b.boneIndex.Head]);
- for(const x of [-1,1])box(.024,.032,.012,'#252321',x*b.cfg.headW*U*.22,fy,fz).applyMatrix4(headPose);
- box(.045,.012,.012,'#74483b',0,fy-.085,fz).applyMatrix4(headPose);
+ for(const x of [-1,1])face(.024,.032,.012,'#252321',x*b.cfg.headW*U*.22,fy,fz).applyMatrix4(headPose);
+ face(.045,.012,.012,'#74483b',0,fy-.085,fz).applyMatrix4(headPose);
  const waist=M.legTop*U+.08, chest=M.shoulderY*U;
  if(v.role!=='porter')box(b.cfg.torsoW*U+.09,.095,b.cfg.torsoD*U+.11,v.trim,0,waist,0); // missing obi
  if(['samurai','miko'].includes(v.role)){
@@ -101,8 +106,8 @@ for(const v of VILLAGERS){
   for(const x of [-.59,.59]){rod([x,chest,0],[x,waist-.20,0],.009);box(.27,.29,.28,'#a78a5b',x,waist-.24,0);box(.28,.025,.29,'#65543b',x,waist-.24,0);}
  }
  figure.updateMatrixWorld(true);
- const data=await new GLTFExporter().parseAsync(figure,{binary:true});
- writeFileSync('${dest}'+v.id+'.glb',Buffer.from(data));
+ const data=await new GLTFExporter().parseAsync(${rigged?'riggedFigure(b,figure,v.role)':'figure'},{binary:true});
+ ${rigged?"await writeRiggedGlb('":"writeFileSync('"}${dest}'+v.id+'.glb',${rigged?'data':'Buffer.from(data)'});
  console.log(v.id,dressed.used.join(', '));
 }
 `;

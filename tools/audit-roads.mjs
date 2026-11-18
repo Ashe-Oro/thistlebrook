@@ -13,7 +13,7 @@ import {existsSync} from 'node:fs';
 const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const here = new URL('..', import.meta.url).pathname;
 /** Audit seed 831. Mutation hooks let tests inject faults before checking. */
-export async function runAudit({root = here, label = 'after', mutate = null, mutateGraph = null} = {}) {
+export async function runAudit({root = here, label = 'after', mutate = null, mutateGraph = null, mutateAnimations = null} = {}) {
 root = root.replace(/\/$/, '') + '/';
 const imp = (p) => import(pathToFileURL(root + p).href), mine = (p) => import(pathToFileURL(here + p).href);
 const {resolveAll} = await imp('src/catalog/resolve-all.js');
@@ -112,6 +112,10 @@ for (const r of town.roads) {
 }
 // 6) Town design rules and disconnected districts / walk network.
 auditPedestrianRules(graph, add);
+if (existsSync(root + 'tools/audit-villager-anims.mjs')) {
+  const {auditVillagerAnimations} = await imp('tools/audit-villager-anims.mjs');
+  auditVillagerAnimations(town, add, mutateAnimations);
+}
 if (existsSync(root + 'src/astra/fair-lot-plan.js')) auditFairLot(await imp('src/astra/fair-lot-plan.js'), add);
 {
   const seen = new Set([0]), q = [0]; for (let i = 0; i < q.length; i++) for (const n of town.edges[q[i]] || []) if (!seen.has(n)) { seen.add(n); q.push(n); }

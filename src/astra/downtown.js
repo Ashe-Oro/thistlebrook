@@ -112,13 +112,15 @@ export async function buildDowntown(scene,town) {
       const p=local(-2.1,f+1);asset('cv-notice-board',p.x,p.z,.7,b.rot);
     }
     if(data.icon==='cup') {
-      for(const x of [-1.9,1.9]) {
+      for(const x of [-1.9]) {
         drum(x,.8,f+.75,.65,.13,'#dfc394',front);drum(x,.4,f+.75,.1,.8,'#7c7057',front);
         drum(x,.95,f+.75,.12,.18,'#fff0cd',front);
         const p=local(x,f+1.5);addPerson(x<0?'elder':'merchant','day',still(p.x,.2,p.z,b.rot+Math.PI,x),.88);
       }
     }
-    const p=local(1.5,f+1.05);addPerson(roles[rooftops.length%roles.length],'day',still(p.x,.2,p.z,b.rot+Math.PI,rooftops.length));
+    if(data.icon!=='cup'){
+      const p=local(1.5,f+1.05);addPerson(roles[rooftops.length%roles.length],'day',still(p.x,.2,p.z,b.rot+Math.PI,rooftops.length));
+    }
     pool(b.door[0],b.door[1],2.3,'#ffd19b');
   }
   // Errands happen on the existing sidewalks. A loop pauses at each shop.

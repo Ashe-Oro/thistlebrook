@@ -136,6 +136,11 @@ function collectUrls(catalog) {
     if (person.id) catalogIds.add(person.id);
   }
 
+  for (const person of [...TOWNSFOLK, ...VILLAGERS]) {
+    const url = `/licensed/characters/rigged/${person.id}.glb`;
+    if (existsSync(sourceForUrl(url))) addUrl(urls, url);
+  }
+
   const srcFiles = listJs(join(root, 'src'));
   const idRe = /\b(?:cv|farm|nat|townsfolk)-[a-z0-9-]+/g;
   const licensedRe = /(?:^|["'`])(licensed\/[a-z0-9_./-]+\.glb)/gi;

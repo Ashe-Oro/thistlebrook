@@ -1,3 +1,4 @@
+import { documentedSeat, GREET_RANGE, CROSSFADE } from '../../life/animation-plan.js';
 import {mealCopy,walkingCopy} from './activity-copy.js';
 import {createWorldRegistry} from '../registry/index.js';
 import { buildLifeRegistry, TOOLS, distance, isOpen } from './registry.js';
@@ -17,19 +18,21 @@ export function createLife(town,options={}){
  const routing=createWorldRegistry({...town,registry:{places:registry.places.map(p=>({...p,type:p.type||p.kind,entryPoints:[{node:p.node,position:town.nodes[p.node],approach:[]}],interactionPoints:p.interaction?.slots||[]}))}});
  let crossingGuard=options.crossingGuard||null;
  let brain=options.brain||scriptedPlanner,day=0,hour=Number.isFinite(options.hour)?((options.hour%24)+24)%24:10.4,elapsed=0,seq=0;
- const actors=createContexts(town,registry).map((context,n)=>({context,index:n,action:null,route:[],localPath:[],history:[],activity:'Starting the day',facing:0,wait:0,retry:0,lastPassing:-100,pose:'idle',game:null,arrivals:0}));
+ const actors=createContexts(town,registry).map((context,n)=>({context,index:n,action:null,route:[],localPath:[],history:[],activity:'Starting the day',facing:0,wait:0,retry:0,lastPassing:-100,greetAfter:0,greetingUntil:0,travelled:0,rise:0,pose:'idle',game:null,arrivals:0}));
  const reservations=new Map(),events=[],games=new Map();
  for(const a of actors)a.context.schedule=dailySchedule(a.context,registry,day,town.seed);
  const slotKey=(place,slot)=>`${place}/${slot}`;
  const owns=(a,p,s)=>reservations.get(slotKey(p,s))===a.context.id;
+ const fitsSlot=(a,p,s)=>!s.counter||s.role===(a.context.job.workplace===p.id?'service':'customer');
+ const freeSlot=(a,p,s)=>fitsSlot(a,p,s)&&(!reservations.has(slotKey(p.id,s.id))||owns(a,p.id,s.id));
  function record(a,action,status,detail){
   const event={id:++seq,day,hour,elapsed,resident:a.context.id,name:a.context.name,tool:action.tool,args:structuredClone(action.args),status,detail};
   a.history.push(event);if(a.history.length>32)a.history.shift();events.push(event);if(events.length>180)events.shift();
  }
  function release(a){for(const [key,id]of reservations)if(id===a.context.id)reservations.delete(key);a.context.location.slot=null;}
- function snapshot(a,passing=false){
+ function snapshot(a,passing=false,greetingTarget=null){
   const c=a.context;
-  return freeze(structuredClone({self:c,clock:{day,hour,elapsed},passing,places:registry.places.map(p=>({...p,distance:distance(c.location.position,town.nodes[p.node]),freeSlots:p.interaction?.slots.filter(s=>!reservations.has(slotKey(p.id,s.id))||owns(a,p.id,s.id)).map(s=>s.id)||[],participants:actors.filter(b=>b.context.location.place===p.id&&b.context.location.slot&&b.action&&b.action.tool!=='walkTo').map(b=>b.context.id)})),neighbours:actors.filter(b=>b!==a).map(b=>({id:b.context.id,name:b.context.name,place:b.context.location.place,activity:byId.get(b.context.location.place)?.interaction?.activity||null}))}));
+  return freeze(structuredClone({self:c,clock:{day,hour,elapsed},passing,greetingTarget,places:registry.places.map(p=>({...p,distance:distance(c.location.position,town.nodes[p.node]),freeSlots:p.interaction?.slots.filter(s=>freeSlot(a,p,s)).map(s=>s.id)||[],participants:actors.filter(b=>b.context.location.place===p.id&&b.context.location.slot&&b.action&&b.action.tool!=='walkTo').map(b=>b.context.id)})),neighbours:actors.filter(b=>b!==a).map(b=>({id:b.context.id,name:b.context.name,place:b.context.location.place,activity:byId.get(b.context.location.place)?.interaction?.activity||null}))}));
  }
  function fail(a,action,error){record(a,action,'rejected',error);return {ok:false,error};}
  /** Single mutation gate, shared by scripted and future replacement brains. */
@@ -37,16 +40,27 @@ export function createLife(town,options={}){
   const a=typeof id==='string'?actors.find(a=>a.context.id===id):id;if(!a)return {ok:false,error:'Unknown resident'};
   let action;try{action=structuredClone(request);}catch{return {ok:false,error:'Action must be JSON serializable'};}
   if(!action||!TOOLS.includes(action.tool)||!action.args||typeof action.args!=='object'||typeof action.reason!=='string')return {ok:false,error:'Invalid action shape'};
-  if(action.tool==='talkTo')return fail(a,action,'Conversations are disabled');
-  if(a.action)return fail(a,action,'Resident is already performing an action');
   if(Array.isArray(action.args)||Object.entries(action.args).some(([key,value])=>!['target','slot','activity','item','bill'].includes(key)||typeof value!=='string'))return fail(a,action,'Action arguments must be supported string fields');
+  if(action.tool==='talkTo'){
+   const other=actors.find(b=>b.context.id===action.args.target);
+   const available=b=>!b.crossing&&!b.waitingToCross&&(!b.action||b.action.tool==='walkTo')&&
+     !b.context.location.slot&&b.greetAfter<=elapsed;
+   const gap=other&&distance(a.context.location.position,other.context.location.position);
+   if(!other||other===a||!available(a)||!available(other)||gap<.65||gap>GREET_RANGE)
+    return fail(a,action,'The other resident must be passing within greeting range');
+   for(const b of [a,other]){b.greetingUntil=elapsed+1.25;b.greetAfter=elapsed+70;}
+   record(a,action,'completed','Exchanged a passing greeting');
+   return {ok:true};
+  }
+  if(a.action)return fail(a,action,'Resident is already performing an action');
   const c=a.context,p=byId.get(action.args.target),tool=action.tool;
   if(!p)return fail(a,action,'Unknown destination');
   if(!isOpen(p.hours,hour)&&p.id!==c.assets.home)return fail(a,action,'Destination is closed');
   if(!p.capabilities.includes(tool))return fail(a,action,'Destination does not support this action');
   if(tool==='walkTo'){
    let slot=null;
-   if(p.interaction){slot=p.interaction.slots.find(s=>(!action.args.slot||s.id===action.args.slot)&&(!reservations.has(slotKey(p.id,s.id))||owns(a,p.id,s.id)));if(!slot)return fail(a,action,'All interaction slots are occupied');}
+   if(p.interaction){
+    slot=p.interaction.slots.find(s=>(!action.args.slot||s.id===action.args.slot)&&freeSlot(a,p,s));if(!slot)return fail(a,action,'All interaction slots are occupied');}
    const resolved=routing.resolvePath(c.location.node,p.id,slot?{slot:slot.id}:{});if(!resolved.ok)return fail(a,action,resolved.error);const path=resolved.nodes;
    // Reverse the exact approach to return to the graph before taking a new route.
    const exit=a.localPath.length?[...a.localPath].reverse().slice(1).map(pos=>({pos:[...pos]})):[];
@@ -56,6 +70,8 @@ export function createLife(town,options={}){
    // and validates the destination; the pedestrian graph supplies the steps.
    const from=exit.length?town.nodes[c.location.node]:c.location.position,walk=path.length>1?sidewalkSteps(town,from,path.at(-1)):[];
    const route=keepToSidewalks(town,c.location.position,[...exit,...walk,...local.slice(1).map(pos=>({pos}))]);
+   const previousSlot=byId.get(c.location.place)?.interaction?.slots.find(s=>s.id===c.location.slot);
+   a.rise=documentedSeat(previousSlot,c.location.position)?CROSSFADE:0;
    release(a);if(slot){reservations.set(slotKey(p.id,slot.id),c.id);action.args.slot=slot.id;}
    a.localPath=[];c.location.place=null;a.retry=0;
    a.action={...action,elapsed:0,duration:0,target:p.id,local,slot:slot?.id||null};a.route=route;a.activity=walkingCopy(p);a.pose='walk';record(a,action,'started',action.reason);
@@ -77,6 +93,7 @@ export function createLife(town,options={}){
   }
   if(tool==='eat'&&!c.assets.inventory.meal&&p.id!==c.assets.home)return fail(a,action,'Bring a packed meal');
   const slot=p.interaction?.slots.find(s=>s.id===c.location.slot);
+  if(slot?.counter&&tool==='work'&&slot.role!=='service')return fail(a,action,'Approach the service side of the counter');
   a.retry=0;a.action={...action,elapsed:0,waiting:0,duration:p.interaction?.duration||durations[tool],target:p.id};
   a.pose=slot?.animation||(tool==='work'?'work':'idle');if(tool==='eat'&&slot?.kind==='seat')a.pose='eat';
   a.activity=tool==='work'?(c.job.title==='Student'?'Attending class':`Working at ${p.name}`):tool==='buy'?'Picking up a packed lunch':tool==='sell'?'Delivering today’s goods':tool==='payBill'?'Paying the household contribution':tool==='rest'&&p.id===c.assets.home?'Resting at home':tool==='eat'?mealCopy(hour):p.interaction?.label||`Visiting ${p.name}`;
@@ -110,12 +127,14 @@ export function createLife(town,options={}){
   }else if(!execute(a,request).ok)a.retry=4;
  }
  function advanceWalk(a,dt){
-  let budget=dt*a.context.personality.pace;
+  const rise=Math.min(a.rise,dt);
+  a.rise-=rise;
+  let budget=(dt-rise)*a.context.personality.pace;
   while(budget>0&&a.route.length){
    const next=a.route[0],pos=a.context.location.position,d=distance(pos,next.pos),step=Math.min(d,budget);
    // Look both ways: a crossing starts only when no car is near (grok-roads).
    if(next.cross&&!a.crossing){if(crossingGuard&&!crossingGuard(pos,next.pos)){a.waitingToCross=true;break;}a.crossing=true;a.waitingToCross=false;}
-   if(d>.0001){a.facing=Math.atan2(next.pos[0]-pos[0],next.pos[1]-pos[1]);pos[0]+=(next.pos[0]-pos[0])*step/d;pos[1]+=(next.pos[1]-pos[1])*step/d;}budget-=step;
+   if(d>.0001){a.facing=Math.atan2(next.pos[0]-pos[0],next.pos[1]-pos[1]);pos[0]+=(next.pos[0]-pos[0])*step/d;pos[1]+=(next.pos[1]-pos[1])*step/d;a.travelled+=step;}budget-=step;
    if(d<=step){pos[0]=next.pos[0];pos[1]=next.pos[1];a.route.shift();a.crossing=false;if(next.node!==undefined){a.context.location.node=next.node;if(a.route.length&&elapsed-a.lastPassing>20){a.lastPassing=elapsed;decide(a,true);}}}else break;
   }
   if(a.action?.tool==='walkTo'&&!a.route.length)arrive(a);
@@ -140,9 +159,23 @@ export function createLife(town,options={}){
    if(hour>23&&normalized<1){day++;for(const a of actors){a.context.memory.day=day;a.context.memory.worked=0;a.context.schedule=dailySchedule(a.context,registry,day,town.seed);}}
    hour=normalized;
   }
+  const greetingTick=Math.floor(elapsed*2)!==Math.floor((elapsed+dt)*2);
   elapsed+=dt;updateGames(dt);
   for(const a of actors){
    const c=a.context;c.needs.hunger=clamp(c.needs.hunger+dt*.045);c.needs.energy=clamp(c.needs.energy-dt*(a.action?.tool==='walkTo'?.028:.012));c.needs.recreation=clamp(c.needs.recreation-dt*.018);
+   if(greetingTick&&hour>=7&&hour<20&&a.action?.tool==='walkTo'&&a.greetAfter<=elapsed&&!a.crossing&&!a.waitingToCross){
+    const other=actors.find(b=>b!==a&&b.greetAfter<=elapsed&&!b.crossing&&!b.waitingToCross&&
+     (!b.action||b.action.tool==='walkTo')&&!b.context.location.slot&&
+     distance(c.location.position,b.context.location.position)>=.65&&distance(c.location.position,b.context.location.position)<=GREET_RANGE);
+    if(other){
+     // The built-in greeting only needs the clock and partner. Custom brains
+     // still receive their full frozen planning context.
+     const context=brain===scriptedPlanner?{clock:{day,hour,elapsed},greetingTarget:other.context.id}:snapshot(a,true,other.context.id);
+     let request;
+     try{request=brain(context);}catch{request=null;}
+     if(request?.tool==='talkTo')execute(a,request);
+    }
+   }
    if(a.retry>0){a.retry-=dt;continue;}
    if(!a.action){decide(a);continue;}
    if(a.action.tool==='walkTo'){advanceWalk(a,dt);continue;}
