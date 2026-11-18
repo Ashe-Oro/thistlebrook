@@ -1,13 +1,24 @@
 import { defineConfig } from 'vite';
 import { privateLibraryPlugin } from './src/catalog/library/private-assets-plugin.js';
 import { resolve, sep, extname } from 'node:path';
-import { createReadStream, statSync } from 'node:fs';
+import { copyFileSync, createReadStream, existsSync, statSync } from 'node:fs';
 
 // Bind to 0.0.0.0 so the dev server is reachable from outside the container.
 // Licensed GLBs stay under public/licensed; builds never copy that library.
 // The private preview reads those assets directly from their licensed home.
 export default defineConfig({
   plugins: [privateLibraryPlugin(), {
+    name: 'copy-icons',
+    closeBundle() {
+      // copyPublicDir is false so licensed models stay out of dist; copy only the icons.
+      const files = ['favicon.ico', 'favicon-32.png', 'apple-touch-icon.png', 'icon-512.png'];
+      for (const file of files) {
+        const src = resolve(__dirname, 'public', file);
+        if (!existsSync(src)) throw new Error(`Missing icon ${file}`);
+        copyFileSync(src, resolve(__dirname, 'dist', file));
+      }
+    },
+  }, {
     name: 'private-public-preview',
     configurePreviewServer(server) {
       const publicRoot = resolve(__dirname, 'public');

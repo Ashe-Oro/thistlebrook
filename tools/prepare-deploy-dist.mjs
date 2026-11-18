@@ -48,6 +48,7 @@ const MIME = {
   '.webp': 'image/webp',
   '.ktx2': 'image/ktx2',
   '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
 };
 
 function walkFiles(dir, acc = []) {
@@ -100,8 +101,15 @@ function resolveOwnedAsset(rel) {
   return resolve(assetRoot, rel);
 }
 
+const PUBLIC_ICONS = new Set(['favicon.ico', 'favicon-32.png', 'apple-touch-icon.png', 'icon-512.png']);
+
 function sourceForUrl(urlPath) {
   const rel = decodeUrlPath(urlPath).replace(/^\//, '');
+  if (PUBLIC_ICONS.has(rel)) {
+    const file = resolve(publicDir, rel);
+    if (!file.startsWith(publicDir + sep) && file !== join(publicDir, rel)) throw new Error(`Icon path escaped root: ${rel}`);
+    return file;
+  }
   if (rel.startsWith('owned-assets/')) {
     const rest = rel.slice('owned-assets/'.length);
     const file = resolveOwnedAsset(rest);
@@ -214,6 +222,7 @@ function collectUrls(catalog) {
   for (const file of ['draco_decoder.js', 'draco_decoder.wasm', 'draco_wasm_wrapper.js']) {
     addUrl(urls, `draco/${file}`);
   }
+  for (const file of PUBLIC_ICONS) addUrl(urls, file);
 
   return {town, urls, catalogIds, libraryIds};
 }

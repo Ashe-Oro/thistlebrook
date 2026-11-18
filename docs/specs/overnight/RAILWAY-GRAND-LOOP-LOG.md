@@ -58,3 +58,8 @@ The 12-second MP4 samples one complete scheduled lap into 144 frames. It uses a 
 - `npm run sim:collisions` and the separate `--weather rain` and `--weather snow` runs each produced zero collisions, unsafe crossings, pedestrians on the rails and vehicles on the rails outside legal decks over 5,400 samples.
 - `npm run build` passed with the Vite chunk-size warning.
 - The five PNGs decoded at 1920 × 1080. The lap MP4 decoded at 1120 × 700, 12 fps, with 144 frames. No GLBs are tracked.
+
+
+## Update, 18 Nov 2026 11:42 AM ET
+
+Ashe likes tunnels and wants the line to tunnel through some of the mountains, with the coastal trestles pulled inland where practical. The 0 m tunnel choice above is no longer a goal; the follow-up is `RAILWAY-MOUNTAIN-TUNNELS.md`.

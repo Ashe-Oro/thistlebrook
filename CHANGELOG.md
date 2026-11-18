@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Favicon.** The thistle on cream is now the tab icon and the home-screen icon: `favicon.ico` (16/32/48), `favicon-32.png`, `apple-touch-icon.png` (180) and `icon-512.png`.
+
 - **Main merge, 18 Nov 2026 (published together).** Merged into main one at a time with the full checks after each: rules-audit (a814591), villager-needs (bc2af8e, reconciled with live weather), school-day (ef7feb0, reconciled with needs and weather), ui-declutter (53970db, TOWN-16) plus its rule-registry fix (37f8c13), the railway grand loop (d1646ec / 2ef28ce, TOWN-17/18, school walkers wait at kerbs) and Maple Hollow (90a2b4a, 13th stop, gated Airport Road crossing). Main checks: 264 tests pass, `test:checks` pass, `audit:roads` 0 open, `sim:collisions` 0 events, build ok.
 
 - **Merged Maple Hollow into the Thistlebrook Grand Loop.** The neighbourhood joins the service as its 13th named stop, with gated Airport Road access and audited driveway bays.

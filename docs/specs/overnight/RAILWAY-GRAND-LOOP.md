@@ -1,5 +1,8 @@
 # Build "Railway grand loop", a longer mixed train on a line that circles the whole Thistlebrook map (branch `village/railway-grand-loop`, worktree `/workspace/cel-town-wt/railway-grand-loop`).
 
+> **Superseded on tunnels (Ashe, 11:42 AM ET 18 Nov 2026):** "I'm okay with tunnels. I think tunnels are cool. It should tunnel through some of the mountains." The guidance below to avoid tunnels or keep the tunnel share low no longer applies; see `RAILWAY-MOUNTAIN-TUNNELS.md`.
+
+
 OWNER: railway-grand-loop lane. Base: current `main` (a9e88ca or later), which already has the railway-loop, vehicle-variety and weather merges. Ashe, 6:04 AM ET Nov 18: "There more of that easiest? It's so short. Plz make it travel around the map." Ashe, 6:06 AM ET: "Plz also include stops along the route at our various places of interest."
 
 ## Reference
