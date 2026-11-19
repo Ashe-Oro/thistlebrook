@@ -4,30 +4,39 @@ import { place } from '../catalog/loader.js';
 import { shortestPath } from '../compiler/astra.js';
 import { weatherPlan } from './weather-plan.js';
 import { fairSchedule } from '../compiler/astra-fair.js';
+import { createVillagerMixer } from '../life/villager-mixer.js';
+import { CLIP } from '../life/animation-plan.js';
+import { concertHours, GUEST_SLOTS } from './festival-plan.js';
 
 const ROLES = ['child','herbalist','carpenter','merchant','elder','baker','farmhand','shopkeeper'];
-const DWELL = {'fair-wheel':25,'fair-carousel':22,'fair-pond':35,'fair-picnic':50,'fair-band':55,'fair-food':12};
-const ACTIVITIES = {'fair-wheel':'Waiting for a gondola','fair-carousel':'Watching the ponies','fair-pond':'Watching the ducks','fair-picnic':'Taking a picnic break','fair-band':'Listening to the band','fair-food':'Buying a picnic'};
+const DWELL = {'fair-wheel':25,'fair-carousel':22,'fair-pond':35,'fair-picnic':50,'fair-food':12};
+const ACTIVITIES = {'fair-wheel':'Waiting for a gondola','fair-carousel':'Watching the ponies','fair-pond':'Watching the ducks','fair-picnic':'Taking a picnic break','fair-food':'Buying a picnic'};
 
 // People travel along the compiled town graph, then along authored unobstructed
 // approaches to capacity-limited activity slots. Closing sends them to the gate.
 export async function createFairLife(scene,town) {
   const root=new THREE.Group();root.name='Merrymead visitors';scene.add(root);
   const gate=town.nodes.findIndex(p=>p[0]===-42&&p[1]===-33);
-  const venues=town.venues.filter(v=>v.district==='fair');
+  const venues=town.venues.filter(v=>Object.hasOwn(SLOTS,v.id));
   const people=await Promise.all(Array.from({length:30},async(_,n)=>{
     const object=await place('townsfolk-'+ROLES[n%ROLES.length],{scale:n%8===0?.85:1.04});
     root.add(object);object.visible=false;
     const snack=new THREE.Mesh(new THREE.CylinderGeometry(.12,.09,.24,8),new THREE.MeshToonMaterial({color:'#f3ba70'}));snack.position.set(.4,.8,.35);snack.visible=false;object.add(snack);
     return {object,snack,n,node:gate,phase:'away',path:[],wait:n*.5,visits:0,slot:null,venue:null,activity:'Arriving at the park',speed:1.15+n%5*.09};
   }));
+  const listeners=await Promise.all(GUEST_SLOTS.map(async (slot,n)=>{
+    const object=await place('townsfolk-'+ROLES[(n+2)%ROLES.length],{animated:true,scale:1.04});
+    object.name='Merrymead listener · '+slot.id;
+    object.visible=false;
+    root.add(object);
+    return {slot,object,mixer:createVillagerMixer(object,n),watching:false};
+  }));
   let lastTime=null,schedule=fairSchedule(4,10),arrivals=0;
   const gatePoint=()=>town.nodes[gate];
   const route=(p,points)=>{p.path=points.map(v=>[...v]);};
   const release=p=>{p.slot=null;};
   const choose=p=>{
-    const available=venues.filter(v=>schedule.open||['fair-pond','fair-picnic'].includes(v.type));
-    const choices=schedule.concert?[...available,venues.find(v=>v.type==='fair-band')]:available.filter(v=>v.type!=='fair-band');
+    const choices=venues.filter(v=>schedule.open||['fair-pond','fair-picnic'].includes(v.type));
     for(let i=0;i<choices.length;i++){
       const v=choices[(p.n+p.visits*3+i)%choices.length];
       const slot=SLOTS[v.id].findIndex((_,k)=>!people.some(other=>other!==p&&other.venue===v&&other.slot===k));
@@ -45,9 +54,35 @@ export async function createFairLife(scene,town) {
     route(p,[...back,v.entry]);p.phase=leaving?'leaving-activity':'returning';
     p.snack.visible=false;release(p);
   }
-  return {people,update(t,hour,day,weather){
+  return {people, audience() {
+    return listeners.filter(p=>p.object.visible).map(({slot,object,watching,mixer})=>({
+      id:slot.id,position:[object.position.x,object.position.z],yaw:object.rotation.y,
+      watching,standing:watching,clip:object.userData.animationClip,tPose:mixer?.sample().tPose,
+    }));
+  },update(t,hour,day,weather){
     const dt=lastTime===null?0:Math.max(0,Math.min(t-lastTime,2));lastTime=t;schedule=fairSchedule(day,hour);
     const plan=weatherPlan(weather);
+    const [start]=concertHours(schedule.weekend);
+    for(const [n,p] of listeners.entries()){
+      p.object.visible=schedule.concert;
+      if(!schedule.concert)continue;
+      const [x,z]=p.slot.position;
+      const [entryX]=p.slot.approach[0];
+      // Stagger arrivals from the west. Seeking into a set places the same
+      // audience at its listening spots directly from the clock.
+      const progress=Math.max(0,Math.min(1,(hour-start-n*.002)*90*1.4/(x-entryX)));
+      p.watching=progress===1;
+      const previousX=p.object.position.x;
+      p.object.position.set(entryX+(x-entryX)*progress,.15,z);
+      p.object.rotation.y=p.watching?p.slot.facing:Math.PI/2;
+      p.object.rotation.z=p.watching?Math.sin(t*5+n)*.044:0;
+      let clip=CLIP.walk;
+      if(p.watching){
+        clip=n%3===1?CLIP.play:CLIP.idle;
+        if(n%3===0&&Math.sin(t*1.9+n)>.65)clip=CLIP.wave;
+      }
+      p.mixer?.update({clip,locomotion:!p.watching},{dt,distance:p.watching?0:Math.abs(p.object.position.x-previousX)});
+    }
     if(dt===0)return; // Pausing also freezes decisions and activity transitions.
     for(const p of people){
       const wanted=p.n<Math.ceil(schedule.visitors*plan.fairAttendance);

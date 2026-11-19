@@ -1,3 +1,4 @@
+import { FESTIVAL_ID } from '../festival-plan.js';
 import { cafeFrontage, fountainBenches, playReservation } from './animation-places.js';
 import { riverZ, pointInTown } from '../../compiler/astra.js';
 
@@ -93,6 +94,7 @@ export function buildLifeRegistry(town,extraPlaces=[]) {
   if(errors.length){rejected.push({id:record.id,errors});continue;}
   const i=record.interaction,index=places.findIndex(p=>p.id===record.id);
   const copy={...(record.furnishing?{furnishing:record.furnishing}:{}),id:record.id,name:record.name||record.id,kind:record.kind||record.type||'prop',...(record.district?{district:record.district}:{}),pos:[...(point(record.pos)?record.pos:i.slots[0].position)],node:i.entryNode,hours:[...i.hours],capabilities:['walkTo',...i.tools],interaction:structuredClone(i)};
+  if(record.id===FESTIVAL_ID)copy.interaction.slots=copy.interaction.slots.filter(slot=>slot.id.startsWith('resident-'));
   if(index<0)places.push(copy);else places[index]=copy;
  }
  const cafe=town.buildings.find(b=>b.name==='Corner Cup Café');

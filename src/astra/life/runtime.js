@@ -1,3 +1,6 @@
+import { fairSchedule } from '../../compiler/astra-fair.js';
+import { weekdayOf } from '../school-plan.js';
+import { FESTIVAL_ID } from '../festival-plan.js';
 import { documentedSeat, GREET_RANGE, CROSSFADE } from '../../life/animation-plan.js';
 import {mealCopy,walkingCopy} from './activity-copy.js';
 import {createWorldRegistry} from '../registry/index.js';
@@ -13,12 +16,12 @@ const freeze=o=>{if(o&&typeof o==='object'&&!Object.isFrozen(o)){Object.freeze(o
 
 /** Pure simulation; no THREE, DOM, network, model calls, or render-time mutations.
  * @param {object} town
- * @param {{brain?:import('./types').Brain, places?:import('./types').Place[], hour?:number, weather?:string}} options */
+ * @param {{brain?:import('./types').Brain, places?:import('./types').Place[], hour?:number, day?:number, weather?:string}} options */
 export function createLife(town,options={}){
  const registry=buildLifeRegistry(town,options.places),byId=new Map(registry.places.map(p=>[p.id,p]));
  const routing=createWorldRegistry({...town,registry:{places:registry.places.map(p=>({...p,type:p.type||p.kind,entryPoints:[{node:p.node,position:town.nodes[p.node],approach:[]}],interactionPoints:p.interaction?.slots||[]}))}});
  let crossingGuard=options.crossingGuard||null,railGuard=options.railGuard||null,localWalkGuard=null,transit=null;
- let brain=options.brain||scriptedPlanner,day=0,hour=Number.isFinite(options.hour)?((options.hour%24)+24)%24:10.4,elapsed=0,seq=0;
+ let brain=options.brain||scriptedPlanner,day=options.day??0,hour=Number.isFinite(options.hour)?((options.hour%24)+24)%24:10.4,elapsed=0,seq=0;
  let weather=isWeather(options.weather)?options.weather:'clear';
  const actors=createContexts(town,registry).map((context,n)=>({context,index:n,action:null,route:[],localPath:[],history:[],activity:'Starting the day',facing:0,wait:0,retry:0,lastPassing:-100,greetAfter:0,greetingUntil:0,travelled:0,rise:0,pose:'idle',game:null,arrivals:0}));
  const reservations=new Map(),events=[],games=new Map();
@@ -33,6 +36,7 @@ export function createLife(town,options={}){
    const wake=Math.min(6,c.job.shift[0]-c.job.commute);
    c.sleep=[(wake+16)%24,wake];
   }
+  c.memory.day=day;
   c.schedule=dailySchedule(c,registry,day,town.seed);
  }
  const slotKey=(place,slot)=>`${place}/${slot}`;
@@ -50,6 +54,7 @@ export function createLife(town,options={}){
   if(gap<.65||gap>GREET_RANGE)return false;
   const busy=actor=>actor.action?.sleeping||actor.action?.tool==='work';
   if(busy(a)||busy(b))return false;
+  if(one.place===FESTIVAL_ID||two.place===FESTIVAL_ID)return false;
   if(one.place&&one.place===two.place)return true;
   return !one.slot&&!two.slot&&[a,b].every(actor=>!actor.action||actor.action.tool==='walkTo');
  }
@@ -89,6 +94,7 @@ export function createLife(town,options={}){
   if(a.action)return fail(a,action,'Resident is already performing an action');
   const c=a.context,p=byId.get(action.args.target),tool=action.tool;
   if(!p)return fail(a,action,'Unknown destination');
+  if(p.id===FESTIVAL_ID&&!fairSchedule(weekdayOf(day),hour).concert)return fail(a,action,'The concert is off');
   const staff=p.id===c.job.workplace&&commuting(c.job,hour)&&['walkTo','work','eat'].includes(tool);
   if(!isOpen(p.hours,hour)&&p.id!==c.assets.home&&!staff)return fail(a,action,'Destination is closed');
   if(!['work','buy','sell','payBill'].includes(tool)&&!allowsWeatherVisit(weather,p,a.index))return fail(a,action,'Outdoor leisure is limited in this weather');
@@ -238,6 +244,36 @@ export function createLife(town,options={}){
    for(const a of group){a.game={...game,ready};a.activity=ready?`${p.interaction.label} · ${game.phase}`:`Waiting for ${p.interaction.activity==='chess'?'a chess partner':'the practice team'}`;}
   }
  }
+ function leaveFestival(a){
+  const c=a.context;
+  if(a.action?.tool==='walkTo'){
+   // Continue along the approved route as far as the venue entry, dropping
+   // the reserved lawn approach. Reverse the part already walked if local.
+   const {local}=a.action, next=a.route[0]?.pos;
+   const onApproach=local.findIndex((point,i)=>i>0&&next&&distance(point,next)<.02);
+   if(onApproach>0){
+    a.route=local.slice(0,onApproach).reverse().map(pos=>({pos:[...pos]}));
+   }else{
+    const entry=a.route.findIndex(step=>distance(step.pos,local[0])<.02);
+    if(entry>=0)a.route=a.route.slice(0,entry+1);
+   }
+   record(a,a.action,'interrupted','The Merrymead set has ended');
+   release(a);
+   a.action={...a.action,args:{target:c.assets.home},slot:null,local:[],target:c.assets.home};
+   const entry=local[0],home=byId.get(c.assets.home);
+   a.route.push(...sidewalkSteps(town,entry,home.node));
+   a.activity='Heading home from Merrymead';
+  }else{
+   if(a.action)finish(a);
+   execute(a,{tool:'walkTo',args:{target:c.assets.home},reason:'The Merrymead set has ended'});
+  }
+ }
+ function setHour(h){
+  if(!Number.isFinite(h))return;
+  hour=((h%24)+24)%24;
+  if(fairSchedule(weekdayOf(day),hour).concert)return;
+  for(const a of actors)if(a.context.location.place===FESTIVAL_ID||a.action?.target===FESTIVAL_ID)leaveFestival(a);
+ }
  function update(dt,nextHour=hour){
   if(!Number.isFinite(dt)||dt<=0)return;dt=Math.min(dt,1);
   if(Number.isFinite(nextHour)){
@@ -249,6 +285,7 @@ export function createLife(town,options={}){
   elapsed+=dt;updateGames(dt);updateTransit();
   for(const a of actors){
    const c=a.context;
+   if((c.location.place===FESTIVAL_ID||a.action?.target===FESTIVAL_ID)&&!fairSchedule(weekdayOf(day),hour).concert)leaveFestival(a);
    tickNeeds(c.needs,a.action,dt);
    if(a.riding)continue;
    if(greetingTick&&hour>=7&&hour<20&&a.greetAfter<=elapsed&&
@@ -302,7 +339,7 @@ export function createLife(town,options={}){
   get weather(){return weather;},setWeather,
   travelWeather(a){return travelWeather(weather,a.index,a.action?.tool==='walkTo');},
   walkPace(a){return a.context.personality.pace*weatherPlan(weather).pace;},
-  setHour(h){if(Number.isFinite(h))hour=((h%24)+24)%24;},
+  setHour,
   setCrossingGuard(fn){crossingGuard=typeof fn==='function'?fn:null;},
   setLocalWalkGuard(fn){localWalkGuard=typeof fn==='function'?fn:null;},
   setRailGuard(fn){railGuard=typeof fn==='function'?fn:null;},

@@ -30,6 +30,7 @@ export function animationPlan({ tool, place, slot, position, role, moving, greet
     return { clip: tool === 'eat' ? CLIP.seatedEat : CLIP.sit, seatHeight: slot.seatHeight };
   }
   if (role === 'fisherman' && tool === 'work' && ['pier', 'harbor-pier'].includes(kind)) return { clip: CLIP.fish };
+  if (kind === 'fair-band' && slot) return { clip: variant % 3 === 0 ? CLIP.play : idle };
   if (role === 'child' && tool === 'visit' && activity === 'play' && slot) return { clip: CLIP.play };
   const counter = slot?.kind === 'counter' || place?.points?.some(point => point === 'counter' || point.kind === 'counter') ||
     ['bakery', 'market', 'store', 'tavern', 'fish-market'].includes(kind);

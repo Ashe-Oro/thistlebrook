@@ -1,4 +1,5 @@
 // @ts-check
+import { FESTIVAL_ID } from '../festival-plan.js';
 import { distance as distanceBetween, isOpen } from './registry.js';
 import { variation } from './profiles.js';
 import { isSchoolDay, weekdayOf } from '../school-plan.js';
@@ -80,6 +81,16 @@ export function scriptedPlanner({self,clock,places,passing,greetingTarget,transi
  if(bedtime<1.25){
   if(here!==home)return go(home,'rest','Head home before bedtime');
   return mealDue?go(home,'eat','Supper from the household pantry'):null;
+ }
+
+ const concert=self.schedule.find(s=>s.target===FESTIVAL_ID);
+ if(concert&&hour>=concert.start&&hour<concert.end&&needs.hunger>25&&weather!=='rain'&&weather!=='snow'){
+  const stage=places.find(p=>p.id===concert.target);
+  const travel=stage?.distance/(self.personality.pace*SECONDS_PER_HOUR);
+  if(stage&&(location.place===stage.id||hour+travel*1.15+.2<concert.end)){
+   const outing=go(stage,'visit',concert.label);
+   if(outing)return outing;
+  }
  }
 
  // Preserve the authored activity choices and the shared game reservations.

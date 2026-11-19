@@ -1,3 +1,4 @@
+import { concertHours, FESTIVAL_ID } from '../festival-plan.js';
 import { DAY_SLEEP, NIGHT_SHIFT_SLEEP } from './needs.js';
 import { SCHOOL_SHIFT, weekdayOf } from '../school-plan.js';
 import { SUNBEAM_RESIDENTS } from '../sunbeam-layout.js';
@@ -63,6 +64,11 @@ export function dailySchedule(self,registry,day,seed){
  const lunch=choose('picnic')[0]||registry.places.find(p=>p.name==='The Copper Kettle')||fallback;
  const evening=registry.places.filter(p=>p.district==='quay');
  const outing=evening[Math.floor(v*evening.length)]||fallback;
+ const stage=registry.places.find(p=>p.id===FESTIVAL_ID&&p.interaction);
+ const [start,end]=concertHours(weekdayOf(day)>=5);
+ /** @type {import('./types').ScheduleBlock | undefined} */
+ const festivalEvening=stage&&v<.52&&self.job.shift[1]<=start
+  ?{start,end,label:'Music at Merrymead',target:stage.id,tool:'visit'}:undefined;
  const [bedtime,wake]=self.sleep;
  const sleep=bedtime>wake?[[0,wake],[bedtime,24]]:[[bedtime,wake]];
  // Maple Hollow: kids play in the yards after school; some evenings bring a
@@ -85,6 +91,6 @@ export function dailySchedule(self,registry,day,seed){
   ...(self.job.shift[0]===self.job.shift[1]?[]:[{start:self.job.shift[0],end:self.job.shift[1],label:self.job.title==='Student'?'At school':'At work',target:self.job.workplace,tool:'work'}]),
   {start:12,end:13.5,label:'Lunch outdoors',target:lunch.id,tool:'eat'},
   {start:15+v*.45,end:18.5,label:fav==='baseball'?'Batting practice':fav==='chess'?'Chess on the square':'A slower afternoon',target:target.id,tool:'visit'},
-  {start:19,end:21.5,label:day%3===1?'An evening at home':'Evening by the river',target:day%3===1?self.assets.home:outing.id,tool:day%3===1?'rest':'visit'},
+  festivalEvening ?? {start:19,end:21.5,label:day%3===1?'An evening at home':'Evening by the river',target:day%3===1?self.assets.home:outing.id,tool:day%3===1?'rest':'visit'},
  ];
 }

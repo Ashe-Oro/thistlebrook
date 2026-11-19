@@ -13,7 +13,7 @@ import {existsSync} from 'node:fs';
 const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const here = new URL('..', import.meta.url).pathname;
 /** Audit seed 831. Mutation hooks let tests inject faults before checking. */
-export async function runAudit({root = here, label = 'after', mutate = null, mutateGraph = null, mutateAnimations = null, mutateBoats = null, mutateStreets = null, mutateSchool = null} = {}) {
+export async function runAudit({root = here, label = 'after', mutate = null, mutateGraph = null, mutateAnimations = null, mutateBoats = null, mutateStreets = null, mutateSchool = null, mutateFestival = null} = {}) {
 root = root.replace(/\/$/, '') + '/';
 const imp = (p) => import(pathToFileURL(root + p).href), mine = (p) => import(pathToFileURL(here + p).href);
 const {resolveAll} = await imp('src/catalog/resolve-all.js');
@@ -131,6 +131,14 @@ if (town.railway) {
   }
 }
 if (existsSync(root + 'src/astra/fair-lot-plan.js')) auditFairLot(await imp('src/astra/fair-lot-plan.js'), add);
+if (existsSync(root + 'src/astra/festival-audit.js')) {
+  const {festivalAuditPlan, auditFestival} = await imp('src/astra/festival-audit.js');
+  const plan = festivalAuditPlan(town, index);
+  if (plan) {
+    mutateFestival?.(plan);
+    for (const finding of auditFestival(plan)) add(finding.category, finding.at, finding.detail);
+  }
+}
 // Thistlebrook High school day: pupil routes (TOWN-01), classroom furniture (TOWN-04), seats (TOWN-09).
 if (existsSync(root + 'src/astra/school-plan.js')) {
   const school = await imp('src/astra/school-plan.js'), plan = school.planSchool(town, graph, walkBetween);

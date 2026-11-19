@@ -1,3 +1,5 @@
+import {concertHours, FESTIVAL_ENTRY} from '../astra/festival-plan.js';
+
 // Fairground parcels and circulation are independent of render geometry.
 // Monday=0. The town starts on Friday; weekends are deliberately busier.
 export const FAIR_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
@@ -6,8 +8,9 @@ export function fairSchedule(day, hour) {
   const weekend = ((day % 7) + 7) % 7 >= 5;
   const open = hour >= (weekend ? 11 : 15) && hour < 22;
   const peak = weekend && hour >= 13 && hour < 21;
+  const [start, end] = concertHours(weekend);
   return { weekend, open, peak, visitors: hour < 7 || hour >= 23 ? 0 : peak ? 30 : open ? (weekend ? 20 : 12) : 5,
-    concert: open && hour >= (weekend ? 16 : 18) && hour < 21.5 };
+    concert: open && hour >= start && hour < end };
 }
 export function addFairground(town) {
   // Fill the former northwest notch, preserving the existing town bounds.
@@ -21,7 +24,7 @@ export function addFairground(town) {
     venue('carousel','Meadow Carousel','fair-carousel',[-50,-68],[-57,-76],[-44,-60],[-50,-61.5],[-50,-57],7,'Painted ponies, a striped canopy and one more turn before tea. Families gather by the entrance while the carousel circles the green.'),
     venue('pond','Willow Duck Pond','fair-pond',[-67,-68],[-76,-76],[-59,-60],[-63,-61.5],[-63,-57],2,'A quiet bank for watching the ducks. Paths go around the water, with room to stop and watch a small flotilla pass the reeds.'),
     venue('picnic','Clover Picnic Lawn','fair-picnic',[-49,-91],[-54,-100],[-44,-81],[-50,-84],[-50,-79],2,'Bring something from the food stands and settle under the orchard trees. The picnic lawn fills up on Saturday and Sunday afternoons.'),
-    venue('band','Merrymead Bandshell','fair-band',[-67,-44],[-76,-53],[-59,-38],[-74,-52],[-74,-57],7,'An open-air stage and a little listening lawn. Weekend sets begin at four; weekday music starts at six. Neighbours drift in from the midway to listen.'),
+    venue('band','Merrymead Bandshell','fair-band',[-67,-44],[-76,-53],[-59,-38],FESTIVAL_ENTRY,[-74,-57],7,'An open-air stage and a little listening lawn. Weekend sets begin at four; weekday music starts at six. Neighbours drift in from the midway to listen.'),
     venue('food','The Picnic Pantry','fair-food',[-49,-46],[-56,-54],[-44,-38],[-50,-53],[-50,-57],4,'Lemonade, warm buns and strawberry scoops. Stop at the counter, then take the long way back past the pond. Open with the rides until ten.')
   );
   const road=(a,b,width=2.2)=>town.roads.push({a,b,width,kind:'park',owner:null});

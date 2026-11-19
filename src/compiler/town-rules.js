@@ -19,6 +19,7 @@ export const TOWN_RULE = Object.freeze({
   hud: 'TOWN-16',
   grandLoop: 'TOWN-17',
   railAccess: 'TOWN-18',
+  festival: 'TOWN-20',
 });
 
 export const ROAD_RULE = Object.freeze({
@@ -61,4 +62,8 @@ export const ROAD_RULE = Object.freeze({
   'school-walk': TOWN_RULE.walking,
   'school-furniture': TOWN_RULE.surface,
   'school-seat': TOWN_RULE.villagerAnimation,
+  'festival-stage': TOWN_RULE.festival,
+  'festival-facing': TOWN_RULE.festival,
+  'festival-road': TOWN_RULE.festival,
+  'festival-clearance': TOWN_RULE.festival,
 });

@@ -6,22 +6,23 @@ import { place } from '../catalog/loader.js';
 import { toonMaterial } from '../toon.js';
 import { fairSchedule } from '../compiler/astra-fair.js';
 import { createFairLife } from './fair-life.js';
+import { buildFestivalStage } from './festival-stage.js';
 
 const C={cream:'#f4dfad',red:'#cf7969',teal:'#578e89',ink:'#485e58',gold:'#d8ad5d',wood:'#a78962'};
 export async function buildFairground(scene,town){
   const fixed=new THREE.Group(),moving=new THREE.Group();moving.name='Merrymead rides';scene.add(moving);
   const cube=new THREE.BoxGeometry(1,1,1),sphere=new THREE.SphereGeometry(1,10,8),cylinder=new THREE.CylinderGeometry(1,1,1,16);
-  const bulbs=[],ducks=[],horses=[],riders=[],musicians=[],ripples=[];
+  const bulbs=[],ducks=[],horses=[],riders=[],vendors=[],ripples=[];
   const mesh=(geo,color,x,y,z,parent=fixed)=>{const m=new THREE.Mesh(geo,toonMaterial(color));m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;};
   const box=(x,y,z,w,h,d,color,parent)=>{const m=mesh(cube,color,x,y,z,parent);m.scale.set(w,h,d);return m;};
   const ball=(x,y,z,r,color,parent)=>{const m=mesh(sphere,color,x,y,z,parent);m.scale.setScalar(r);return m;};
   const disk=(x,y,z,r,h,color,parent)=>{const m=mesh(cylinder,color,x,y,z,parent);m.scale.set(r,h,r);return m;};
   const beam=(a,b,width,color,parent=fixed)=>{const av=new THREE.Vector3(...a),bv=new THREE.Vector3(...b),m=mesh(cylinder,color,...av.clone().add(bv).multiplyScalar(.5).toArray(),parent);m.scale.set(width,av.distanceTo(bv),width);m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),bv.sub(av).normalize());return m;};
   const ring=(x,y,z,r,width,color,parent=fixed)=>mesh(new THREE.TorusGeometry(r,width,6,64),color,x,y,z,parent);
-  const sign=(label,x,y,z,width,color=C.ink)=>{
+  const sign=(label,x,y,z,width,color=C.ink,parent=fixed)=>{
     const c=document.createElement('canvas');c.width=1024;c.height=180;const ctx=c.getContext('2d');ctx.fillStyle=color;ctx.fillRect(0,0,c.width,c.height);ctx.strokeStyle=C.cream;ctx.lineWidth=3;ctx.strokeRect(12,12,1000,156);ctx.fillStyle=C.cream;ctx.font='bold 60px Georgia';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(label,512,94);
     const texture=new THREE.CanvasTexture(c);texture.colorSpace=THREE.SRGBColorSpace;
-    const m=new THREE.Mesh(new THREE.PlaneGeometry(width,width*180/1024),new THREE.MeshBasicMaterial({map:texture,side:THREE.DoubleSide}));m.position.set(x,y,z);fixed.add(m);return m;
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(width,width*180/1024),new THREE.MeshBasicMaterial({map:texture,side:THREE.DoubleSide}));m.position.set(x,y,z);parent.add(m);return m;
   };
   const bulb=(x,y,z,parent=moving,color='#ffe0a0')=>{const m=ball(x,y,z,.11,color,parent);m.material=new THREE.MeshBasicMaterial({color});bulbs.push(m);return m;};
   const load=async(id,x,z,scale=1,rot=0,parent=fixed)=>{const o=await place(id,{x,z,scale,rotY:rot});parent.add(o);return o;};
@@ -111,7 +112,7 @@ export async function buildFairground(scene,town){
     for(const dz of [-1.25,1.25])box(-50.2,1.35,z+dz,.08,2.7,.08,C.wood);
     const labels=['LEMONADE','WARM BUNS','BERRY SCOOPS'];
     const s=sign(labels[n],-50.2,2.7,z,2.8,[C.teal,C.gold,C.red][n]);s.rotation.y=-Math.PI/2;
-    jobs.push(load('townsfolk-'+['merchant','baker','shopkeeper'][n],-47.9,z,1,-Math.PI/2,moving).then(o=>musicians.push({o,vendor:true,base:0})));
+    jobs.push(load('townsfolk-'+['merchant','baker','shopkeeper'][n],-47.9,z,1,-Math.PI/2,moving).then(o=>vendors.push(o)));
   }
   for(const x of [-52.5,-45.5])box(x,1.65,-40.4,.12,3.3,.12,C.wood);
   sign('THE PICNIC PANTRY',-49,3.4,-40.4,7.5,C.red);
@@ -138,7 +139,7 @@ export async function buildFairground(scene,town){
     jobs.push(load('farm-produce-crates',x-.6,z,.4));
     for(const [n,dx,dz]of [[0,-1.7,.4],[1,1.3,-1.4]])jobs.push(load('townsfolk-'+(n?'child':'herbalist'),x+dx,z+dz,n?.7:.9,n?0:Math.PI/2,moving).then(o=>lawnGuests.push(o)));
   }
-  // Ring toss beside the midway, and a skittles lane on the listening lawn.
+  // Ring toss beside the midway and on the approach to the listening lawn.
   for(const [x,z]of [[-73,-82],[-59,-54]]){
     jobs.push(load('cv-market-stall',x,z,.8));
     jobs.push(load('cv-flower-cart',x+2.2,z,.65));
@@ -150,14 +151,7 @@ export async function buildFairground(scene,town){
     }
     jobs.push(load('townsfolk-child',x,z+2.5,.75,Math.PI,moving).then(o=>lawnGuests.push(o)));
   }
-  box(-58,.11,-48,2,.04,6,C.cream);
-  for(let row=0;row<3;row++)for(let n=0;n<=row;n++){
-    const x=-58+(n-row/2)*.4,z=-50+row*.4;
-    disk(x,.42,z,.09,.55,C.red);ball(x,.75,z,.13,C.cream);
-  }
-  ball(-58,.3,-45.8,.22,C.teal);
   jobs.push(load('cv-bench',-59,-43,.7,Math.PI/2));
-  jobs.push(load('townsfolk-child',-58,-44.5,.75,Math.PI,moving).then(o=>lawnGuests.push(o)));
 
   // A proper fan-shaped shell: concentric half arches open onto the lawn.
   box(-67,.4,-48.4,13,.7,6,C.wood);box(-67,.8,-48.4,13,.12,6,C.cream);
@@ -176,13 +170,7 @@ export async function buildFairground(scene,town){
   const back=new THREE.Shape();back.moveTo(-5.5,0);back.absarc(0,0,5.5,Math.PI,0,true);back.lineTo(-5.5,0);
   mesh(new THREE.ShapeGeometry(back),C.teal,-67,.85,-50.8);
   for(let n=0;n<3;n++)box(-67,.2+n*.2,-44.8-n*.4,4,.18,.5,C.cream);
-  for(const x of [-72.5,-61.5]){box(x,1.7,-46,1,1.7,.8,C.ink);const speaker=disk(x,1.8,-45.56,.3,.04,'#344c48');speaker.rotation.x=Math.PI/2;}
   sign('MERRYMEAD SESSIONS',-67,4.2,-50.6,8.5);
-  for(let n=0;n<3;n++)jobs.push(load('townsfolk-'+['baker','miller','innkeeper'][n],-70+n*3,-48,.95,Math.PI,moving).then(o=>{
-    o.position.y=.88;musicians.push({o,vendor:false,base:.88});
-    if(n<2){ball(.35,.9,-.35,.32,C.gold,o);beam([.35,1,-.35],[.35,1.9,-.35],.065,C.wood,o);}
-    else disk(0,.7,-.6,.48,.45,C.red,o);
-  }));
   for(const z of [-43,-40.5])for(const x of [-72,-64])jobs.push(load('cv-bench',x,z,.85,Math.PI));
 
   // Park gateways, avenue trees, beds and festoons tie the precinct together.
@@ -210,8 +198,8 @@ export async function buildFairground(scene,town){
   for(const {o,matrices,ids}of batches.values()){
     const instance=new THREE.InstancedMesh(o.geometry,o.material,matrices.length);matrices.forEach((m,i)=>instance.setMatrixAt(i,m));instance.userData.registryIds=ids;instance.castShadow=o.castShadow;instance.receiveShadow=o.receiveShadow;scene.add(instance);
   }
-  const life=await createFairLife(scene,town);
-  const lights=[[-64,-91],[-50,-68],[-67,-44],[-49,-46]].map(([x,z])=>{const l=new THREE.PointLight('#ffd498',0,17,1.6);l.position.set(x,5,z);scene.add(l);return l;});
+  const [life, festival] = await Promise.all([createFairLife(scene,town), buildFestivalStage(scene,sign,town)]);
+  const lights=[[-64,-91],[-50,-68],[-49,-46]].map(([x,z])=>{const l=new THREE.PointLight('#ffd498',0,17,1.6);l.position.set(x,5,z);scene.add(l);return l;});
   let lastTime=null,rideTime=0,schedule=fairSchedule(4,10);
   return {life,wheel,carousel,stats:{fairVisitors:30,fairDucks:7,fairRiders:riders.length},update(t,hour,night,day=4,weather){
     const dt=lastTime===null?0:Math.max(0,t-lastTime);lastTime=t;schedule=fairSchedule(day,hour);if(schedule.open)rideTime+=dt;
@@ -221,8 +209,9 @@ export async function buildFairground(scene,town){
     lawnGuests.forEach((o,n)=>{o.visible=hour>=9&&hour<22;o.rotation.z=Math.sin(t*1.8+n)*.025;});
     ducks.forEach((o,n)=>{const a=t*.065-n*.32,x=-67+Math.cos(a)*4.2,z=-68+Math.sin(a)*2.7;o.position.set(x,.12+Math.sin(t*2+n)*.025,z);o.rotation.y=Math.atan2(-Math.sin(a)*4.2,Math.cos(a)*2.7);});
     ripples.forEach(({m,x,phase})=>{m.position.x=x+Math.sin(t*.4+phase)*.25;});
-    musicians.forEach(({o,vendor,base},n)=>{o.visible=vendor?schedule.open:schedule.concert;o.rotation.z=Math.sin(t*2+n)*.035;o.position.y=base+Math.abs(Math.sin(t*2+n))*.025;});
+    vendors.forEach((o,n)=>{o.visible=schedule.open;o.rotation.z=Math.sin(t*2+n)*.035;o.position.y=Math.abs(Math.sin(t*2+n))*.025;});
+    festival.update(t,dt,hour,schedule.concert);
     bulbs.forEach(b=>{b.visible=night>.12&&schedule.open;});lights.forEach(l=>l.intensity=night*(schedule.open?24:2));
     life.update(t,hour,day,weather);
-  },audit(){return {schedule,rideAngle:wheel.rotation.z,carouselAngle:carousel.rotation.y,ducks:ducks.map(d=>d.position.toArray()),...life.audit()};}};
+  },audit(){return {schedule,rideAngle:wheel.rotation.z,carouselAngle:carousel.rotation.y,ducks:ducks.map(d=>d.position.toArray()),...life.audit(),festival:{...festival.audit(),audience:life.audience()}};}};
 }

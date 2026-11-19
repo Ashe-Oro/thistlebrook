@@ -2,11 +2,18 @@ import {assetInteractionPoints} from './asset-points.js';
 import {seedModelPlacements} from './seed-models.js';
 import manifest from './district-models.json' with {type:'json'};
 import {modelPlacementId} from './model-id.js';
-import {inventory,assetGroups} from '../../catalog/library/index.js';
+import {FESTIVAL_STALLS} from '../festival-plan.js';
+import {inventory,assetGroups,getAsset} from '../../catalog/library/index.js';
 
 export function expansionModels(town,catalog){
  const districts=new Set(town.districts.map(d=>d.id));
  const rows=manifest.filter(p=>districts.has(p.district));
+ const fair=town.regions.find(r=>r.id==='fair');
+ if(fair)for(const {asset,position,scale,elevation} of FESTIVAL_STALLS){
+  const model=getAsset('fairground/'+asset);
+  rows.push({asset:model.id,district:'fair',pos:position.map((v,i)=>v+fair.offset[i]),
+   scale,rot:0,size:model.geometry.size.map(v=>v*scale),elevation,path:model.path});
+ }
  // Woodland scatter belongs to the seed's compiler, never the reference capture.
  rows.push(...seedModelPlacements(town,catalog));
  return rows.map(p=>({...p,id:modelPlacementId(p.district,p.asset,p.pos,p.scale,p.rot,p.ordinal)}));

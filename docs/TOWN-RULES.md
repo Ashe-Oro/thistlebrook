@@ -154,6 +154,14 @@ The centreline must be at least 1,773 m long. The road audit and railway tests c
 
 The road audit and railway tests measure the walk from each inventoried entrance to its platform on the sidewalk graph. They also check the named sign. Maple Hollow enters the inventory when its parcel is present.
 
+## TOWN-20 · Festival-goers face the stage and keep the boards and roads clear
+
+2026-11-18
+
+> Festival-goers face the stage and never stand on the stage or the roads.
+
+At 1:12 PM ET, Ashe asked to “put a band up there and have like a little music festival” at the outdoor auditorium in the bottom-left of town. The Merrymead Bandshell lawn slots aim toward the centre of the boards. Listeners may turn up to 40° from that heading. The road audit checks standing positions against carriageways and Merrymead park roads and checks the audience approaches and festival fixture clearances. `tests/music-festival.test.mjs` injects a listener on the boards, one facing away and one standing in a park road. Each fault must fail the festival check and produce an open road-audit finding.
+
 ## Rules in progress on other lanes
 
 These are already Ashe's rules. Their checks land with the lanes building those features.
