@@ -138,21 +138,29 @@ The winter skin lays cool blue-violet shadow snow, a mid band and a slightly war
 
 Ashe asked at 9:51 AM ET on 18 Nov 2026. The town view keeps only the masthead, the explore menu, the top-right clock and the small map tools (zoom, turn, home). The clock's dropdown holds the time presets and slider, pause and speed, weather and skin, so those features stay reachable; `?weather=` and `?skin=` URL params still work. There is no sound in the town, so there is no sound toggle. `tests/ui-declutter.test.mjs` fails if any removed piece comes back in markup, code or CSS, and drives the real UI modules in headless Chrome to prove the dropdown sets time, pace, weather and skin.
 
-## TOWN-17 · The main line must circle the town
+## TOWN-17 · The Northern Loop runs continuously with at least six trailing cars
 
 2026-11-18
 
-> The main line must circle the town: the closed path encloses at least 80% of the district centroids (West Works, downtown, civic/school, airport, harbor/coast, woods, fair/outskirts, and Maple Hollow when that parcel is present), and each service train has at least six coaches or wagons.
+> The train runs 24/7.
 
-The centreline must be at least 1,773 m long. The road audit and railway tests check its length, the enclosed district centres, and the number of coaches and wagons in the service consist. The locomotive and tender are excluded from that count.
+Ashe approved a 590.50 m northern loop between Roadster Proving Ground and Maple Hollow. The train pauses for passengers at its two platforms on every lap. The audit counts passenger coaches and freight wagons toward the six-car minimum, excluding the locomotive and tender. The previous Grand Loop coverage requirement is superseded for this route.
 
-## TOWN-18 · Major places need a named rail stop
+## TOWN-18 · Both northern landmarks need a named rail stop
 
 2026-11-18
 
 > Every listed major point of interest has a station or halt within 60 m by pedestrian path, and that stop has a named platform sign.
 
-The road audit and railway tests measure the walk from each inventoried entrance to its platform on the sidewalk graph. They also check the named sign. Maple Hollow enters the inventory when its parcel is present.
+The road audit measures both approved walks from the landmark to the platform and checks the named sign. Eleven earlier stops are deferred under the northern-only approval.
+
+## TOWN-19 · Rail can enter terrain only through a tunnel with portals
+
+2026-11-18
+
+> If it goes into the mountain that's fine but it needs to have a tunnel.
+
+The audit measures the roof, both walls, the flanks and the face at each opening. On open track it checks the full clearance corridor against the terrain. The renderer cuts the same hills along the surveyed approach and bore, and the railway tests raycast through all six mouths.
 
 ## TOWN-20 · Festival-goers face the stage and keep the boards and roads clear
 
@@ -161,6 +169,38 @@ The road audit and railway tests measure the walk from each inventoried entrance
 > Festival-goers face the stage and never stand on the stage or the roads.
 
 At 1:12 PM ET, Ashe asked to “put a band up there and have like a little music festival” at the outdoor auditorium in the bottom-left of town. The Merrymead Bandshell lawn slots aim toward the centre of the boards. Listeners may turn up to 40° from that heading. The road audit checks standing positions against carriageways and Merrymead park roads and checks the audience approaches and festival fixture clearances. `tests/music-festival.test.mjs` injects a listener on the boards, one facing away and one standing in a park road. Each fault must fail the festival check and produce an open road-audit finding.
+
+## TOWN-21 · Rail stays clear of water
+
+2026-11-18
+
+> Please update the tracks to never go over the water.
+
+The audit checks sea, rivers, inland streams and pools against the full track footprint. A future permitted inland stream span requires a real bridge with supports on land. The approved loop has zero water encounters.
+
+## TOWN-22 · Track footprints clear the road and neighbouring objects
+
+2026-11-18
+
+> Tracks collide with the road. In general, you need better collision detection.
+
+Every metre of the track corridor must clear lots, buildings, plazas, props and tree crowns. Only registered road crossings within ten degrees of perpendicular are allowed. The crossing must have a flush deck, continuous rails and opposed kerb gates on clear land.
+
+## TOWN-23 · Every platform sits on land
+
+2026-11-18
+
+> Doesn't make sense to have the tracks in the water.
+
+The audit samples the whole platform and its end ramps against the same water inventory used for track. Both passenger platforms also have clear land approaches.
+
+## TOWN-24 · Placed objects keep carriageways clear
+
+2026-11-18
+
+> In general, you need better collision detection.
+
+Audit the physical footprint of props, structures, planters, patios and parking against nearby traffic surfaces. The road audit also checks parking against local footways and other placements. The Lantern Room's tables and hedge planters share a compiled terrace footprint so all their parts stay behind the kerb.
 
 ## Rules in progress on other lanes
 

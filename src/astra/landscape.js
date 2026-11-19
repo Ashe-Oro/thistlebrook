@@ -11,6 +11,9 @@ import {residentPedestrian} from '../roads/walking.js';
 import {distanceToSegment} from '../compiler/astra.js';
 import {cruiserPose, waterlineAt} from './water-traffic-plan.js';
 import {hull} from './watercraft.js';
+import {landscapeHills} from '../compiler/terrain.js';
+import {excavateHill, tunnelCuts} from './railway-tunnels.js';
+import {inkMesh} from './ink-mesh.js';
 
 function strip(points,width,color,y,parent,id) {
  const vertices=[],indices=[];
@@ -40,12 +43,17 @@ export async function buildLandscape(scene,town) {
  coast.push(coast[0]);
  strip(coast,9,'#d9c799',-.095,scene,plan.registryId);
  strip(coast,3,'#e9d9ac',-.08,scene,plan.registryId);
- for(const h of plan.hills) {
-  const start=kit.root.children.length;
-  const g=new THREE.Mesh(h.mountain?new THREE.ConeGeometry(1,1,7):new THREE.IcosahedronGeometry(1,1),toonMaterial(h.mountain?'#8e9d7b':'#9eaf77'));
-  g.position.set(h.pos[0],h.mountain?h.height/2-.1:-h.height*.22,h.pos[1]);g.scale.set(h.radius,h.height,h.radius*.8);g.userData.scenery=g.material.userData.scenery=true;kit.root.add(g);
-  if(h.mountain){const cap=new THREE.Mesh(new THREE.ConeGeometry(1,1,7),toonMaterial('#d5d2af'));cap.position.set(h.pos[0],h.height*.85,h.pos[1]);cap.scale.set(h.radius*.3,h.height*.3,h.radius*.24);cap.userData.scenery=cap.material.userData.scenery=true;kit.root.add(cap);}
-  kit.root.children.slice(start).forEach(o=>tagObject(o,h.registryId));
+ const cuts = town.railway ? tunnelCuts(town.railway) : [];
+ for (const h of landscapeHills(town)) for (const [i, part] of h.parts.entries()) {
+   // Bake non-uniform terrain scale so the ink uses a consistent world width.
+   const source = part.geometry.clone().scale(...part.scale).translate(...part.position);
+   const geometry = excavateHill(source, cuts);
+   const material = toonMaterial(i ? '#d5d2af' : h.mountain ? '#8e9d7b' : '#9eaf77').clone();
+   const mesh = inkMesh(new THREE.Mesh(geometry, material), .10);
+   mesh.receiveShadow = true;
+   mesh.castShadow = true;
+   mesh.userData.scenery = material.userData.scenery = true;
+   kit.root.add(tagObject(mesh, h.id));
  }
  // Owned vegetation is instanced by source mesh. Every instance carries its own
  // compiler placement ID, including meadow grass and wildflowers.
@@ -54,7 +62,17 @@ export async function buildLandscape(scene,town) {
   const transform=new THREE.Object3D(),matrix=new THREE.Matrix4();
   template.traverse(part=>{if(!part.isMesh)return;const batch=new THREE.InstancedMesh(part.geometry,part.material,members.length);
    members.forEach((p,i)=>{transform.position.set(p.pos[0],p.y||0,p.pos[1]);transform.rotation.y=p.rot;transform.scale.setScalar(p.scale);transform.updateMatrix();batch.setMatrixAt(i,matrix.multiplyMatrices(transform.matrix,part.matrixWorld));});
-   tagBatch(batch,members.map(p=>p.registryId));batch.castShadow=part.castShadow;batch.receiveShadow=true;scene.add(batch);
+   tagBatch(batch, members.map(p => p.registryId));
+   if (part.userData.outline) {
+     batch.userData.outline = true;
+     batch.receiveShadow = false;
+     batch.castShadow = false;
+   } else {
+     batch.castShadow = part.castShadow;
+     batch.receiveShadow = true;
+   }
+   if (part.userData.foliage) batch.userData.foliage = true;
+   scene.add(batch);
   });
  }
  // Regional roads (grok-roads): one record per chain with a single filleted

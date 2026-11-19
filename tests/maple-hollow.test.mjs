@@ -81,16 +81,13 @@ test('maple hollow: props stay off the carriageway; houses clear every street', 
   for (const l of mh.lots) for (const p of [...(l.yard?.slots || []).map((q) => q.at), ...(l.around || [])]) assert.ok(!nearCar(p), `${l.key} path or play spot at ${p} touches a parked car`);
 });
 
-test('Maple Hollow local traffic turns before Airport Road, which has a gated level crossing', () => {
+test('Maple Hollow local traffic turns before Airport Road and the railway clears that road', () => {
   const traffic = createRegionalTraffic(town);
   const connector = STREETS.drive.points.at(-1);
   const airportApproach = town.roads.find((r) => r.centerline && !r.mapleHollow &&
     polyDist(connector, r.centerline) < .05 && r.centerline.some((p) => p[1] < -180));
   assert(airportApproach, 'Airport Road connects the Maple junction and the northbound approach');
-  const crossing = town.railway.crossings.find((c) => polyDist(c.pos, airportApproach.centerline) < .05);
-  assert(crossing?.gated && Math.abs(crossing.angle - 90) < 2);
-  const traces = traffic.lines.filter((line) => polyDist(crossing.pos, line.points) < .05);
-  assert(traces.length > 0 && traces.every((line) => !line.mapleHollow), 'only airport through traffic uses the crossing');
+  assert.equal(town.railway.crossings.length, 0, 'the northern loop clears the airport through road');
   const approach = traffic.lines.find((line) => line.mapleHollow && polyDist(connector, line.points) < .05);
   assert(approach);
   const end = approach.sampler.at(approach.end).p, start = approach.sampler.at(approach.start).p;

@@ -71,7 +71,7 @@ export function adoptExtension(town,id,layout,{offset=[0,0],bounds,links=[],path
  if(town[planKey].nodes)for(const [key,index]of Object.entries(town[planKey].nodes)){const n=node(move(draft.nodes[index],offset));town[planKey].nodes[key]=n;town.expansionLocal[id].nodes[key]=n;}
  return region;
 }
-export const WORLD_VIEWS={railway:{x:38,z:78,zoom:.245,rotation:0},...Object.fromEntries(Object.entries(STARBASE_VIEWS).map(([id,v])=>[id,{...v,x:v.x+80,z:v.z+230}])),roadster:{x:-205,z:-172,zoom:2.65},...Object.fromEntries(Object.entries(COAST_VIEWS).map(([id,v])=>[id,{...v,x:v.x+160,z:v.z+150} ])),...THEMEPARK_VIEWS,skatepark:{...SKATEPARK_VIEW,x:87,z:-109},airport:{x:104,z:-188,zoom:1.55},...OUTSKIRTS_VIEWS,fair:{...FAIR_VIEW,x:FAIR_VIEW.x-140},...Object.fromEntries(Object.entries(HARBOR_VIEWS).map(([id,v])=>[id==='beach'?'shell-cove':id,{...v,x:v.x+100}])),'maple-hollow':{...MAPLE_HOLLOW_VIEW}};
+export const WORLD_VIEWS={railway:{x:-105,z:-216,zoom:.94,rotation:1},...Object.fromEntries(Object.entries(STARBASE_VIEWS).map(([id,v])=>[id,{...v,x:v.x+80,z:v.z+230}])),roadster:{x:-205,z:-172,zoom:2.65},...Object.fromEntries(Object.entries(COAST_VIEWS).map(([id,v])=>[id,{...v,x:v.x+160,z:v.z+150} ])),...THEMEPARK_VIEWS,skatepark:{...SKATEPARK_VIEW,x:87,z:-109},airport:{x:104,z:-188,zoom:1.55},...OUTSKIRTS_VIEWS,fair:{...FAIR_VIEW,x:FAIR_VIEW.x-140},...Object.fromEntries(Object.entries(HARBOR_VIEWS).map(([id,v])=>[id==='beach'?'shell-cove':id,{...v,x:v.x+100}])),'maple-hollow':{...MAPLE_HOLLOW_VIEW}};
 export function compileWorld(catalog,seed=831,{capture=false}={}){
  const town=compileAstra(catalog,seed);unifyStraightRuns(town);town.regions=[];town.expansionLocal={};
  // The harbor approach squeezes between the bandstand and the farm fence, so it
@@ -104,10 +104,12 @@ export function compileWorld(catalog,seed=831,{capture=false}={}){
  const stops=capture?[]:compileExpansionScenes(town,pointInWorld);
  // Maple is deterministic and needs to be present for the platform reservations.
  addMapleHollow(town);
- if(!capture)stops.push(...compileAssetVignettes(town,catalog,pointInWorld,railwayAccessReservations(town)));
- rebuildWorldGraph(town);planRegionalRoads(town);flagMapleHollowRoads(town,planRegionalLines);planLandscape(town);town.water=planWater(town);planWoods(town);addRailway(town);
+ if(!capture)stops.push(...compileAssetVignettes(town,catalog,pointInWorld,railwayAccessReservations()));
+ rebuildWorldGraph(town);planRegionalRoads(town);flagMapleHollowRoads(town,planRegionalLines);planLandscape(town);town.water=planWater(town);planWoods(town);addRailway(town,catalog);
+ const market=town.venues.find(v=>v.id==='work-station');
+ Object.assign(market,{name:'West Works Market Hall',type:'market',story:'The old station hall now serves the West Works market and its workshops.'});
  const stopNode=rebuildWorldGraph(town);finishMapleHollow(town,stopNode);
- for(const st of town.railway.stations)if(!st.existing){const v=town.venues.find(p=>p.id===st.venue);v.node=st.node=stopNode(v.entry);}
+ for(const st of town.railway.stations){const v=town.venues.find(p=>p.id===st.venue);v.node=st.node=stopNode(v.entry);}
  for(const scene of stops)for(const slot of scene.slots){slot.node=stopNode([slot.approach[0],slot.approach[2]]);town.interactions.push(slot);}
  town.registry=buildRegistry(town,catalog);registerLandscape(town);registerWoods(town);addExpansionModels(town,catalog);addDistrictLandmarks(town,landmarks);addDistrictActivities(town);addParkActivities(town);addDistrictFurniture(town);includeLifePlacements(town);addMapleHollowPlaces(town);const errors=registryErrors(town);if(errors.length)throw Error(errors.join('; '));return finishWorld(town);
 }

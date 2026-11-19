@@ -181,7 +181,7 @@ export async function buildDowntown(scene,town) {
     wire(Array.from({length:25},(_,n)=>[48+n/24*14,5.8-Math.sin(n/24*Math.PI)*.9,z]));
     for(let n=0;n<14;n++)orb(48.5+n,5.75-Math.sin((n+.5)/14*Math.PI)*.9,z,.13,n%3?'#ffe4a0':'#eea8ad',root,true);
   }
-  for(const z of [-17,-12.5,-3,2])for(const x of [49.5,60.5]) {
+  for (const {centre: [x, z]} of town.courtyards) {
     box(x,.12,z,2.7,.08,3.5,'#b69b76');
     // Bottles, tiny menus and planters turn isolated tables into terraces.
     drum(x+.25,1.1,z,.07,.32,'#527e68');drum(x-.25,1.05,z,.12,.21,'#e8b776');
@@ -189,7 +189,7 @@ export async function buildDowntown(scene,town) {
     for(const dz of [-1.65,1.65]){box(x,.4,z+dz,2.4,.55,.28,'#8b745b');for(let n=0;n<5;n++)orb(x-1+n*.5,.82,z+dz,.3,'#7d9b74');}
   }
   for(let n=0;n<20;n++) {
-    const x=n%2?60.5:49.5,z=[-17,-12.5,-3,2][Math.floor(n/2)%4],side=n<8?-1:1;
+    const [x,z]=town.courtyards[(n%2)*4+Math.floor(n/2)%4].centre,side=n<8?-1:1;
     // Existing six terrace visitors occupy the first left seats.
     const px=x+(n>=16?(n%2?-.95:.95):0),pz=z+side*(n>=16?.1:1.06);
     addPerson(roles[n%6],'night',still(px,.2,pz,side>0?Math.PI:0,n),.83);

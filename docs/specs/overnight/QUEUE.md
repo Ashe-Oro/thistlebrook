@@ -3,7 +3,7 @@
 Run top to bottom. 3–4 Grok builds at once, each in its own worktree from main.
 Brief: "Read docs/specs/overnight/<SPEC> and do it." plus standard rules (TOWN-RULES, no licensed models in git, tests+audits pass, shots, CHANGELOG, local commits only).
 
-0. RAILWAY-MOUNTAIN-TUNNELS.md — Ashe 11:41 AM Nov 18: tunnel through the mountains, pull the coastal trestles inland (next)
+0. RAILWAY-REROUTE.md — Ashe Nov 18: collision-aware replan (no water, crossings, tunnels, cel shading); Stage A plan + Opus high review, Stage B after Ashe approves (supersedes RAILWAY-MOUNTAIN-TUNNELS.md)
 1. RAILWAY-LOOP.md
 2. VEHICLE-STREET-VARIETY.md
 3. VILLAGER-ANIMATIONS.md

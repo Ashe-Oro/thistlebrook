@@ -124,7 +124,7 @@ export function compileAstra(catalog, seed=831) {
  for(const [x,z] of [[-14,-40],[-14,-48],[16,-40],[16,-48],[40,-40],[40,-48],[39,-8],[39,1]])prop('cv-bench',x,z,-Math.PI/2,.9);
  for(const [x,z] of [[-64,-14],[-50,-14],[-64,2],[-50,2],[-60,0],[-54,0],[14,-57],[18,-57],[-35,-70],[59,-70]])prop('cv-streetlamp',x,z,0,1);
  // Dining terraces are reserved against foliage as well as parcel geometry.
- town.courtyards=[];for(const x of [49.5,60.5])for(const z of [-17,-12.5,-3,2]){const area={min:[x-1.1,z-1.6],max:[x+1.1,z+1.6]};reservations.push(area);town.courtyards.push(area);}
+ town.courtyards=[];for(const x of [50.4,60.5])for(const z of [-17,-12.5,-3,2]){const area={centre:[x,z],min:[x-1.35,z-1.95],max:[x+1.35,z+1.95]};reservations.push(area);town.courtyards.push(area);}
  // Canopies, rather than just trunks, must clear every street, parcel and water.
  for(let i=0;i<1600;i++){
   const x=-78+random()*140,z=-102+random()*134;

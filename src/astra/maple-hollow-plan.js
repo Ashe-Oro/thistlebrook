@@ -385,7 +385,7 @@ export function flagMapleHollowRoads(town, planRegionalLines) {
   const groups = new Set(mh.routeGroups);
   for (const r of town.roads) if (r.kind === 'world-link' && r.centerline && (r.routeGroups || [r.routeGroup]).every((g) => groups.has(g))) r.mapleHollow = true;
   // Keep local traffic on the neighbourhood streets. The airport approach has
-  // its own through service and a gated railway crossing beyond the Maple junction.
+  // its own through service past the Maple junction.
   const roads = town.roads.filter((r) => r.kind === 'world-link');
   const driveGroup = mh.routeGroups[0];
   const groupOf = (r) => !r.mapleHollow ? 'through' : r.routeGroups.includes(driveGroup) ? 'drive' : 'side-streets';

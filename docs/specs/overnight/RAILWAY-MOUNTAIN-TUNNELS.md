@@ -1,5 +1,7 @@
 # Railway mountain tunnels (Thistlebrook Grand Loop, v2)
 
+> **Superseded (18 Nov 2026) by `RAILWAY-REROUTE.md`.** Its tunnel goals are folded into that spec. Work in progress kept at commit c1de921. Do not run this spec.
+
 Ashe, 11:41–11:42 AM ET, 18 Nov 2026: asked why the grand loop runs out over the water on trestles, then: "I'm okay with tunnels. I think tunnels are cool. It should tunnel through some of the mountains."
 
 ## Reference

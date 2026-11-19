@@ -33,7 +33,8 @@ if(rail){const vis=[],tun=[];let run=null;for(const q of rail.samples){const t=q
  for(const pts of vis)s+=line(pts,`stroke="#222" stroke-width="${(2.4*S).toFixed(1)}"`);for(const pts of tun)s+=line(pts,`stroke="#555" stroke-width="2" stroke-dasharray="6 4"`);
  for(const st of rail.stations)s+=poly(st.polygon,'fill="#fd4" stroke="#000"')+text(st.polygon[0],st.name,11,'#600');
  for(const c of rail.crossings)s+=`<circle cx="${X(c.pos[0])}" cy="${Z(c.pos[1])}" r="5" fill="none" stroke="#f00" stroke-width="2"/>`;
- if(rail.yard)s+=line(rail.yard.track,`stroke="#555" stroke-width="${(2*S).toFixed(1)}"`);}
+ for(const t of rail.tunnels)for(const p of t.portals)s+=`<circle cx="${X(p.pos[0])}" cy="${Z(p.pos[1])}" r="4" fill="#a88765" stroke="#222"/>`;
+}
 else if(town.workRail)s+=line([[town.workRail.minX,town.workRail.z],[town.workRail.maxX,town.workRail.z]],'stroke="#000" stroke-width="3"');
 for(let x=Math.ceil(minX/20)*20;x<=maxX;x+=20)s+=`<line x1="${X(x)}" y1="0" x2="${X(x)}" y2="${H}" stroke="#000" stroke-opacity=".1"/>`+text([x,minZ+6],x,10);
 for(let z=Math.ceil(minZ/20)*20;z<=maxZ;z+=20)s+=`<line x1="0" y1="${Z(z)}" x2="${W}" y2="${Z(z)}" stroke="#000" stroke-opacity=".1"/>`+text([minX+1,z],z,10);

@@ -10,6 +10,7 @@ import {pathToFileURL} from 'node:url';
 import {ROAD_RULE} from '../src/compiler/town-rules.js';
 import {auditPedestrianRules, auditTownLayout, auditFairLot, auditRailway} from './audit-town-rules.mjs';
 import {existsSync} from 'node:fs';
+import {auditRailwayLayout} from './audit-railway-layout.mjs';
 const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const here = new URL('..', import.meta.url).pathname;
 /** Audit seed 831. Mutation hooks let tests inject faults before checking. */
@@ -118,12 +119,11 @@ if (existsSync(root + 'tools/audit-villager-anims.mjs')) {
 }
 if (town.railway) {
   auditRailway(town, graph, index, await imp('src/compiler/railway.js'), add, {walkBetween, origin: town.venues[0].entry});
-  const {grandLoopReview} = await imp('src/astra/railway-plan.js');
-  if (grandLoopReview) {
-    const review = grandLoopReview(town, graph);
+  const {railwayReview} = await imp('src/astra/railway-plan.js');
+  if (railwayReview) {
+    auditRailwayLayout(town, catalog, graph, add);
+    const review = railwayReview(town, graph);
     const at = town.railway.stations[0].centre;
-    if (review.length < 1773) add('grand-loop', at, `Main line is only ${review.length.toFixed(1)} m`);
-    if (review.enclosed < .8) add('grand-loop', at, `Main line encloses only ${(100 * review.enclosed).toFixed(1)}% of the named districts`);
     if (review.trailing < 6) add('grand-loop', at, `The service train has only ${review.trailing} coaches and wagons`);
     for (const stop of review.stops) if (!stop.linked || !stop.sign || stop.distance > 60) {
       add('rail-poi-access', stop.origin ?? at, `${stop.id}: ${stop.linked ? stop.distance.toFixed(1) + ' m walk' : 'no pedestrian path'}${stop.sign ? '' : ', no platform sign'}`);

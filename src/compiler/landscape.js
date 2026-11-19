@@ -66,7 +66,7 @@ export function registerLandscape(town) {
  };
  add(town.landscape,'landscape:mainland','Thistlebrook continuous mainland','area',[0,0]);
  add({},'landscape:ocean','Thistlebrook Gulf · shared ocean','area',[330,180]);
- town.landscape.hills.forEach((h,i)=>add(h,`landscape:hill-${i}`,h.mountain?'Pine ridge':'Rolling meadow hill','landmark',h.pos));
+ town.landscape.hills.forEach((h,i)=>add(h,h.registryId ?? `landscape:meadow-hill-${i}`,h.mountain?'Pine ridge':'Rolling meadow hill','landmark',h.pos));
  town.landscape.models.forEach((p,i)=>add(p,`landscape:model-${i}`,p.asset.replaceAll('-',' '),'vegetation',p.pos,{asset:p.asset,scale:p.scale,rot:p.rot}));
  for(const [id,name,pos] of [['ferry','Saltwind coastal ferry',[195,85]],['sail-0','Ocean Drive sailboat',[330,105]],['sail-1','Gulf sailboat',[353,160]]])add({},`landscape:${id}`,name,'vehicle',pos);
  town.registry.places.push(...records);town.landscape.records=records;

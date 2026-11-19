@@ -42,7 +42,7 @@ export async function buildAstra(scene,town){
  // Continuous soft lanes with rounded joins, plus an inset market square.
  const circleGeo=new THREE.CylinderGeometry(1,1,.06,12);
  for(const region of town.regions||[])if(region.ground){assembly=town.districts.find(d=>d.id===region.id).registryId;const b=region.bounds;box((b.minX+b.maxX)/2,-1.28,(b.minZ+b.maxZ)/2,b.maxX-b.minX+3,2.5,b.maxZ-b.minZ+3,'#a8bc7d');}
- for(const r of town.roads){assembly=r.registryId;if(r.kind==='world-link')continue;if(r.external==='coral-coast'&&Math.min(r.a[0],r.b[0])<225)continue;if(r.external&&r.kind!=='catalog'&&!['fair','skatepark','coral-coast'].includes(r.external))continue;
+ for(const r of town.roads){assembly=r.registryId;if(r.kind==='world-link')continue;if(r.external==='coral-coast'&&Math.min(r.a[0],r.b[0])<225)continue;if(r.external&&r.kind!=='catalog'&&!r.surveyApproach&&!['fair','skatepark','coral-coast'].includes(r.external))continue;
  const dx=r.b[0]-r.a[0],dz=r.b[1]-r.a[1],len=Math.hypot(dx,dz);if(len<.01)continue;
   const m=box((r.a[0]+r.b[0])/2,.07,(r.a[1]+r.b[1])/2,r.width,.09,len,r.kind==='avenue'?'#87958b':'#d9c9a4');m.rotation.y=Math.atan2(dx,dz);
   for(const p of [r.a,r.b]){const c=mesh(circleGeo,r.kind==='avenue'?'#87958b':'#d9c9a4',p[0],.07,p[1]);c.scale.set(r.width/2,1,r.width/2);}
@@ -57,9 +57,9 @@ export async function buildAstra(scene,town){
  const civicQuarter=await buildAssembly(buildCivicQuarter,scene,town,'civic-green');selectables.push(...civicQuarter.venueRecords);
  const districts=await buildAssembly(buildDistricts,scene,town,'common');selectables.push(...districts.venueRecords.filter(v=>!['civic-green','works','themepark','coral-coast'].includes(v.data.district)));
  const works=await buildPlacedDistrict(buildWorkDistrict,scene,town,'works');selectables.push(...works.records);
- const railway=town.railway?await buildRailway(scene,town,{works,landscape}):null;if(railway){
+ const railway=town.railway?await buildRailway(scene,town,{landscape}):null;if(railway){
   tagAssembly(railway.root,town.districts.find(d=>d.id==='works').registryId);
-  for(const st of town.railway.stations.filter(s=>!s.existing)){
+  for(const st of town.railway.stations){
    const data=town.venues.find(v=>v.id===st.venue);
    const bounds=new THREE.Box3(new THREE.Vector3(data.box.min[0],st.y,data.box.min[1]),new THREE.Vector3(data.box.max[0],st.y+2.8,data.box.max[1]));
    selectables.push({type:'venue',data,bounds});

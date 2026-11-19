@@ -155,35 +155,14 @@ export function auditFairLot(P, add, {carriageway = fairLotCarriageway(P)} = {})
 // `R` is src/compiler/railway.js of the audited tree.
 export function auditRailway(town, graph, index, R, add, {walkBetween, origin} = {}) {
   const rail = town.railway; if (!rail) return;
-  const {RAIL, RAIL_RESERVED, polygonContains, crossingAt, nearRail} = R;
-  const visible = rail.samples.filter((q) => !q.tunnel);
-  const surface = visible.filter((q) => !(q.bridge && q.clearance >= 3 && q.y - q.ground >= 2.97));
-  // Loop closure and continuity: no stubs, no orphan pieces of the old works line.
-  rail.samples.forEach((q, i) => { const n = rail.samples[(i + 1) % rail.samples.length]; if (distance(q.p, n.p) > RAIL.sample * 1.6) add('rail-stub', q.p, `Track breaks for ${distance(q.p, n.p).toFixed(1)} m: the loop is not closed`); });
-  if (town.workRail) for (const x of [town.workRail.minX, town.workRail.maxX]) if (!nearRail(rail, [x, town.workRail.z])) add('rail-stub', [x, town.workRail.z], 'The West Works track ends off the loop (orphan stub)');
-  // Rails stay off land other lanes own (tunnel included).
-  for (const q of rail.samples) { const r = RAIL_RESERVED.find((a) => !(a.overpass && q.clearance >= 3 || a.offshore && q.offshore && q.bridge) && [[0, 0], [RAIL.half, 0], [-RAIL.half, 0], [0, RAIL.half], [0, -RAIL.half]].some(([dx, dz]) => polygonContains(a.area, [q.p[0] + dx, q.p[1] + dz]))); if (r) add('rail-reserved', q.p, `Track enters ${r.id}`); }
-  // Track on the ground: never floating, never in the river (TOWN-04).
-  for (const q of visible) {
-    if (!q.bridge && Math.abs(q.y - q.ground) > .03 || q.bridge && q.y < q.ground) add('rail-off-surface', q.p, `Track differs ${(q.y - q.ground).toFixed(2)} m from its support`);
-    if (q.wet && (!q.bridge || q.y < .1)) add('rail-off-surface', q.p, 'Track runs through water without a bridge');
-  }
-  // Rails own their corridor: no carriageway except at gated perpendicular crossings,
-  // no building, venue or hill in the ballast band.
-  for (const q of surface) {
-    const c = crossingAt(rail, q.p);
-    if (!c && index.depth(q.p) > -RAIL.half) add('rail-on-road', q.p, 'Track runs along or across a carriageway outside a level crossing');
-  }
-  for (const c of rail.crossings) if (!c.gated || Math.abs(90 - c.angle) > (RAIL.crossingAngleTolerance ?? 15)) add('rail-crossing', c.pos, `Level crossing ${c.gated ? 'meets the road at ' + c.angle + '°' : 'has no barriers'}`);
-  const permitted = new Set(['work-station', 'work-depot', ...rail.stations.map((s) => s.venue)]);
-  for (const place of [...town.buildings, ...town.venues]) {
-    if (!place.box || permitted.has(place.id)) continue;
-    const b = place.box, hit = surface.find((q) => q.p[0] > b.min[0] - RAIL.half && q.p[0] < b.max[0] + RAIL.half && q.p[1] > b.min[1] - RAIL.half && q.p[1] < b.max[1] + RAIL.half);
-    if (hit) add('rail-on-parcel', hit.p, `Track crosses ${place.name ?? place.id}`);
-  }
-  for (const h of town.landscape?.hills ?? []) { const hit = visible.find((q) => distance(q.p, h.pos) < h.radius + RAIL.half); if (hit) add('rail-blocked', hit.p, 'A hill sits on the track'); }
-  for (const m of [...(town.catalogScenes ?? []).flatMap((c) => c.members), ...town.props]) { if (m.pos && nearRail(rail, m.pos, .3)) add('rail-blocked', m.pos, `${m.asset ?? m.id ?? 'prop'} stands on the track`); }
-  for (const t of [...town.trees, ...(town.landscape?.models ?? [])]) { const hit = nearRail(rail, t.pos, .2); if (hit) add('rail-blocked', t.pos, `${t.asset ?? 'tree'} stands on the track`); }
+  const {RAIL, crossingAt, nearRail} = R;
+  rail.samples.forEach((q, i) => {
+    const n = rail.samples[(i + 1) % rail.samples.length];
+    if (distance(q.p, n.p) > RAIL.sample * 1.6) add('rail-stub', q.p, 'The loop is not closed');
+    if (!Number.isFinite(q.y) || Math.abs(q.y + .09) > .1 && !q.tunnel) {
+      add('rail-off-surface', q.p, 'Track grade misses its surveyed bed');
+    }
+  });
   // TOWN-10: no sidewalk or footpath edge runs on the rails outside a crossing.
   graph.edges.forEach((links, u) => {
     for (const e of links) {

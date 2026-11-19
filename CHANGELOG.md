@@ -6,6 +6,10 @@
 
 - **Favicon.** The thistle on cream is now the tab icon and the home-screen icon: `favicon.ico` (16/32/48), `favicon-32.png`, `apple-touch-icon.png` (180) and `icon-512.png`.
 
+- **Northern Loop railway.** Replaced the Grand Loop with the surveyed 590.50 m Northern Loop. The steam train serves Roadster Proving Ground and Maple Hollow around the clock via three excavated tunnels with inked stone portals and earth berms. The route clears water and carriageways. The town audit now checks the full railway corridor, tunnel cover and platforms, and the Lantern Room patios sit behind the kerb.
+
+- **Main merge, 19 Nov 2026 (published).** Merged village/railway-tunnels (1d763c2) on top of the Merrymead festival. Kept both rule sets (TOWN-19…24 and TOWN-20) and put TOWN-RULES.md and the rule registry back in numeric order. Main checks: `test:ci` 263 tests pass, `test:checks` pass, `sim:collisions` rain and snow ok, `audit:roads` 0 open (17 justified), railway plan validator 0 violations, build ok.
+
 - **Main merge, 18 Nov 2026 (published together).** Merged into main one at a time with the full checks after each: rules-audit (a814591), villager-needs (bc2af8e, reconciled with live weather), school-day (ef7feb0, reconciled with needs and weather), ui-declutter (53970db, TOWN-16) plus its rule-registry fix (37f8c13), the railway grand loop (d1646ec / 2ef28ce, TOWN-17/18, school walkers wait at kerbs) and Maple Hollow (90a2b4a, 13th stop, gated Airport Road crossing). Main checks: 264 tests pass, `test:checks` pass, `audit:roads` 0 open, `sim:collisions` 0 events, build ok.
 
 - **Merged Maple Hollow into the Thistlebrook Grand Loop.** The neighbourhood joins the service as its 13th named stop, with gated Airport Road access and audited driveway bays.

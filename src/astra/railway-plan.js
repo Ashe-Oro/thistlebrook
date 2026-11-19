@@ -3,7 +3,7 @@
 // the clock hour (no THREE, no DOM), shared by the renderer, the residents'
 // rail guard, sim-collisions and the tests.
 // Clock: 1 game hour = 90 simulated seconds at 1x (src/astra/clock.js).
-import {RAIL, SERVICE, railPose, sidingPose, inTunnel, dist, polygonContains, RAIL_POIS, RAIL_DISTRICTS, hasMapleHollow} from '../compiler/railway.js';
+import {RAIL, SERVICE, railPose, inTunnel, dist} from '../compiler/railway.js';
 import {walkBetween} from '../roads/pedestrian.js';
 
 export const SECONDS_PER_HOUR = 90;
@@ -29,12 +29,11 @@ const rel = (a, b, L) => { let d = wrap(a - b, L); if (d > L / 2) d -= L; return
 
 /** Run time of a stop-to-stop leg on a trapezoid speed profile. */
 function leg(from, to, rail) {
-  const d = wrap(to - from, rail.length), tunnelShare = sharedTunnel(rail, from, d) / d;
-  const v = tunnelShare > .5 ? SERVICE.tunnelCruise : SERVICE.cruise, a = SERVICE.accel;
+  const d = wrap(to - from, rail.length);
+  const v = SERVICE.cruise, a = SERVICE.accel;
   const full = v * v / a <= d, time = full ? d / v + v / a : 2 * Math.sqrt(d / a), top = full ? v : Math.sqrt(a * d);
   return {from, d, time, v: top, a};
 }
-function sharedTunnel(rail, from, d) { let n = 0; for (let x = 0; x < d; x += 2) if (inTunnel(rail, from + x)) n += 2; return Math.min(n, d); }
 function legDistance(l, t) {
   const {a, v, d, time} = l, ta = v / a;
   if (t <= 0) return 0; if (t >= time) return d;
@@ -43,72 +42,56 @@ function legDistance(l, t) {
   return .5 * a * ta * ta + v * (t - ta);
 }
 
-/** Complete laps fit inside the service day. Excess time is layover at Union. */
+/** One recurring cycle. Align whole cycles with the game's 24-hour clock
+ * by adjusting cruise speed slightly so midnight never teleports the train. */
 export function timetable(rail) {
-  const order = [...rail.stations].sort((a, b) => a.s - b.s);
-  const start = order.findIndex((st) => st.id === SERVICE.berth);
-  const stops = [...order.slice(start), ...order.slice(0, start)];
+  const stops = [...rail.stations].sort((a, b) => a.s - b.s);
   const legs = stops.map((st, i) => leg(st.s, stops[(i + 1) % stops.length].s, rail));
-  const lap = legs.reduce((n, l) => n + l.time + SERVICE.dwell, 0);
-  const first = SERVICE.first * SECONDS_PER_HOUR, end = SERVICE.last * SECONDS_PER_HOUR;
-  const laps = Math.max(1, Math.floor((end - first) / lap));
-  const interval = laps > 1 ? (end - first - lap) / (laps - 1) : lap;
+  const naturalLap = legs.reduce((n, l) => n + l.time + SERVICE.dwell, 0);
+  const day = 24 * SECONDS_PER_HOUR;
+  const laps = Math.max(1, Math.floor(day / naturalLap));
+  const lap = day / laps;
+  const scale = (lap - stops.length * SERVICE.dwell) / (naturalLap - stops.length * SERVICE.dwell);
+  for (const l of legs) {
+    l.time *= scale;
+    l.v /= scale;
+    l.a /= scale ** 2;
+  }
   const departures = [];
   for (let k = 0; k < laps; k++) {
-    let t = first + k * interval;
+    let t = k * lap;
     for (const [i, st] of stops.entries()) {
       t += SERVICE.dwell;
       departures.push({lap: k, station: st.id, at: t, arriveNext: t + legs[i].time, next: stops[(i + 1) % stops.length].id});
       t += legs[i].time;
     }
   }
-  return {stops, legs, lap, laps, interval, first, end: departures.at(-1).arriveNext, departures, length: rail.length};
-}
-
-// Reverse clear of the points, then pull forward on the other track.
-const SHUNT_DISTANCE = 62;
-const shunt = {d: SHUNT_DISTANCE, time: 2 * Math.sqrt(SHUNT_DISTANCE / .8), v: Math.sqrt(SHUNT_DISTANCE * .8), a: .8};
-
-function shuntAt(berth, elapsed, toSiding, lap) {
-  const reversing = elapsed < shunt.time;
-  const t = reversing ? elapsed : elapsed - shunt.time;
-  const offset = legDistance(shunt, t);
-  const speed = Math.min(shunt.a * t, shunt.a * Math.max(0, shunt.time - t));
-  return {
-    s: berth.s - (reversing ? offset : SHUNT_DISTANCE - offset), speed,
-    phase: 'shunt', station: berth.id, lap, doors: false, siding: reversing !== toSiding,
-  };
+  return {stops, legs, lap, laps, departures, length: rail.length};
 }
 
 /** Train state at a clock hour: centre arc length s, speed, phase, station. */
 export function trainAt(rail, tt, hour) {
-  const t = wrap(hour, 24) * SECONDS_PER_HOUR, berth = tt.stops[0];
-  const startShunt = tt.first - 2 * shunt.time;
-  const park = tt.end + SERVICE.dwell;
-  if (t >= startShunt && t < tt.first) return shuntAt(berth, t - startShunt, false, -1);
-  if (t >= tt.end && t < park) return {s: berth.s, speed: 0, phase: 'dwell', station: berth.id, lap: tt.laps - 1, doors: true};
-  if (t >= park && t < park + 2 * shunt.time) return shuntAt(berth, t - park, true, tt.laps - 1);
-  if (t < tt.first || t >= tt.end) return {s: berth.s, speed: 0, phase: 'rest', station: berth.id, lap: -1, doors: false, siding: true};
-  const k = Math.floor((t - tt.first) / tt.interval); let u = t - tt.first - k * tt.interval;
-  if (u >= tt.lap) return {s: berth.s, speed: 0, phase: 'layover', station: berth.id, lap: k, doors: false};
-  for (let i = 0; i < tt.stops.length; i++) {
-    if (u < SERVICE.dwell) return {s: tt.stops[i].s, speed: 0, phase: 'dwell', station: tt.stops[i].id, lap: k, doors: u > 3 && u < SERVICE.dwell - 3, dwellLeft: SERVICE.dwell - u};
-    u -= SERVICE.dwell; const l = tt.legs[i];
-    if (u < l.time) {
-      const x = legDistance(l, u), x2 = legDistance(l, u + .1);
-      return {s: wrap(l.from + x, rail.length), speed: (x2 - x) / .1, phase: 'run', station: null, next: tt.stops[(i + 1) % tt.stops.length].id, lap: k, doors: false};
+  const t = wrap(hour, 24) * SECONDS_PER_HOUR;
+  const lap = Math.floor(t / tt.lap);
+  let u = t - lap * tt.lap;
+  for (const [i, st] of tt.stops.entries()) {
+    if (u < SERVICE.dwell) return {s: st.s, speed: 0, phase: 'dwell', station: st.id, lap, doors: u > 3 && u < SERVICE.dwell - 3, dwellLeft: SERVICE.dwell - u};
+    u -= SERVICE.dwell;
+    const l = tt.legs[i];
+    if (u < l.time || i === tt.legs.length - 1) {
+      const x = legDistance(l, u);
+      const speed = Math.max(0, Math.min(l.a * u, l.v, l.a * (l.time - u)));
+      return {s: wrap(l.from + x, rail.length), speed, phase: 'run', station: null, next: tt.stops[(i + 1) % tt.stops.length].id, lap, doors: false};
     }
     u -= l.time;
   }
-  return {s: berth.s, speed: 0, phase: 'rest', station: berth.id, lap: k, doors: false};
 }
 
 /** Each vehicle of the consist: centre pose, yaw and footprint. */
-export function trainCars(rail, s, siding = false) {
-  const pose = siding && rail.siding ? sidingPose : railPose;
+export function trainCars(rail, s) {
   let front = s + HALF; const out = [];
   for (const c of CONSIST) {
-    const mid = front - c.length / 2, a = pose(rail, mid + c.length * .32), b = pose(rail, mid - c.length * .32);
+    const mid = front - c.length / 2, a = railPose(rail, mid + c.length * .32), b = railPose(rail, mid - c.length * .32);
     const centre = [(a.p[0] + b.p[0]) / 2, (a.p[1] + b.p[1]) / 2], d = [a.p[0] - b.p[0], a.p[1] - b.p[1]], n = Math.hypot(...d) || 1;
     out.push({asset: c.asset, centre: c.centre, s: mid, pos: centre, y: (a.y + b.y) / 2, pitch: Math.atan2(a.y - b.y, n), dir: [d[0] / n, d[1] / n], yaw: Math.atan2(d[0], d[1]), length: c.length, width: c.width, hidden: inTunnel(rail, mid + c.length / 2) && inTunnel(rail, mid - c.length / 2)});
     front -= c.length + COUPLING;
@@ -120,7 +103,6 @@ export function trainCars(rail, s, siding = false) {
 // road and rise once the last coach is 2 m clear of the deck.
 export const CROSSING_WARN = 60;
 export function crossingState(rail, c, train) {
-  if (train.phase === 'rest') return {closed: false, lower: 0};
   const r = rel(c.s, train.s, rail.length); // + = crossing ahead of the train centre
   const ahead = r - HALF, behind = -r - HALF;
   if (ahead > CROSSING_WARN + 8 || behind > c.reach + 2) return {closed: false, lower: 0};
@@ -147,7 +129,7 @@ function placeFor(town, st, pick, graph) {
   const choices = [...town.venues, ...town.buildings.map((b) => ({...b, entry: b.door}))]
     .filter((v) => v.entry && !v.id?.startsWith('rail-') && v.district === st.district && dist(v.entry, st.centre) < 80)
     .filter((v) => {
-      const path = walkBetween(graph, v.entry, st.entry ?? UNION_GATE[0]);
+      const path = walkBetween(graph, v.entry, st.entry);
       return 'cross' in path.at(-1);
     });
   return choices[Math.floor(pick() * choices.length)];
@@ -171,22 +153,17 @@ export function planTravellers(town, rail, tt, graph, {count = 18, seed = town.s
     const start = placeFor(town, from, random, graph), end = placeFor(town, to, random, graph);
     if (!start || !end) continue;
     const spot = (st) => { const along = (random() - .5) * (st.length - 8), k = .35 + random() * .3; return [st.centre[0] + st.along[0] * along + st.out[0] * (k - .5) * (st.far - st.near), st.centre[1] + st.along[1] * along + st.out[1] * (k - .5) * (st.far - st.near)]; };
-    const fromEntry = from.entry ?? platformGate(from), toEntry = to.entry ?? platformGate(to);
+    const fromEntry = from.entry, toEntry = to.entry;
     const inboundWalk = walkBetween(graph, start.entry, fromEntry);
     const outboundWalk = walkBetween(graph, toEntry, end.entry);
-    const exit = [spot(to), ...gateway(to).reverse()];
-    const inbound = [...inboundWalk.map((p) => p.pos), ...gateway(from), spot(from)];
+    const exit = [spot(to)];
+    const inbound = [...inboundWalk.map((p) => p.pos), spot(from)];
     const outbound = [...exit, ...outboundWalk.map((p) => p.pos)];
     const crossingEdges = (walk, offset = 0) => new Map(walk.flatMap((p, i) => p.cross ? [[i + offset, [walk[i - 1].pos, p.pos]]] : []));
     out.push({id: 'rail-traveller-' + n, from: from.id, to: to.id, depart: dep.at, arrive: arrive.arriveNext, inbound, outbound, inboundCrossings: crossingEdges(inboundWalk), outboundCrossings: crossingEdges(outboundWalk, exit.length), origin: start.id, destination: end.id, model: Math.floor(random() * 1e6)});
   }
   return out;
 }
-// Union's platform is reached from the station forecourt, through the hall.
-export const UNION_GATE = [[-88, -147], [-80, -147], [-80, -159.4]];
-function platformGate(st) { return st.id === 'union' ? UNION_GATE[0] : st.entry; }
-function gateway(st) { return st.id === 'union' ? UNION_GATE.slice(1).map((p) => [...p]) : []; }
-
 const WALK = 1.25;
 /**
  * Precompute each traveller's walking timeline at 0.25 s resolution, holding
@@ -241,7 +218,7 @@ function advanceTraveller(state, track, seconds, clearRoad, clearRail) {
     const b = track[index + 1];
     const step = Math.min(seconds, b.t - state.t);
     if (b.crossing && state.crossing !== b.crossing && !clearRoad(...b.crossing)) return false;
-    const from = sample(track, state.t).pos, to = sample(track, state.t + step).pos;
+    const from = sample(track, state.t).pos, to = sample(track, Math.min(b.t, state.t + step)).pos;
     if (!clearRail(from, to)) return false;
     state.crossing = b.crossing;
     state.t = b.t - state.t - step < 1e-8 ? b.t : state.t + step;
@@ -254,7 +231,7 @@ function advanceTraveller(state, track, seconds, clearRoad, clearRail) {
 export function createRailwayService(town, graph) {
   const rail = town.railway, tt = timetable(rail);
   const travellers = graph ? travellerTimeline(rail, tt, planTravellers(town, rail, tt, graph)) : [];
-  let hour = 0, train = trainAt(rail, tt, 0), states = rail.crossings.map(() => ({closed: false, lower: 0})), cars = trainCars(rail, train.s, train.siding);
+  let hour = 0, train = trainAt(rail, tt, 0), states = rail.crossings.map((c) => crossingState(rail, c, train)), cars = trainCars(rail, train.s);
   let clearRoad = () => true;
   const clear = (a, b, pad) => railClear(rail, states, a, b, pad);
   const walkers = new Map();
@@ -266,7 +243,7 @@ export function createRailwayService(town, graph) {
       const seek = h < hour || Math.abs((h - hour) * SECONDS_PER_HOUR - dt) > 1e-5;
       hour = h; train = trainAt(rail, tt, h);
       states = rail.crossings.map((c) => crossingState(rail, c, train));
-      cars = trainCars(rail, train.s, train.siding);
+      cars = trainCars(rail, train.s);
       if (seek) walkers.clear();
       const now = hour * SECONDS_PER_HOUR;
       for (const tr of travellers) {
@@ -280,7 +257,7 @@ export function createRailwayService(town, graph) {
           continue;
         }
         if (state?.track !== track) {
-          const t = seek ? Math.min(now, track.at(-1).t) : Math.max(track[0].t, now - dt);
+          const t = Math.min(track.at(-1).t, Math.max(track[0].t, seek ? now : now - dt));
           // A seek can place someone partway across a road. Let them finish
           // that crossing under the same rules as a continuously moving walker.
           const crossing = seek ? track[Math.ceil((t - track[0].t) * 4 - 1e-8)].crossing : undefined;
@@ -310,52 +287,16 @@ export function createRailwayService(town, graph) {
   };
 }
 
-function areaCentre(points) {
-  let area = 0, x = 0, z = 0;
-  for (const [i, a] of points.entries()) {
-    const b = points[(i + 1) % points.length], signed = a[0] * b[1] - b[0] * a[1];
-    area += signed;
-    x += (a[0] + b[0]) * signed;
-    z += (a[1] + b[1]) * signed;
-  }
-  return [x / (3 * area), z / (3 * area)];
-}
-
-/** Measured limits used by the two Grand Loop town rules. */
-export function grandLoopReview(town, graph, consist = CONSIST) {
-  const rail = town.railway, polygon = rail.samples.map((q) => q.p);
-  const maple = hasMapleHollow(town);
-  const districtIds = maple ? [...RAIL_DISTRICTS, 'maple-hollow'] : RAIL_DISTRICTS;
-  const enclosure = districtIds.map((id) => {
-    const centre = id === 'pinewood' && town.woods ? areaCentre(town.woods.area) : town.districts.find((d) => d.id === id)?.center;
-    return {id, centre, enclosed: Boolean(centre && polygonContains(polygon, centre))};
+/** Named platform signs and measured walks from the two approved landmarks. */
+export function railwayReview(town, graph, consist = CONSIST) {
+  const stops = town.railway.stations.map((st) => {
+    const entry = town.venues.find((v) => v.id === st.venue)?.entry;
+    const sign = st.furniture.find((f) => f.asset === 'station_nameboard' && f.sign?.trim())?.sign;
+    const path = entry ? walkBetween(graph, st.origin, entry) : [];
+    const linked = path.length > 0 && 'cross' in path.at(-1) && dist(path[0].pos, st.origin) < 5 && dist(path.at(-1).pos, entry) < .75;
+    const distance = linked ? path.slice(1).reduce((n, q, i) => n + dist(q.pos, path[i].pos),
+      dist(st.origin, path[0].pos) + dist(entry, path.at(-1).pos)) : Infinity;
+    return {id: st.id, origin: st.origin, entry, sign, linked, distance};
   });
-  const stops = RAIL_POIS.filter((poi) => !poi.parcel || maple).map((poi) => {
-    const st = rail.stations.find((s) => s.id === poi.station);
-    const place = town.venues.find((v) => v.id === poi.place);
-    const landmark = town.registry?.places.find((v) => v.id === poi.registry);
-    const origin = poi.gate ?? place?.entry ?? landmark?.entryPoints?.[0]?.position;
-    const station = town.venues.find((v) => v.id === st?.venue);
-    const entry = station?.entry;
-    const sign = st?.furniture.find((f) => f.asset === 'station_nameboard' && f.sign?.trim())?.sign;
-    const path = origin && entry ? walkBetween(graph, origin, entry) : [];
-    const linked = path.length > 0 && 'cross' in path.at(-1) && dist(path[0].pos, origin) < 5 && dist(path.at(-1).pos, entry) < .75;
-    let distance = linked ? dist(origin, path[0].pos) + dist(entry, path.at(-1).pos) : Infinity;
-    if (linked) {
-      for (let i = 1; i < path.length; i++) distance += dist(path[i - 1].pos, path[i].pos);
-      if (st.existing) {
-        for (let i = 1; i < UNION_GATE.length; i++) distance += dist(UNION_GATE[i - 1], UNION_GATE[i]);
-      } else {
-        const firstLink = town.roads.find((r) => r.station === st.id && dist(r.a, entry) < .01);
-        if (firstLink) {
-          const flat = dist(firstLink.a, firstLink.b);
-          distance += Math.hypot(flat, st.y + .57) - flat;
-        }
-      }
-    }
-    return {id: poi.id, station: poi.station, origin, entry, sign, linked, distance};
-  });
-  const trailing = consist.filter((c) => c.role === 'passenger' || c.role === 'freight').length;
-  const tracedLength = polygon.reduce((n, p, i) => n + dist(p, polygon[(i + 1) % polygon.length]), 0);
-  return {length: Math.min(rail.length, tracedLength), enclosure, enclosed: enclosure.filter((d) => d.enclosed).length / enclosure.length, trailing, stops};
+  return {trailing: consist.filter((c) => c.role === 'passenger' || c.role === 'freight').length, stops};
 }
