@@ -11,7 +11,7 @@ export { installTeslaTraffic } from './adapter.js';
 // Absolute simulation time makes pause, speed and deterministic capture agree.
 export function createTeslaTown(scene,town,{traffic=null,residents=null}={}){
   const root=new THREE.Group();root.name='Thistlebrook electric vehicles';scene.add(root);
-  const adapter=traffic?installTeslaTraffic(traffic):null;
+  const adapter=traffic?installTeslaTraffic(traffic,{count:0}):null;
   const simulation=adapter?null:createPreviewFleetSimulation();
   const fleet=simulation?simulation.vehicles.map((v,i)=>{
     const object=createTeslaVehicle(v.kind,i===5?{color:'#93b7ad'}:{});root.add(object);return object;

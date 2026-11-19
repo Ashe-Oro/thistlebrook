@@ -25,6 +25,9 @@ export const TOWN_RULE = Object.freeze({
   railFootprint: 'TOWN-22',
   platformLand: 'TOWN-23',
   placementOverlap: 'TOWN-24',
+  vehicleClearance: 'TOWN-25',
+  trafficFlow: 'TOWN-26',
+  packVehicles: 'TOWN-27',
 });
 
 export const ROAD_RULE = Object.freeze({

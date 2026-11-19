@@ -7,6 +7,7 @@
 // people come from life/runtime.js and vehicles from roads/regional-traffic.js.
 import * as THREE from 'three';
 import { toonMaterial } from '../toon.js';
+import { LAMP_LOOK } from './lamp-look.js';
 import { tagObject } from './registry/render-tags.js';
 import { REGIONAL } from '../roads/regional.js';
 import { suburbBatch, suburbNight, suburbLamps, loadSuburbGeometry, ROLE_BASE } from './maple-hollow-assets.js';
@@ -117,17 +118,12 @@ export async function buildMapleHollow(scene, town, {traffic = null} = {}) {
     const lot = lotOf.get(p.lot), y = p.model === 'vacant_lot_tile' ? -.1 : 0, scale = p.model === 'vacant_lot_tile' ? [p.scale, .3, p.scale] : p.scale;
     push(p.model, {matrix: matrix(p.pos, p.yaw, scale, y), id: idFor(p), lot, prop: p, lit: p.model === 'streetlamp' ? 1 : 0});
   }
-  // Parked family cars in the driveways (PARKING_BAYS), then the moving ones.
-  for (const b of mh.bays) push(b.model, {matrix: matrix(b.center, b.yaw, SCALE.car), id: b.lot, bay: b, lot: lotOf.get(b.lot)});
   for (const [model, items] of byModel) {
     const castShadow = items.some((it) => it.prop?.castShadow) || /house|garage|porch|deck|tree|family|suv/.test(model);
     loads.push(suburbBatch(model, items.map((it) => ({...it,
       mhSiding: colorFor(model, it.lot, 'siding'), mhRoof: colorFor(model, it.lot, 'roof'), mhAccent: colorFor(model, it.lot, 'accent'), mhLit: it.lit,
     })), {scale: items[0].prop?.scale && !Array.isArray(items[0].prop.scale) ? items[0].prop.scale : model.includes('house') ? SCALE.house : SCALE.prop, castShadow, attributes: true}).then((b) => { batches[model] = {...b, items}; root.add(b.mesh, b.hull); }));
   }
-  // Moving vehicles: the school bus and the family cars on Maple Hollow's lines.
-  const movers = {family_sedan: [], suv_minivan: [], family_pickup: []};
-  let busBatch = null;
   await Promise.all(loads);
   const regional = () => traffic;
   // ---- lights: streetlamp pools and porch glows (one instanced decal) ----
@@ -140,14 +136,6 @@ export async function buildMapleHollow(scene, town, {traffic = null} = {}) {
   porches.forEach((l, i) => pools.setMatrixAt(lamps.length + i, matrix(l.door, 0, [3.4, 1, 3.4], .11)));
   pools.userData.registryIds = [...lamps.map(() => district), ...porches.map((l) => l.key)];
   root.add(pools);
-  // ---- moving vehicle batches (created once, filled per frame) ----
-  const carSlots = 24;
-  for (const model of Object.keys(movers)) {
-    const b = await suburbBatch(model, Array.from({length: carSlots}, () => ({matrix: matrix([0, -500], 0, .01), id: district})), {scale: .9, castShadow: true, attributes: true, dynamic: true});
-    movers[model] = b; root.add(b.mesh, b.hull);
-  }
-  busBatch = await suburbBatch('school_bus', [{matrix: matrix(BUS.depot, 0, SCALE.bus), id: district}], {scale: SCALE.bus, castShadow: true, attributes: true, dynamic: true});
-  root.add(busBatch.mesh, busBatch.hull);
   // Puffs from grills during a BBQ; sprinkler arcs sway (instanced, one draw each).
   const puffs = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(.18, 0), new THREE.MeshBasicMaterial({color: '#eceee2', transparent: true, opacity: .45, depthWrite: false}), 18);
   puffs.name = 'Maple Hollow • grill smoke'; puffs.frustumCulled = false; root.add(puffs);
@@ -170,7 +158,6 @@ export async function buildMapleHollow(scene, town, {traffic = null} = {}) {
   // Dynamic batches keep at least one (hidden) instance so registry coverage always matches count.
   const hidden = matrix([0, -900], 0, .0001, -50);
   const setCount = (mesh, n) => { if (!n) mesh.setMatrixAt(0, hidden); mesh.count = Math.max(1, n); mesh.userData.registryIds = Array(mesh.count).fill(district); };
-  for (const b of Object.values(movers)) { setCount(b.mesh, 0); setCount(b.hull, 0); }
   setCount(puffs, 0);
   function update(t, hour, night, people = []) {
     suburbNight.value = night; suburbLamps.value = Math.max(0, Math.min(1, (night - .15) / .5));
@@ -185,22 +172,13 @@ export async function buildMapleHollow(scene, town, {traffic = null} = {}) {
         attr.needsUpdate = true;
       }
     }
-    const lampK = suburbLamps.value; pools.material.opacity = lampK * .8;
+    const lampK = suburbLamps.value; pools.material.opacity = lampK * LAMP_LOOK.suburbPool;
     for (let i = 0; i < porches.length; i++) pools.setMatrixAt(lamps.length + i, matrix(porches[i].door, 0, lit[i] ? [4.6, 1, 4.6] : [.001, 1, .001], .11));
     pools.instanceMatrix.needsUpdate = true;
-    // Vehicles from the regional simulation.
-    const rt = regional(), counts = {family_sedan: 0, suv_minivan: 0, family_pickup: 0};
-    if (rt) {
-      for (const v of rt.vehicles) {
-        if (!v.mapleHollow) continue;
-        const yaw = Math.atan2(v.direction[0], v.direction[1]);
-        if (v.kind === 'school-bus') { busBatch.set(0, matrix(v.position, yaw, SCALE.bus, .02)); busBatch.commit(); stats.bus = {status: v.status, position: v.position.map((x) => +x.toFixed(1)), doorOpen: v.doorOpen, run: v.run}; continue; }
-        const model = ['family_sedan', 'suv_minivan', 'family_pickup'][Math.floor(hash(v.id) * 3)], b = movers[model], i = counts[model]++;
-        if (i < carSlots) b.set(i, matrix(v.position, yaw, .9, .02));
-      }
-      for (const [model, b] of Object.entries(movers)) { setCount(b.mesh, Math.min(carSlots, counts[model])); setCount(b.hull, b.mesh.count); b.commit(); }
-      stats.cars = counts.family_sedan + counts.suv_minivan + counts.family_pickup;
-    }
+    const vehicles = regional()?.vehicles.filter(v => v.mapleHollow) ?? [];
+    const bus = vehicles.find(v => v.kind === 'school-bus');
+    if (bus) stats.bus = {status:bus.status, position:bus.position.map(x=>+x.toFixed(1)), doorOpen:bus.doorOpen, run:bus.run};
+    stats.cars = vehicles.length - Number(Boolean(bus));
     // BBQ smoke while someone tends a grill.
     let n = 0;
     for (const person of people) {

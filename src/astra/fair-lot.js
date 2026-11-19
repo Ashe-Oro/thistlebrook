@@ -4,13 +4,15 @@ import {residentPedestrian} from '../roads/walking.js';
 // instanced mesh per style and part, visitors one per townsfolk part.
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
-import {toonMaterial, outlineMaterial} from '../toon.js';
+import {toonMaterial} from '../toon.js';
 import {place} from '../catalog/loader.js';
 import {districtKit} from './downtown-kit.js';
-import {createTeslaVehicle} from './tesla/models.js';
+import {packVehicle} from './vehicle-models.js';
 import {tagAssembly} from './registry/render-tags.js';
 import * as P from './fair-lot-plan.js';
-import {createFairLotSim, STYLES} from './fair-lot-sim.js';
+import {lampPosts} from './lamp-posts.js';
+import {buildLampGlow} from './lamp-glow.js';
+import {createFairLotSim, STYLES, fairLotModel} from './fair-lot-sim.js';
 
 const C = {asphalt: '#7c8980', apron: '#7c8980', paint: '#ece6cf', kerb: '#c9c2ad', paving: '#d8c9a8', grass: '#8fae6a', pole: '#4c5a57', glow: '#ffe3a6', trunk: '#8a6a48', leaf: '#6f9f55', leaf2: '#86b263', red: '#b8433c', cream: '#f4dfad', teal: '#466b70'};
 const Y = {ground: .046, paint: .062}, ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
@@ -26,31 +28,6 @@ function flat(points, y, color) {
   const shape = new THREE.Shape(points.map(([x, z]) => new THREE.Vector2(x, -z)));
   const g = new THREE.ShapeGeometry(shape); g.rotateX(-Math.PI / 2); g.translate(0, y, 0);
   const m = new THREE.Mesh(g, toonMaterial(color)); m.receiveShadow = true; return m;
-}
-/** One template per style: paint (instance colour), fixed trim (vertex colour), ink hull. */
-function carTemplate(style) {
-  const src = new THREE.Group();
-  if (style === 'hatch') {
-    const box = (x, y, z, w, h, d, c, outline) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d).translate(x, y, z), toonMaterial(c)); if (outline) m.userData.ink = true; src.add(m); };
-    box(0, .46, 0, 1.18, .42, 2.56, '#ffffff', true); box(0, .86, -.12, 1.02, .4, 1.38, '#ffffff', true);
-    box(0, .88, -.12, 1.06, .3, 1.2, '#466568'); box(0, .87, .52, .96, .28, .1, '#466568');
-    box(0, .34, 1.29, 1.1, .16, .06, '#3c514e'); box(0, .34, -1.29, 1.1, .16, .06, '#3c514e');
-    for (const x of [-.56, .56]) for (const z of [-.82, .82]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(.22, .22, .14, 10).rotateZ(Math.PI / 2).translate(x, .22, z), toonMaterial('#2c3436')); src.add(w); }
-  } else src.add(createTeslaVehicle(style, {color: '#ffffff', scale: CAR_SCALE[style]}));
-  src.updateMatrixWorld(true);
-  const paint = [], fixed = [], ink = [];
-  src.traverse((o) => {
-    if (!o.isMesh) return;
-    let g = o.geometry.clone().applyMatrix4(o.matrixWorld); g = g.index ? g.toNonIndexed() : g;
-    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k);
-    if (!g.attributes.normal) g.computeVertexNormals();
-    if (o.userData.outline) { ink.push(g); return; }
-    const c = o.material.color ? o.material.color.clone() : new THREE.Color('#333');
-    if (o.userData.ink) ink.push(g.clone());
-    if (c.getHexString() === 'ffffff') paint.push(g);
-    else { const n = g.attributes.position.count, col = new Float32Array(n * 3); for (let i = 0; i < n; i++) col.set([c.r, c.g, c.b], i * 3); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); fixed.push(g); }
-  });
-  return {paint: mergeGeometries(paint), fixed: fixed.length ? mergeGeometries(fixed) : null, ink: ink.length ? mergeGeometries(ink) : null};
 }
 const vertexToon = () => trimMaterial ??= new THREE.MeshToonMaterial({color: '#ffffff', vertexColors: true, gradientMap: toonMaterial('#ffffff').gradientMap});
 function plain(o) {
@@ -69,8 +46,6 @@ function bakeStatics(statics, root) {
   const ground = new THREE.Mesh(mergeGeometries(geos), vertexToon()); ground.name = 'Funfair Parking ground'; ground.castShadow = true; ground.receiveShadow = true; root.add(ground); geos.forEach((g) => g.dispose());
   for (const list of batches.values()) { const m = new THREE.InstancedMesh(list[0].geometry, list[0].material, list.length); list.forEach((o, i) => m.setMatrixAt(i, o.matrixWorld)); m.name = 'Funfair Parking lamps & signs'; m.castShadow = list[0].castShadow; root.add(m); }
 }
-// Toy Teslas are 2.3-2.5 m long; scale them into the 2.6 m bay car.
-const CAR_SCALE = {sedan: 1.08, crossover: 1.06, cybertruck: 1};
 let trimMaterial = null;
 
 export async function buildFairLot(scene, town, {hour = 10, seed = town?.seed ?? 831} = {}) {
@@ -107,7 +82,6 @@ export async function buildFairLot(scene, town, {hour = 10, seed = town?.seed ??
   for (const c of P.CROSSWALKS) for (let x = c.min[0] + .3; x < c.max[0] - .1; x += .72) paint(x + .18, (c.min[1] + c.max[1]) / 2, .36, c.max[1] - c.min[1] - .3);
   // Lamps, trees, booth and the sign.
   for (const [x, z] of P.LAMPS) { drum(x, 2.1, z, .07, 4.2, C.pole); box(x, 4.2, z, .5, .1, .26, C.pole); box(x, 4.12, z, .36, .08, .2, C.glow, statics, true); }
-  for (const [x, z] of P.LAMPS.filter((_, i) => i % 3 === 0)) kit.pool(x, z, 4.2, '#ffd88a');
   P.TREES.forEach(([x, z], i) => { const s = .85 + (i % 3) * .12; drum(x, .8 * s, z, .12 * s, 1.6 * s, C.trunk); orb(x, 2.1 * s, z, 1.05 * s, i % 2 ? C.leaf : C.leaf2); orb(x + .3 * s, 2.7 * s, z - .2 * s, .7 * s, i % 2 ? C.leaf2 : C.leaf); });
   const [bx, bz] = P.BOOTH.center; box(bx, 1.05, bz, P.BOOTH.size[0], 2.1, P.BOOTH.size[1], C.cream); box(bx, 1.35, bz + .56, 1.0, .55, .03, C.teal); box(bx, 2.22, bz, P.BOOTH.size[0] + .35, .14, P.BOOTH.size[1] + .35, C.red);
   for (let i = 0; i < 4; i++) box(bx - .6 + i * .4, 2.33, bz, .18, .08, P.BOOTH.size[1] + .3, i % 2 ? C.cream : C.red);
@@ -118,20 +92,25 @@ export async function buildFairLot(scene, town, {hour = 10, seed = town?.seed ??
   const back = box(sx, 3.45, sz, sw + .2, 1.3, .1, C.teal); back.rotation.y = yaw; board.position.x += Math.sin(yaw) * .07; board.position.z += Math.cos(yaw) * .07;
   const disc = sign('P', sx + ax[0] * (sw / 2 + .55), 3.45, sz + ax[1] * (sw / 2 + .55), .9, .9, '#3f6fa3'); disc.rotation.y = yaw;
   bakeStatics(statics, root);
+  // streetlights: a pool and halo under every lot lamp (previously one pool per three lamps).
+  if (town) root.add(buildLampGlow(lampPosts(town).filter((p) => p.source === 'fair-lot'), {name: 'Funfair Parking lamps'}).group);
 
   // ---- cars
   const CAP = P.BAYS.length + 8, batches = new Map();
-  for (const {id} of STYLES) {
-    const tpl = carTemplate(id), parts = [];
-    for (const [key, geometry, material] of [['paint', tpl.paint, toonMaterial('#ffffff')], ['fixed', tpl.fixed, null], ['ink', tpl.ink, outlineMaterial(.009)]]) {
-      if (!geometry) continue;
-      const mesh = new THREE.InstancedMesh(geometry, key === 'fixed' ? vertexToon() : material, CAP); mesh.name = `Funfair Parking ${id} ${key}`; mesh.count = 1; mesh.setMatrixAt(0, ZERO); mesh.frustumCulled = false;
-      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); mesh.castShadow = key !== 'ink'; mesh.receiveShadow = key !== 'ink';
-      if (key === 'paint') mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 3), 3);
-      root.add(mesh); parts.push(mesh);
-    }
-    batches.set(id, parts);
-  }
+  await Promise.all(STYLES.flatMap(({id,colors})=>colors.map(async colour=>{
+    const template=await packVehicle(fairLotModel(id,colour));
+    template.updateMatrixWorld(true);
+    const parts=[];
+    template.traverse(part=>{
+      if(!part.isMesh)return;
+      const geometry=part.geometry.clone().applyMatrix4(part.matrixWorld);
+      const mesh=new THREE.InstancedMesh(geometry,part.material,CAP);
+      mesh.name=`Funfair Parking ${id} ${colour}`;mesh.count=1;mesh.setMatrixAt(0,ZERO);mesh.frustumCulled=false;
+      mesh.castShadow=!part.userData.outline;mesh.receiveShadow=!part.userData.outline;mesh.userData={...part.userData,fleet:template.userData.fleet};
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);root.add(mesh);parts.push(mesh);
+    });
+    batches.set(id+colour,parts);
+  })));
   // ---- visitors: instanced townsfolk, one batch per role and mesh.
   const roles = ['merchant', 'child'], VCAP = 40, crowd = [];
   for (const role of roles) {
@@ -144,18 +123,19 @@ export async function buildFairLot(scene, town, {hour = 10, seed = town?.seed ??
   const retag = (mesh) => { if (owner) mesh.userData.registryIds = Array.from({length: mesh.count}, () => owner); };
 
   const sim = createFairLotSim({hour, seed});
-  const tf = new THREE.Object3D(), color = new THREE.Color(), m4 = new THREE.Matrix4();
-  let lastT = null;
+  const tf = new THREE.Object3D(), m4 = new THREE.Matrix4();
+  let lastT = null, otherVehicles = () => [];
   function render(t) {
-    const counts = new Map(STYLES.map((s) => [s.id, 0]));
+    const counts = new Map([...batches.keys()].map(key=>[key,0]));
     for (const v of sim.vehicles()) {
-      const parts = batches.get(v.style), i = counts.get(v.style); if (!parts || i >= CAP) continue; counts.set(v.style, i + 1);
+      const key=v.style+v.color, parts=batches.get(key), i=counts.get(key);
+      if (!parts || i >= CAP) continue; counts.set(key,i+1);
       tf.position.set(v.position[0], .02, v.position[1]); tf.rotation.set(0, Math.atan2(v.direction[0], v.direction[1]), 0); tf.scale.setScalar(1); tf.updateMatrix();
-      for (const mesh of parts) { mesh.setMatrixAt(i, tf.matrix); if (mesh.instanceColor) mesh.setColorAt(i, color.set(v.color)); }
+      for (const mesh of parts) mesh.setMatrixAt(i,tf.matrix);
     }
     // Never an empty batch: the registry needs one id per instance, so an
     // unused style keeps a single zero-scale instance.
-    for (const [id, parts] of batches) for (const mesh of parts) { const n = counts.get(id); if (!n) mesh.setMatrixAt(0, ZERO); mesh.visible = n > 0; mesh.count = Math.max(1, n); mesh.instanceMatrix.needsUpdate = true; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true; }
+    for (const [id, parts] of batches) for (const mesh of parts) { const n = counts.get(id); if (!n) mesh.setMatrixAt(0, ZERO); mesh.visible = n > 0; mesh.count = Math.max(1, n); mesh.instanceMatrix.needsUpdate = true; }
     const people = sim.people(), per = new Map(roles.map((r) => [r, 0]));
     for (const p of people) {
       const n = Number(p.id.split('-').at(-1)), role = roles[n % roles.length], i = per.get(role); if (i >= VCAP) continue; per.set(role, i + 1);
@@ -169,7 +149,7 @@ export async function buildFairLot(scene, town, {hour = 10, seed = town?.seed ??
   render(0);
   const bounds = new THREE.Box3(new THREE.Vector3(P.LOT.minX, 0, P.LOT.minZ), new THREE.Vector3(P.LOT.maxX, 4, P.LOT.maxZ));
   return {
-    root, sim,
+    root, sim, setOtherVehicles(fn) { otherVehicles=fn; },
     selectables: [{type: 'venue', data: {id: 'funfair-parking', name: 'Funfair Parking', district: 'themepark', story: `${P.BAYS.length} marked bays beside Pinecrest's Funfair gate. Cars come off the mountain road, follow the arrows round the one-way aisles and park nose-in; visitors walk the centre promenade and cross at the zebras to the gate. Busy from late morning until the lights go out.`}, bounds}],
     update(t, hour, night, people = []) {
       kit.update(night);
@@ -179,7 +159,7 @@ export async function buildFairLot(scene, town, {hour = 10, seed = town?.seed ??
         const o = p.object?.position ?? p;
         if (o.x > 180 && o.x < 276 && o.z > -12 && o.z < 42) near.push(p.actor ? residentPedestrian(p.actor) : o);
       }
-      if (dt > 0) sim.update(dt, hour, near, t); else sim.update(1e-6, hour, near, t);
+      sim.update(dt || 1e-6, hour, near, t, otherVehicles());
       render(t);
     },
     audit() { return {...sim.audit(), drawCalls: 1 + dynamic.length}; },

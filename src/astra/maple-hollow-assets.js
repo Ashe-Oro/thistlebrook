@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { createGLTFLoader } from '../gltf-loader.js';
 import { RAMP, outlineMaterial } from '../toon.js';
 import { hullFor } from './themepark-assets.js';
+import { LAMP_LOOK } from './lamp-look.js';
 
 const BASE = import.meta.env?.BASE_URL ?? '/';
 // Literal paths: tools/prepare-deploy-dist.mjs ships exactly the models named here.
@@ -105,7 +106,7 @@ varying float vMhGlass; varying float vMhLamp;`)
       .replace('#include <common>', '#include <common>\nuniform float uAstraNight;\nuniform float uMhLamps;\nvarying float vMhGlass; varying float vMhLamp;')
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
  if(vMhGlass>.5){totalEmissiveRadiance+=vec3(1.0,.48,.09)*uAstraNight*.9;diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.8,.4,.1),uAstraNight);}
- if(vMhLamp>.5){totalEmissiveRadiance+=vec3(1.0,.78,.42)*uMhLamps*1.6;diffuseColor.rgb=mix(diffuseColor.rgb,vec3(1.0,.86,.55),uMhLamps*.7);}`);
+ if(vMhLamp>.5){totalEmissiveRadiance+=vec3(1.0,.78,.42)*uMhLamps*${LAMP_LOOK.suburbGlass.toFixed(2)};diffuseColor.rgb=mix(diffuseColor.rgb,vec3(1.0,.86,.55),uMhLamps*.7);}`);
   };
   material.customProgramCacheKey = () => 'maple-hollow-suburb';
   return material;

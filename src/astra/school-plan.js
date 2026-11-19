@@ -195,7 +195,7 @@ export function planSchool(town, graph, walkBetween) {
   const doorToCampus = route(SCHOOL.door, SCHOOL.campusNode);
   const busToDoor = route(SCHOOL.campusNode, SCHOOL.door, SCHOOL.busApproach);
   const playground = town.venues.find((v) => v.type === SCHOOL.playground);
-  const toYard = route(SCHOOL.door, playground.entry, [], SCHOOL.playgroundGate);
+  const toYard = route(SCHOOL.door, SCHOOL.playgroundGate[0], [], SCHOOL.playgroundGate);
   const students = NAMES.map((name, i) => {
     const bus = i % 4 === 3 && far.length > 0;               // three Sunbeam Terrace pupils ride the bus
     const home = bus ? far[Math.floor(i / 4) % far.length] : near[i % near.length];

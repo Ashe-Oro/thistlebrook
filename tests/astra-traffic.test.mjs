@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import {resolveAll} from '../src/catalog/resolve-all.js';
 import {compileAstra,distanceToSegment} from '../src/compiler/astra.js';
 import {createTrafficSimulation,sampleLane} from '../src/astra/traffic-simulation.js';
+import {pedestrianGraph} from '../src/roads/pedestrian.js';
 import {TOWN_RULE} from '../src/compiler/town-rules.js';
 import {crossingClear,footprint,pointInFootprint} from '../src/roads/collisions.js';
 const catalog=resolveAll(JSON.parse(readFileSync(new URL('../src/catalog/bounds.json',import.meta.url))));
@@ -13,14 +14,23 @@ const simulate=(s,seconds,people=[])=>{for(let t=0;t<seconds;t+=.05)s.update(.05
 test('all lane routes stay on real motor roads, away from school paths and river bridges',()=>{
  const s=createTrafficSimulation(town);
  for(const [id,path] of Object.entries(s.routes))for(let d=0;d<path.length;d+=.1){const {position:p,direction:u}=sampleLane(path,d);
-  for(const side of [-.49,.49]){const edge=[p[0]-u[1]*side,p[1]+u[0]*side];assert(s.roads.some(r=>distanceToSegment(edge,r.a,r.b)<=r.width/2),`${id} leaves street envelope at ${edge}`);}
+  const halfWidth=id==='station-reverse-cycle'?s.vehicles.find(v=>v.route===id).width/2+.05:.49;
+  for(const side of [-halfWidth,halfWidth]){const edge=[p[0]-u[1]*side,p[1]+u[0]*side];assert(s.roads.some(r=>distanceToSegment(edge,r.a,r.b)<=r.width/2),`${id} leaves street envelope at ${edge}`);}
   assert(p[1]<6,'Traffic must not drive onto wooden footbridges');
  }
  for(const seed of [0,7,42,99])assert.doesNotThrow(()=>createTrafficSimulation(compileAstra(catalog,seed)));
 });
 test('the town bus clears the sidewalk at the downtown jog',()=>{
  const {vehicles}=createTrafficSimulation(town),bus=vehicles.find(v=>v.kind==='bus'&&v.route==='town');
- const sidewalk=Array.from({length:41},(_,i)=>[-36.2486+i*.1,-13.3806+i*.00625]);
+ const graph=pedestrianGraph(town), sidewalk=[];
+ graph.edges.forEach((edges,i)=>edges.forEach(edge=>{
+  if(!edge.sidewalk||edge.to<=i)return;
+  const a=graph.nodes[i].pos,b=graph.nodes[edge.to].pos;
+  if(Math.max(a[0],b[0])<-40||Math.min(a[0],b[0])>-29||[a,b].some(p=>p[1]<-20||p[1]>-10))return;
+  const steps=Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/.1);
+  for(let j=0;j<=steps;j++)sidewalk.push(a.map((v,axis)=>v+(b[axis]-v)*j/steps));
+ }));
+ assert(sidewalk.some(p=>p[0]>-37&&p[0]<-34));
  for(let distance=0;distance<bus.path.length;distance+=.05){
   const pose=sampleLane(bus.path,distance);
   if(pose.position[0]<-40||pose.position[0]>-29)continue;

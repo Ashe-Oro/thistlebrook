@@ -1,7 +1,7 @@
 // Deterministic authored vignettes share the town clock and pause/speed controls.
 // They are not a city-wide emergency or healthcare simulation.
 export const FIRE_ROUTE = [[-88,-84],[-88,-77],[-80,-77],[-80,-52],[-89,-52]];
-export const DELIVERY_ROUTE = [[-71,-79],[-71,-77],[-80,-77],[-80,-33],[-78,-33],[-78,-18]];
+export const DELIVERY_ROUTE = [[-73.48,-83.25],[-73.48,-77],[-80,-77],[-80,-33],[-78,-33],[-78,-20.5]];
 export const STORY_ROUTE = [[-52,-82],[-52,-77],[-80,-77],[-80,-54],[-70,-54],[-70,-42],[-60,-42],[-60,-46]];
 export function sampleRoute(points, fraction) {
   const lengths=points.slice(1).map((p,i)=>Math.hypot(p[0]-points[i][0],p[1]-points[i][1]));
@@ -22,3 +22,11 @@ export function civicLifeState(t,hour) {
   return {cycle,phase,fireProgress,fireVisible:cycle>=16&&cycle<49,waterVisible:cycle>=40&&cycle<54,
     libraryOpen:hour>=8&&hour<19,storyTime:hour>=15&&hour<18,parkOpen:hour>=6&&hour<21,deliveryActive:hour>=8&&hour<16};
 }
+
+// Positions shared by the scene and collision checks.
+export const CIVIC_PARKED = [
+  {id:'civic-reserve', model:'af-fire-tender', center:[-94,-84], yaw:0},
+  {id:'civic-ambulance', model:'rc-ambulance', center:[-65.5,-84], yaw:Math.PI/2},
+  {id:'civic-patrol', model:'vb-police', center:[-87,-57], yaw:Math.PI/2},
+  {id:'astra-school-bus', model:'sn-school-bus', center:[21,-61], yaw:0},
+];

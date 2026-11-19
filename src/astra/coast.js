@@ -62,7 +62,7 @@ export async function buildCoast(scene,town) {
   for(const z of [-102,-88,-74,-60,-46,-32,-18,-4]){
     palm(105.3,z,5.5+(Math.abs(z)%3)*.5,z*.1);
     box(105.6,.3,z,1.8,.4,1.8,'#c3b99c');
-    drum(109,z%3?2.5:2.6,z-4,.06,5,'#527b79');orb(109,5.05,z-4,.22,'#ffe6af',kit.root,true);kit.pool(109,z-4,3,'#ffe5a3');
+    drum(109,z%3?2.5:2.6,z-4,.06,5,'#527b79');orb(109,5.05,z-4,.22,'#ffe6af',kit.root,true);kit.pool(109,z-4,3,'#ffe5a3',true);
     box(109,.5,z+3,1.1,.14,2.2,'#b89472');box(109.5,.9,z+3,.1,.8,2.2,'#b89472');box(109,.22,z+3,.6,.44,1.7,'#6f8d83');
     drum(109,.48,z+5,.32,.9,'#729f9a');
   }

@@ -1,5 +1,7 @@
 import {tagDistrictModels} from './registry/district-models.js';
 import * as THREE from 'three';
+import { QUAY_LAMPS } from './lamp-posts.js';
+import { LAMP_LOOK } from './lamp-look.js';
 import { createGLTFLoader } from '../gltf-loader.js';
 import { place } from '../catalog/loader.js';
 import { toonMaterial, toonVertexColorMaterial } from '../toon.js';
@@ -143,7 +145,7 @@ export async function buildHarbor(scene,town) {
     const g=new THREE.Group();dynamic.add(g);orb(0,0,0,.18,'#f2e9d2',g).scale.set(.17,.13,.32);
     const wings=[-1,1].map(side=>{const m=box(side*.4,0,0,.7,.045,.22,'#ece7d2',g);return m;});gulls.push({o:g,wings,n});
   }
-  for(const x of [29,43,51,66,81,90]){
+  for(const [x] of QUAY_LAMPS){
     cylinder(x,1.7,44.7,.07,3.4,'#647b70');box(x,3.35,44.7,.6,.12,.6,'#49665e');
     const bulb=orb(x,3.1,44.7,.19,'#ffdea1',dynamic);bulb.material=new THREE.MeshBasicMaterial({color:'#ffdea1'});lamps.push(bulb);
     const light=new THREE.PointLight('#ffc879',0,8,1.8);light.position.set(x,2.8,44.7);dynamic.add(light);lamps.push(light);
@@ -163,7 +165,7 @@ export async function buildHarbor(scene,town) {
       for(const b of buoys){b.o.position.y=-.3+Math.sin(t*1.5+b.n)*.06;b.o.rotation.z=Math.sin(t+b.n)*.07;}
       for(const {o,wings,n} of gulls){const a=t*.13+n*.9;o.position.set(65+Math.cos(a)*23,7+n*.7+Math.sin(a*2),62+Math.sin(a)*13);o.rotation.y=-a;wings.forEach((w,i)=>w.rotation.z=(i?1:-1)*Math.sin(t*4+n)*.4);o.visible=hour>5&&hour<20;}
       beacon.rotation.y=t*.2;beacon.visible=night>.25;lamp.visible=night>.2;beaconLight.intensity=night*5;lantern.material.emissive.setRGB(night*.9,night*.4,night*.09);
-      for(const m of lamps){if(m.isLight)m.intensity=night*2.5;else m.visible=night>.2;}
+      for(const m of lamps){if(m.isLight)m.intensity=night*LAMP_LOOK.harbourLight;else m.visible=night>.2;}
     },
     audit(){return {...life.audit(),boats:boats.length+watercraft.boats.filter(b=>b.g.visible).length,watercraft:watercraft.audit(),lighthouseOn:beacon.visible,beaconAngle:beacon.rotation.y};},
   };

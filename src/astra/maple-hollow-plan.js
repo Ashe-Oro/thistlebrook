@@ -1,3 +1,4 @@
+import {MAPLE_VEHICLE_MODELS, vehicleModel} from './traffic-fleet.js';
 // OWNER: opus-suburb lane. Maple Hollow: an American-suburb district north of
 // Thistlebrook High (site x -40..60, z -185..-105). Pure layout data and compiler
 // hooks: no THREE, no DOM, no random draws (every choice is a stable hash, so
@@ -10,7 +11,7 @@ export const MH = 'maple-hollow';
 export const MAPLE_HOLLOW_BOUNDS = Object.freeze({minX: -42, maxX: 60, minZ: -183, maxZ: -106});
 export const MAPLE_HOLLOW_VIEW = Object.freeze({x: 10, z: -145, zoom: 1.6});
 // Scales against the town (docs/specs/suburb-assets.md; tuned values in docs/OPUS-SUBURB-LOG.md).
-export const SCALE = Object.freeze({house: .75, prop: .75, car: .85, bus: .55, tree: .75, garage: .62});
+export const SCALE = Object.freeze({house: .75, prop: .75, tree: .75, garage: .62});
 const KERB = 2.8, VERGE = 4.1; // carriageway half width (REGIONAL.width / 2) and lot front setback from the centerline
 
 // ---- streets (authored centerlines, world coordinates) ----
@@ -50,7 +51,6 @@ export const FOOT = Object.freeze({
   garage: [-3.28, -3.17, 3.28, 3.25], front_porch: [-1.94, -1.1, 1.94, 1.97], backyard_deck: [-2.2, -1.69, 2.2, 2.62],
   garden_shed: [-1.48, -1.27, 1.8, 1.27], kids_treehouse: [-1.99, -1.89, 1.87, 2.06], pergola: [-1.75, -1.72, 1.75, 1.72],
   swimming_pool: [-2.3, -1.6, 2.3, 1.6], swing_set: [-2.21, -.9, 1.64, 1.24], patio_table_chairs: [-1.05, -1.05, 1.05, 1.18],
-  family_sedan: [-.7, -1.55, .7, 1.57], suv_minivan: [-.75, -1.6, .75, 1.61], family_pickup: [-.74, -1.76, .74, 1.75], school_bus: [-1.15, -4.02, 1.15, 4.05],
 });
 export const HOUSES = ['bungalow_house', 'ranch_house', 'split_level_house', 'two_story_house', 'modern_house', 'townhouse_duplex'];
 export const HOUSE_LABEL = {bungalow_house: 'bungalow', ranch_house: 'ranch', split_level_house: 'split-level', two_story_house: 'two-storey', modern_house: 'modern', townhouse_duplex: 'duplex'};
@@ -175,11 +175,12 @@ export function planMapleHollow() {
     const carModel = ['family_sedan', 'suv_minivan', 'family_pickup'][Math.floor(h3 * 3)];
     const carZ = D / 2 - 1.4;
     if (h > .12) {
-      const center = F.w(dx, carZ), yaw = F.yaw(), cf = FOOT[carModel];
+      const center = F.w(dx, carZ), yaw = F.yaw();
+      const {length, width} = vehicleModel(MAPLE_VEHICLE_MODELS[carModel]);
       while (bays.some((b) => b.model === carModel && b.colour === PAINT[lot.palette.paint] && len(sub(b.center, center)) < 4)) {
         lot.palette.paint = 1 + lot.palette.paint % (PAINT.length - 1);
       }
-      const bay = {id: `maple-${lot.i}`, type: 'driveway', center, yaw: +yaw.toFixed(5), length: +((cf[3] - cf[1]) * SCALE.car).toFixed(3), width: +((cf[2] - cf[0]) * SCALE.car).toFixed(3), road: r5(lot.streetPoint), model: carModel, colour: PAINT[lot.palette.paint], lot: lot.key};
+      const bay = {id: `maple-${lot.i}`, type: 'driveway', center, yaw: +yaw.toFixed(5), length, width, road: r5(lot.streetPoint), model: carModel, colour: PAINT[lot.palette.paint], lot: lot.key};
       bays.push(bay); lot.bay = bay.id;
     }
     // Kerbside: mailbox by the driveway, wheelie bins at the garage end, address plaque on the walk.

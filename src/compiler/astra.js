@@ -1,3 +1,4 @@
+import {widenBusStreets} from '../roads/town-roads.js';
 import {buildRegistry} from '../astra/registry/index.js';
 import { compileTownScenes, checkScene } from './library-scenes.js';
 import { overlap as libraryOverlap } from '../catalog/library/index.js';
@@ -30,7 +31,7 @@ export function compileAstra(catalog, seed=831) {
  town.venues=[
   {id:'tennis',name:'Common Tennis Club',type:'tennis',pos:[1,-44],box:{min:[-12,-53],max:[14,-35]},entry:[1,-33]},
   {id:'basketball',name:'The Neighbourhood Court',type:'basketball',pos:[28,-44],box:{min:[18,-53],max:[38,-35]},entry:[28,-33]},
-  {id:'playground',name:'Little Oak Playground',type:'playground',pos:[-26,-44],box:{min:[-35,-53],max:[-17,-35]},entry:[-26,-33]},
+  {id:'playground',name:'Little Oak Playground',type:'playground',pos:[-26,-44],box:{min:[-35,-53],max:[-17,-35]},entry:[-26,-33],access:[-26,-36.2]},
   {id:'school',name:'Thistlebrook High School',type:'school',district:'common',height:12,pos:[-2,-61],box:{min:[-16,-67],max:[14,-55]},entry:[-2,-54.5],access:[16,-54.5]},
   {id:'baseball',name:'Thistlebrook Owls Baseball',type:'baseball',district:'common',pos:[-22,-84],box:{min:[-40,-101],max:[-4,-71]},entry:[-22,-69],access:[-22,-71]},
   {id:'football',name:'Owls Memorial Stadium',type:'football',district:'common',pos:[30,-84],box:{min:[0,-101],max:[61,-70]},entry:[30,-69],access:[30,-71]},
@@ -43,7 +44,7 @@ export function compileAstra(catalog, seed=831) {
  for(const x of [-22,-7,22])road([x,-15],[x,4],2.6);
  for(const x of [-22,22]) {road([x,4],[x,20.5],2.6);}
  road([-22,20.5],[22,20.5],2.2);
- for(const z of [-15,4]){road([-32,z],[-22,z]);road([22,z],[32,z]);}
+ for(const z of [-15,4]){road([-32,z],[-22,z]);road([22,z],[32,z],2.9);}
  // District spines are authored before parcels, furnishing and foliage.
  for(const x of [-22,22])road([x,-33],[x,-15],2.6);
  road([-34,-33],[46,-33],3);
@@ -69,9 +70,9 @@ export function compileAstra(catalog, seed=831) {
  const reserve=(id,x,z,rot=0,scale=1,pad=.25)=>{const b=box(id,x,z,rot,scale);if(![b.min,[b.min[0],b.max[1]],b.max,[b.max[0],b.min[1]]].every(p=>pointInTown(p,town)))return null;if(reservations.some(a=>overlap(a,b,pad)))return null;reservations.push(b);return b;};
  const homes=['cv-home-cottage','cv-home-thatched','cv-home-timber','cv-home-townhouse'];
  const slots=[
- [-28,-24,'cv-windmill','The Little Mill'],[-17,-24,null,'Clover Cottage'],[-7,-24,null,'Honeycomb House'],[4,-24,null,'Bluebell House'],[15,-24,'cv-chapel','Saint Willow’s'],[27,-24,null,'Foxglove Cottage'],
+ [-28,-24,'cv-windmill','The Little Mill'],[-16.2,-24,null,'Clover Cottage'],[-7,-24,null,'Honeycomb House'],[4,-24,null,'Bluebell House'],[15,-24,'cv-chapel','Saint Willow’s'],[27,-24,null,'Foxglove Cottage'],
  [-29,-5,'cv-bakery','Flour & Fern'],[-15,-5,null,'Rosemary Cottage'],[0,-6,'cv-tavern','The Copper Kettle'],[13,-5,'cv-store','Thistlebrook Provisions'],[29,-5,null,'Juniper House'],
- [-30,9,null,'Riverside Cottage'],[30,9,'cv-blacksmith','Bram’s Workshop'],[-29,25,'farm-farmhand-cottage','Orchard House'],[12,25,'farm-hay-barn','Clover Farm'],[30,25,'farm-farmhouse','The Farmhouse'],[55,-23,'cv-tavern','The Nightjar'],[55,-7,'cv-market-hall','The Lantern Room'],[55,4,'cv-store','Moonrise Gelateria'],
+ [-34.5,9.75,null,'Riverside Cottage'],[30,9,'cv-blacksmith','Bram’s Workshop'],[-29,25,'farm-farmhand-cottage','Orchard House'],[12,25,'farm-hay-barn','Clover Farm'],[30,25,'farm-farmhouse','The Farmhouse'],[55,-23,'cv-tavern','The Nightjar'],[55,-7,'cv-market-hall','The Lantern Room'],[55,4,'cv-store','Moonrise Gelateria'],
  [-71,-24,'cv-bakery','Sunrise Bakehouse'],[-59,-24,'cv-store','Sole & Stitch'],[-47,-24,'cv-home-townhouse','The Reading Room'],
  [-73,-6,'cv-tavern','Corner Cup Café'],[-42,-6,'cv-store','Petal & Stem'],[-57,9.5,'cv-home-timber','Thistlebrook Town Hall'],[-73,6,'cv-home-cottage','The Post Office']
  ];
@@ -105,6 +106,7 @@ export function compileAstra(catalog, seed=831) {
  for(const r of roads){if(r.a[0]===-42&&r.b[0]===-42)r.width=3;if(r.a[1]===-33&&r.b[1]===-33&&Math.min(r.a[0],r.b[0])<=-80)r.width=3;}
  for(const [a,b] of [[[-80,-103],[-105,-103]],[[-105,-103],[-105,-77]],[[-105,-77],[-100,-77]],[[-126,-33],[-144,-33]],[[-144,-33],[-144,-70]],[[-144,-70],[-115,-70]],[[-115,-70],[-115,-73]]])road(a,b,3,'avenue');
  for(const r of roads)if(r.a[1]===-52&&r.b[1]===-52&&Math.min(r.a[0],r.b[0])< -105)r.kind='pedestrian';
+ widenBusStreets(roads);
  town.catalogScenes=compileTownScenes(town);reservations.push(...town.catalogScenes.map(s=>s.box));
  town.interactions=town.catalogScenes.flatMap(s=>s.slots);
  // Props never stand in the river (a doorstep flower bed once landed in it).

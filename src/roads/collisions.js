@@ -47,3 +47,52 @@ export function crossingClear(a, b, vehicles) {
   }
   return true;
 }
+
+// Distance from a point to the oriented body. A zone stays occupied until
+// the complete footprint clears its perimeter.
+export function vehicleInZone(v, point, radius) {
+  const dx = point[0] - v.position[0], dz = point[1] - v.position[1];
+  const [x, z] = v.direction;
+  const along = Math.max(0, Math.abs(dx * x + dz * z) - v.length / 2);
+  const across = Math.max(0, Math.abs(dx * z - dz * x) - v.width / 2);
+  return along * along + across * across < radius * radius;
+}
+
+/** Guard a simulation substep against vehicles from any system. The
+ * broad-phase extent comes from both bodies, including long trucks. */
+export function sweepBlocker(vehicle, next, vehicles) {
+  const candidate = footprint(next);
+  for (const other of vehicles) {
+    if (other === vehicle) continue;
+    const dx = other.position[0] - next.position[0], dz = other.position[1] - next.position[1];
+    const reach = (vehicle.length + vehicle.width + other.length + other.width) / 2 + .05;
+    if (Math.abs(dx) > reach || Math.abs(dz) > reach) continue;
+    if (footprintsOverlap(candidate, footprint(other), .035)) return other;
+  }
+  return null;
+}
+
+/** Break a circular wait for reservations, without bypassing physical clearance. */
+export function releaseWaitCycles(vehicles, zones, events) {
+  for (const vehicle of vehicles) {
+    if (vehicle.speed > .02 || !vehicle.blockedBy) continue;
+    const seen = new Set();
+    let current = vehicle;
+    while (current?.speed <= .02 && current.blockedBy) {
+      if (seen.has(current)) {
+        if (current !== vehicle) break;
+        const cycle = [...seen].sort((a, b) => String(a.id).localeCompare(String(b.id), 'en', {numeric:true}));
+        if (cycle[0] !== vehicle) break;
+        const transferable = zones.find(zone => zone.owner === vehicle.blockedBy
+          && (zone.points??[zone.point]).every(p=>!vehicleInZone(zone.owner,p,zone.radius??4)));
+        if (transferable) {
+          transferable.owner = vehicle;
+          events.push({allowed:vehicle.id, cycle:cycle.map(v => v.id), at:transferable.point});
+        }
+        break;
+      }
+      seen.add(current);
+      current = current.blockedBy;
+    }
+  }
+}

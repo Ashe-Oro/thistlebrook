@@ -56,7 +56,9 @@ export function compileAssetVignettes(town,catalog,pointInWorld,reservations=[])
     // The exterior aisle is a footpath: it must sit beside the road, not on it.
     if(carriageways.some(b=>overlap(b,pathBox(aisle[0],aisle.at(-1),.45))))continue;
     const entry=aisle.reduce((a,b)=>Math.hypot(a[0]-street[0],a[1]-street[1])<Math.hypot(b[0]-street[0],b[1]-street[1])?a:b);
-    const join=[street[0],entry[1]],segments=[[street,join],[join,entry]].filter(([a,b])=>Math.hypot(a[0]-b[0],a[1]-b[1])>.01);
+    // Leave the road across its width before turning to meet the aisle.
+    const join=Math.abs(dz)>Math.abs(dx)?[entry[0],street[1]]:[street[0],entry[1]];
+    const segments=[[street,join],[join,entry]].filter(([a,b])=>Math.hypot(a[0]-b[0],a[1]-b[1])>.01);
     if(segments.some(([a,b])=>{
      const steps=Math.max(1,Math.ceil(Math.hypot(a[0]-b[0],a[1]-b[1])*2));
      for(let n=0;n<=steps;n++){const p=a.map((v,k)=>v+(b[k]-v)*n/steps);if(!pointInWorld(p,town)||Math.abs(p[1]-riverZ(p[0]))<3.4||spec.district==='outskirts'&&inLake(p,.3))return true;}

@@ -202,6 +202,30 @@ The audit samples the whole platform and its end ramps against the same water in
 
 Audit the physical footprint of props, structures, planters, patios and parking against nearby traffic surfaces. The road audit also checks parking against local footways and other placements. The Lantern Room's tables and hedge planters share a compiled terrace footprint so all their parts stay behind the kerb.
 
+## TOWN-25 · Vehicles never overlap
+
+2026-11-19
+
+> Every road vehicle, of every system, keeps its model’s footprint clear of every other at all times, junctions included.
+
+Every road vehicle keeps its model's footprint clear of other vehicles, including through junctions. `tools/sim-traffic.mjs` samples all vehicle systems and tests the oriented footprints for overlap.
+
+## TOWN-26 · Traffic never jams
+
+2026-11-19
+
+> A road end is a turnaround, never a trap.
+
+Vehicles keep moving or stop for a red light, a closed gate that reopens, a person on the crossing, or a scheduled stop. The traffic check reports waits over 30 seconds and identifies the blocker. A road end is a turnaround. `tests/traffic-fix.test.mjs` exercises the former road-end lockup and an artificial gate.
+
+## TOWN-27 · Every vehicle is a pack model
+
+2026-11-19
+
+> Please replace our vehicles with assets from the ThreeJS pack.
+
+Road vehicles use owned ThreeJS Assets models with cel shading and an ink outline. The footprint comes from the model's measured bounds and its rendered scale. `tests/traffic-fix.test.mjs` checks the bounds against the licensed models. The Roadster arena is a separate authored show.
+
 ## Rules in progress on other lanes
 
 These are already Ashe's rules. Their checks land with the lanes building those features.

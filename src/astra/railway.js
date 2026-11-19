@@ -5,6 +5,8 @@
 // Railway pack models (private ThreeJS Assets licence) load at runtime from the
 // local licensed mapping and are never copied into source or build output.
 import * as THREE from 'three';
+import {lampPosts} from './lamp-posts.js';
+import {buildLampGlow} from './lamp-glow.js';
 import {createGLTFLoader} from '../gltf-loader.js';
 import {RAMP, toonMaterial, toonVertexColorMaterial} from '../toon.js';
 import {inkMesh} from './ink-mesh.js';
@@ -268,6 +270,8 @@ export async function buildRailway(scene, town, {landscape = null} = {}) {
   // Lamp glows (night only).
   const glows = new THREE.InstancedMesh(new THREE.SphereGeometry(.2, 8, 6), new THREE.MeshBasicMaterial({color: '#ffd987', transparent: true, opacity: .85}), rail.stations.flatMap((s) => s.furniture.filter((f) => f.light)).length);
   { const o = new THREE.Object3D(); let i = 0; for (const st of rail.stations) for (const f of st.furniture.filter((f) => f.light)) { o.position.set(f.pos[0], st.y + .66 + 2.75, f.pos[1]); o.updateMatrix(); glows.setMatrixAt(i++, o.matrix); } glows.visible = false; root.add(glows); }
+  // streetlights: platform lamps light the platform as well as their glass.
+  root.add(buildLampGlow(lampPosts(town).filter((p) => p.source === 'railway'), {name: 'platform lamps'}).group);
   // Mixed steam service. All stock shares the same toon shader and ink hull.
   const moving = new THREE.Group(); moving.name = 'Northern Loop train'; root.add(moving);
   const cars = [];

@@ -94,7 +94,7 @@ export async function buildMidway(kit,moving,{pine}={}){
 
  await Promise.all(jobs);
  // Night pools under every lamp and the brightest attractions.
- for(const [x,z]of lamps)kit.pool(x,z,6,'rgba(255,214,140,.95)');
+ for(const [x,z]of lamps)kit.pool(x,z,6,'rgba(255,214,140,.95)',true);
  for(const [x,z,r]of [[0,51,9],[-36,12,13],[36,12,7],[20,12,8],[-36,40,8],[36,40,7],[-20,12,7],[0,12,8],[0,32,10],[-14,32,9],[14,32,9]])kit.pool(x,z,r,'rgba(255,190,130,.75)');
  return {lamps,update(t){for(const {c,x,z,k}of clouds){c.position.x=((x+t*.35+k*30+90)%180)-90;c.position.z=z+Math.sin(t*.01+k)*6;}}};
 }

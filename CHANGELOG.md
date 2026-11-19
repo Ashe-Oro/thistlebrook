@@ -2,11 +2,46 @@
 
 ## Unreleased
 
+- **Streetlights.** Every lamp post in Thistlebrook now lights at dusk. Before, only the six hand-placed Market Square and quarter lamps glowed. The 112 kerbside lamps from the street plan stayed dark, and so did Merrymead Park's posts and Sunbeam Court's lantern heads. Civic Green, the Works yard and both railway platforms lit their lamp glass but cast no light on the ground, and Funfair Parking put a pool under only one lamp in three. A single lamp-post registry now lists all 205 posts with the glow that lights each one. Lamps without a glow of their own get an instanced lantern head, ground pool and halo, three draws per district and no extra point lights. Ground pools and halos are about 40% brighter across the town, including Maple Hollow's lamps, the midway and coast lamp pools, the harbour quay and the `?life=1` village. Day lighting, the lamp models and their positions are unchanged. [Captures](shots/streetlights/) · [Spec and outcome](docs/specs/STREETLIGHTS.md).
+
+- **Traffic and vehicle models.** Regional drivers turn through the opposite lane one at a time. The old turnaround put both lanes on the centreline, where drivers could wait on each other indefinitely. Civic Green’s fire tender and delivery van now drive in the same simulation as the West Loop buses, cars and bicycles. Junction reservations account for the tail of each vehicle, and traffic uses footprints measured from the models you see. Regional roads use City, Vice Beach and Suburban Neighborhood cars and City buses. Civic Green uses an Airfield fuel truck for the fire tender, a Realistic City ambulance, a Vice Beach police cruiser, and a City delivery van. Astra High uses the Suburban Neighborhood school bus. Airport ground service uses the Airfield tug and cart train, Pinecrest uses City shuttles, and Funfair Parking uses City, Vice Beach and Suburban Neighborhood cars. Normal traffic uses the pack fleet. The Roadster arena remains a separate decision for Ashe. Vehicle classes now share 2.05 / 4.5 world units per metre across the town, regional roads, parking, airport and Starbase. The police cruiser reads at taxi size, the campus and regional school buses match, and parked cars match their moving counterparts. Bus streets, stops and marked bays account for the new dimensions. Starbase uses the Farm red tractor towing the Farm tractor trailer, with a second copy of the trailer staged at recovery. The trailer’s raised load platform supports the ship and leaves the tractor cab visible. [Traffic fix log](docs/specs/TRAFFIC-FIX-LOG.md).
+
+  | Class | Target length (m) | Model scale |
+  | --- | ---: | --- |
+  | Bicycle | 1.65 | Cozy Village 0.5625 |
+  | Convertible / sports | 4.4 | Vice Beach cruiser 0.6509, sports convertible 0.7332 |
+  | Sedan / hatch | 4.5 | City sedan 0.6706, Vice Beach pastel sedan 0.7085, Suburban family sedan 0.6569 |
+  | Taxi / police | 4.8 | City taxi 0.7153, Vice Beach police cruiser 0.7471 |
+  | Minivan / SUV | 5 | Suburban minivan 0.7094 |
+  | Delivery van | 5 | Class available for standard vans |
+  | Pushback tug | 5 | Airfield tug 0.8549 |
+  | Pickup | 5.3 | Suburban pickup 0.6876 |
+  | Box van | 6 | City delivery van 0.7132 |
+  | Ambulance | 6 | Realistic City ambulance 0.3945 |
+  | Heavy tractor | 7.5 | Farm red tractor 1.1988 |
+  | Garbage truck | 8 | City garbage truck 0.8118 |
+  | Fire tender | 8 | Airfield fuel truck 1.1262 |
+  | Baggage cart train | 10 | Airfield baggage cart train 1.1621 |
+  | School bus | 11 | Suburban school bus 0.6209 |
+  | City bus | 11.5 | City bus 1.1131 |
+  | Rocket trailer / recovery dolly | 13 | Farm tractor trailer 1.9319 |
+
+  At publish time the Blob model pack needs these six additions under `public/licensed/`.
+
+  - `airfield/fuel_truck.glb`
+  - `airfield/pushback_tug.glb`
+  - `airfield/baggage_cart_train.glb`
+  - `realistic-city/realistic_ambulance_01.glb`
+  - `farm/red_tractor.glb`
+  - `farm/tractor_trailer.glb`
+
 - **Merrymead Music Festival.** Five animated musicians play at the Merrymead Bandshell on weekend afternoons and every evening through 9:30 pm. Park visitors gather on the listening lawn, residents can exchange an evening outing for the concert, and popcorn and candy floss stalls open for the set. Stage lights and drifting notes follow the town clock. TOWN-20 checks audience facing and keeps the boards and roads clear. [Captures](shots/music-festival/) · [Decisions](docs/specs/overnight/MUSIC-FESTIVAL-LOG.md).
 
 - **Favicon.** The thistle on cream is now the tab icon and the home-screen icon: `favicon.ico` (16/32/48), `favicon-32.png`, `apple-touch-icon.png` (180) and `icon-512.png`.
 
 - **Northern Loop railway.** Replaced the Grand Loop with the surveyed 590.50 m Northern Loop. The steam train serves Roadster Proving Ground and Maple Hollow around the clock via three excavated tunnels with inked stone portals and earth berms. The route clears water and carriageways. The town audit now checks the full railway corridor, tunnel cover and platforms, and the Lantern Room patios sit behind the kerb.
+
+- **Main merge, 19 Nov 2026, traffic fix (published).** Merged village/traffic-fix (7b03f88) on top of 1cce7bf. TOWN-RULES.md keeps the railway rules (TOWN-19…24) and adds TOWN-25…27 in numeric order. Branch checks at 7b03f88: `test:ci` 271 tests pass, `sim:collisions` clear/rain/snow 0 events, `sim:traffic` seeds 831/42/99 0 overlaps, 0 stalls, 0 deadlock releases, `audit:roads` and railway audit clean, build and `deploy:dist` ok. The private Blob model pack is re-uploaded with the new airfield, realistic-city, farm and railway GLBs before publishing.
 
 - **Main merge, 19 Nov 2026 (published).** Merged village/railway-tunnels (1d763c2) on top of the Merrymead festival. Kept both rule sets (TOWN-19…24 and TOWN-20) and put TOWN-RULES.md and the rule registry back in numeric order. Main checks: `test:ci` 263 tests pass, `test:checks` pass, `sim:collisions` rain and snow ok, `audit:roads` 0 open (17 justified), railway plan validator 0 violations, build ok.
 

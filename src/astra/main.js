@@ -48,10 +48,13 @@ async function start(){
  const traffic=await createTraffic(scene,town,residents,world);tagAssembly(traffic.root,'market');
  // grok-roads: residents look both ways before a crossing; regional cars also
  // see town traffic. Both read the same pure simulations the tests use.
- const clearRoad=(a,b)=>crossingClear(a,b,[...traffic.simulation.vehicles,...(world.landscape?.traffic?.vehicles||[])]);
+ const townVehicles=()=>[...traffic.simulation.vehicles,...traffic.simulation.parked];
+ const lotVehicles=()=>world.expansions.fairlot.sim.vehicles();
+ world.expansions.fairlot.setOtherVehicles(()=>[...townVehicles(),...world.landscape.traffic.vehicles]);
+ const clearRoad=(a,b)=>crossingClear(a,b,[...townVehicles(),...world.landscape.traffic.vehicles,...lotVehicles()]);
  residents.life.setCrossingGuard(clearRoad);
  residents.life.setLocalWalkGuard(world.expansions.fairlot.sim.clearWalk);
- world.landscape?.setOtherVehicles?.(()=>traffic.simulation.vehicles);
+ world.landscape?.setOtherVehicles?.(()=>[...townVehicles(),...lotVehicles()]);
  // railway-loop: residents wait at a level crossing while its barriers are down.
  const railway=world.railway?.service;
  if(railway){residents.life.setRailGuard(railway.clear);railway.setCrossingGuard(clearRoad);}
@@ -112,7 +115,7 @@ async function start(){
   railway?.update(hour,simDt);
   if(!paused)residents.update(simDt,elapsed,hour);
   schoolDay.update(hour,weekday(),simDt,clearRoad,railway?.clear);
-  if(!paused)traffic.update(simDt);
+  if(!paused)traffic.update(simDt,hour);
   if(following)controls.target.lerp(following.object.getWorldPosition(new THREE.Vector3()).setY(0),1-Math.exp(-dt*5));
  controls.update(dt);selection.update();cameraUI.activity(selected,following===selected);lifePanel.update(selected,elapsed);
  ui.root.classList.toggle('exploring',activeView!=='village'||camera.zoom>1.4);const type=residents.life.weather;night=lighting.update(hour,type);tesla.update(elapsed,night);world.update(elapsed,night,hour,residents.people,weekday(),type);weather.update(type,elapsed,night,camera,controls.target);school.update(dt*(paused?0:speed),hour,weekday());workUI.update(world.works,controls,hour,camera.zoom);ui.clock(hour,weekday());lightControls.update(hour);if(render&&school.drawing)school.render();else

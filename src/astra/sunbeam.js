@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import { lampPosts, SUNBEAM_LAMPS, LAMP_LOOK } from './lamp-posts.js';
+import { buildLampGlow } from './lamp-glow.js';
+import { DISTRICT_OFFSETS } from '../compiler/astra-placement.js';
 import { place } from '../catalog/loader.js';
 import { toonMaterial } from '../toon.js';
 
@@ -117,7 +120,7 @@ export async function buildSunbeam(scene, town) {
   for(let n=0;n<7;n++){const x=-66+(n===3?-.45:n===4?.45:0),z=-50+n*.56;line([[x-.35,.225,z-.25],[x+.35,.225,z-.25],[x+.35,.225,z+.25],[x-.35,.225,z+.25],[x-.35,.225,z-.25]],'#fff0cb');}
   const pinwheel=new THREE.Group();pinwheel.position.set(-69,1.9,-55.8);moving.add(pinwheel);box(-69,1,-55.8,.055,2,.055,'#c6ac7a');
   for(let n=0;n<4;n++){const petal=box(0,.24,0,.26,.5,.035,['#ca8e77','#e5c16c','#7ca29a','#a6b1c1'][n],pinwheel);petal.rotation.z=n*Math.PI/2;petal.position.set(Math.sin(n*Math.PI/2)*.24,Math.cos(n*Math.PI/2)*.24,0);}
-  for(const [x,z]of [[-76,-51],[-46,-53],[-63,-36]]){asset('cv-streetlamp',x,z,.9);const glow=new THREE.PointLight('#ffce87',0,10,1.5);glow.position.set(x,2.8,z);scene.add(glow);lights.push(glow);}
+  for(const [x,z]of SUNBEAM_LAMPS){asset('cv-streetlamp',x,z,.9);const glow=new THREE.PointLight('#ffce87',0,10,1.5);glow.position.set(x,2.8,z);scene.add(glow);lights.push(glow);}
   const localSpots=[['elder',-63.2,-55,.97],['merchant',-62,-54.8,1],['child',-66,-49,.95],['farmhand',-69,-54.8,1],['innkeeper',-74.5,-55.9,1],['child',-64.7,-48.1,.85]];
   localSpots.forEach(([role,x,z,scale],n)=>jobs.push(place('townsfolk-'+role,{x,z,scale}).then(o=>{o.position.y=.22;moving.add(o);neighbours.push({o,n,x,z});})));
   // Repeated geometry is instanced, including the private kit's toon outlines.
@@ -125,11 +128,13 @@ export async function buildSunbeam(scene, town) {
   root.traverse(o=>{if(!o.isMesh)return;const key=o.geometry.uuid+o.material.uuid;if(!batches.has(key))batches.set(key,{o,matrices:[]});batches.get(key).matrices.push(o.matrixWorld.clone());});
   for(const {o,matrices}of batches.values()){const m=new THREE.InstancedMesh(o.geometry,o.material,matrices.length);matrices.forEach((matrix,i)=>m.setMatrixAt(i,matrix));m.castShadow=o.castShadow;m.receiveShadow=o.receiveShadow;scene.add(m);}
   root.traverse(o=>{if(o.isLine){const copy=o.clone();copy.applyMatrix4(o.parent.matrixWorld);scene.add(copy);}});
+  // streetlights: the courtyard lamps lit the ground but had no lantern head.
+  scene.add(buildLampGlow(lampPosts(town).filter(p=>p.source==='sunbeam'),{name:'Sunbeam lamps',offset:DISTRICT_OFFSETS.sunbeam}).group);
   neighbours.sort((a,b)=>a.n-b.n);
   return {selectables,stats:{homes:18,buildings:9,shops:2,courtyardNeighbours:6},
     audit:()=>({neighbours:neighbours.map(({o})=>({position:o.position.toArray(),rotation:o.rotation.y,visible:o.visible})),washing:washing.map(m=>m.rotation.x),pinwheel:pinwheel.rotation.z}),
     update(t,hour,night){
-      glass.color.set('#6c9399').lerp(new THREE.Color('#f4c477'),night);glass.emissive.set('#e9aa58');glass.emissiveIntensity=night*.65;lights.forEach(l=>l.intensity=night*5);
+      glass.color.set('#6c9399').lerp(new THREE.Color('#f4c477'),night);glass.emissive.set('#e9aa58');glass.emissiveIntensity=night*.65;lights.forEach(l=>l.intensity=night*LAMP_LOOK.sunbeamLight);
       washing.forEach((m,n)=>{m.rotation.x=Math.sin(t*1.6+n*.7)*.16;m.rotation.z=Math.sin(t+n)*.03;});pinwheel.rotation.z=-t*.75;
       neighbours.forEach(({o,n,x,z})=>{
         o.visible=hour>=7&&hour<21;

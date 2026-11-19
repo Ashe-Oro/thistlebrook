@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createGLTFLoader } from '../gltf-loader.js';
 import { toonVertexColorMaterial, outlineMaterial } from '../toon.js';
+import { FLEET_MODELS, LIVERY } from './traffic-fleet.js';
 
 const BASE = import.meta.env?.BASE_URL ?? '/';
 const OUTLINE_WORLD = .035;
@@ -18,7 +19,7 @@ export function loadPackGeometry(path) {
   if (!cache.has(path)) cache.set(path, loader.loadAsync(BASE + path).then((gltf) => {
     gltf.scene.updateMatrixWorld(true);
     const parts = [];
-    gltf.scene.traverse((o) => { if (!o.isMesh) return; const g = o.geometry.clone().applyMatrix4(o.matrixWorld); for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'color'].includes(k)) g.deleteAttribute(k); if (!g.attributes.color) { const c = new Float32Array(g.attributes.position.count * 3).fill(.8); g.setAttribute('color', new THREE.BufferAttribute(c, 3)); } if (g.attributes.color.itemSize === 4 || g.attributes.color.normalized || !(g.attributes.color.array instanceof Float32Array)) { const src = g.attributes.color, c = new Float32Array(src.count * 3); for (let i = 0; i < src.count; i++) { c[i * 3] = src.getX(i); c[i * 3 + 1] = src.getY(i); c[i * 3 + 2] = src.getZ(i); } g.setAttribute('color', new THREE.BufferAttribute(c, 3)); } parts.push(g.index ? g.toNonIndexed() : g); });
+    gltf.scene.traverse((o) => { if (!o.isMesh) return; const g = o.geometry.clone().applyMatrix4(o.matrixWorld); for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'color'].includes(k)) g.deleteAttribute(k); if (!g.attributes.color) { const c = new Float32Array(g.attributes.position.count * 3); const rgb = o.material.color?.toArray() ?? [.8,.8,.8]; for (let i = 0; i < c.length; i += 3) c.set(rgb, i); g.setAttribute('color', new THREE.BufferAttribute(c, 3)); } if (g.attributes.color.itemSize === 4 || g.attributes.color.normalized || !(g.attributes.color.array instanceof Float32Array)) { const src = g.attributes.color, c = new Float32Array(src.count * 3); for (let i = 0; i < src.count; i++) { c[i * 3] = src.getX(i); c[i * 3 + 1] = src.getY(i); c[i * 3 + 2] = src.getZ(i); } g.setAttribute('color', new THREE.BufferAttribute(c, 3)); } parts.push(g.index ? g.toNonIndexed() : g); });
     const geometry = parts.length === 1 ? parts[0] : mergeGeometries(parts);
     if (!geometry.attributes.normal) geometry.computeVertexNormals();
     geometry.computeBoundingBox();
@@ -40,7 +41,13 @@ export function retintGeometry(geometry, retint, hex) {
   if (variants.has(key)) return variants.get(key);
   const g = geometry.clone(), col = g.attributes.color, target = new THREE.Color(hex), match = [];
   let ref = 0;
-  for (let i = 0; i < col.count; i++) { const [h, s, v] = hsv(col.getX(i), col.getY(i), col.getZ(i)); if (s > .3 && v > .02 && hueGap(h, retint.hue) <= retint.width) { match.push([i, v]); ref += v; } }
+  const [minS,maxS]=retint.saturation??[.3,1], [minV,maxV]=retint.value??[.02,1];
+  for (let i = 0; i < col.count; i++) {
+    const [h,s,v]=hsv(col.getX(i),col.getY(i),col.getZ(i));
+    if(s>=minS&&s<=maxS&&v>=minV&&v<=maxV&&hueGap(h,retint.hue)<=retint.width){
+      match.push([i,v]);ref+=v;
+    }
+  }
   ref = match.length ? ref / match.length : 1;
   for (const [i, v] of match) { const k = Math.min(1.6, v / ref); col.setXYZ(i, Math.min(1, target.r * k), Math.min(1, target.g * k), Math.min(1, target.b * k)); }
   col.needsUpdate = true; variants.set(key, g); return g;
@@ -69,4 +76,14 @@ export async function instancedModel(path, items, {scale = 1, y = 0, name = path
     m.name = k ? 'ink-batch' : name; group.add(m);
   });
   return group;
+}
+
+/** Render the same fitted model that supplies the simulation footprint. */
+export async function packVehicle({model, colour, fit}) {
+  const {path, pack, retint} = FLEET_MODELS[model];
+  const base = await loadPackGeometry(path);
+  const geometry = retint && colour && colour !== LIVERY ? retintGeometry(base, retint, colour) : base;
+  const object = toonModel(geometry, fit);
+  object.userData.fleet = {model, colour, pack, size: fit.size};
+  return object;
 }

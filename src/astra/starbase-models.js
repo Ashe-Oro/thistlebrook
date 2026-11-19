@@ -12,6 +12,7 @@ export function primitives(root){
  const label=(text,x,y,z,w,h,c='#344d53',p=root,flat=false)=>{const canvas=document.createElement('canvas');canvas.width=1024;canvas.height=128;const ctx=canvas.getContext('2d');ctx.fillStyle=c;ctx.fillRect(0,0,1024,128);ctx.fillStyle='#fff2d7';ctx.font='600 68px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,512,67,970);const tex=new THREE.CanvasTexture(canvas);tex.colorSpace=THREE.SRGBColorSpace;const m=mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({map:tex,side:THREE.DoubleSide}),x,y,z,p);if(flat)m.rotation.x=-Math.PI/2;return m;};
  return {mesh,box,cylinder,orb,beam,ring,label};
 }
+export const ROCKET_NOZZLE_BOTTOM = -.395;
 export function rocket(kind){
  const root=new THREE.Group();root.name=kind;const p=primitives(root),{box,cylinder,ring,beam}=p;
  const ship=kind==='ship',superHeavy=kind==='booster',upper=kind==='upper';
@@ -28,7 +29,7 @@ export function rocket(kind){
  else if(!upper){p.label('FALCON 9',0,7,.712,3,.55,'#e9eee7').rotation.z=Math.PI/2;}
  const legs=[];
  if(!ship&&!superHeavy&&!upper)for(let n=0;n<4;n++){const a=n*Math.PI/2+Math.PI/4,g=new THREE.Group();g.rotation.y=a;g.position.set(Math.sin(a)*r,.25,Math.cos(a)*r);root.add(g);const leg=new THREE.Group();g.add(leg);beam([0,0,0],[0,3.7,.18],.16,'#24363c',leg);box(0,3.65,.2,.55,.18,.45,'#23343b',leg);legs.push(leg);}
- for(let n=0;n<(superHeavy?9:ship?3:upper?1:5);n++){const a=n*2.399,radius=superHeavy?1:ship?.65:upper?0:.4;cylinder(Math.sin(a)*radius,-.17,Math.cos(a)*radius,.22,.45,'#25323b',root,.13);}
+ for(let n=0;n<(superHeavy?9:ship?3:upper?1:5);n++){const a=n*2.399,radius=superHeavy?1:ship?.65:upper?0:.4;cylinder(Math.sin(a)*radius,ROCKET_NOZZLE_BOTTOM+.45/2,Math.cos(a)*radius,.22,.45,'#25323b',root,.13);}
  const flame=new THREE.Group();flame.position.y=-.3;root.add(flame);const orange=new THREE.MeshBasicMaterial({color:'#ff952e'}),cream=new THREE.MeshBasicMaterial({color:'#fff4b0'});
  const outer=cylinder(0,-2.8,0,r*.75,5.6,orange,flame,0.02);outer.rotation.z=Math.PI;
  const inner=cylinder(0,-1.6,0,r*.47,3.5,cream,flame,0.01);inner.rotation.z=Math.PI;flame.visible=false;

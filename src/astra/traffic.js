@@ -1,13 +1,15 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { toonMaterial } from '../toon.js';
-import { place } from '../catalog/loader.js';
+import { tagAssembly } from './registry/render-tags.js';
 import { createTrafficSimulation, PARKING_BAYS } from './traffic-simulation.js';
 import { batchInstances } from '../compiler/batches.js';
 import { instantiate } from '../catalog/loader.js';
-import { FLEET_MODELS, FOOTPRINT, LIVERY, assignFleet, parkedFleet, fitModel } from './traffic-fleet.js';
+import { FLEET_MODELS, assignFleet, parkedFleet } from './traffic-fleet.js';
 import { planStreets, CLASS_STYLE, FURNITURE_MODELS } from './street-plan.js';
-import { loadPackGeometry, retintGeometry, toonModel, instancedModel } from './vehicle-models.js';
+import { lampPosts } from './lamp-posts.js';
+import { buildLampGlow } from './lamp-glow.js';
+import { packVehicle, instancedModel } from './vehicle-models.js';
 import { distanceToSegment } from '../compiler/astra.js';
 import { residentPedestrian } from '../roads/walking.js';
 import { pedestrianGraph } from '../roads/pedestrian.js';
@@ -16,7 +18,7 @@ import { midpoint, ZEBRA_HALF_WIDTH } from '../roads/crosswalks.js';
 // Self-contained integration: the compiler and resident routines stay untouched.
 export async function createTraffic(scene,town,residents,world){
  const simulation=createTrafficSimulation(town),root=new THREE.Group();root.name='Thistlebrook town traffic';scene.add(root);
- const materials=new Map(),cube=new THREE.BoxGeometry(1,1,1),wheelGeo=new THREE.CylinderGeometry(.22,.22,.12,10);
+ const materials=new Map(),cube=new THREE.BoxGeometry(1,1,1);
  const material=color=>{if(!materials.has(color))materials.set(color,toonMaterial(color));return materials.get(color);};
  const box=(parent,x,y,z,w,h,d,color)=>{const m=new THREE.Mesh(cube,material(color));m.position.set(x,y,z);m.scale.set(w,h,d);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;};
  const label=(parent,text,x,y,z,w,h,bg='#315e60',fg='#fff3d3')=>{
@@ -62,10 +64,11 @@ export async function createTraffic(scene,town,residents,world){
  // Bays sit beyond the south sidewalk with a short dropped-kerb apron.
  for(const b of PARKING_BAYS){if(b.type==='driveway')continue;const [x,z]=b.center,u=[Math.sin(b.yaw),Math.cos(b.yaw)],dd=Math.hypot(x-b.road[0],z-b.road[1]),n=[(x-b.road[0])/dd,(z-b.road[1])/dd],ang=b.yaw;
   const hw=Math.max(...simulation.roads.filter(r=>distanceToSegment(b.road,r.a,r.b)<.05).map(r=>r.width/2),1.3),at=(a,o)=>[x+u[0]*a+n[0]*o,z+u[1]*a+n[1]*o];
-  const pad=box(streets,x,.2,z,1.6,.03,3.2,'#77867e');pad.rotation.y=ang;pad.scale.set(1.6,.03,3.2);
-  const apronLen=dd-.8-hw,[ax,az]=at(0,-.8-apronLen/2),apron=box(streets,ax,.19,az,2.2,.03,apronLen+.05,'#a9a28f');apron.rotation.y=Math.atan2(n[0],n[1]);
-  for(const a of [-1.5,1.5]){const [lx,lz]=at(a,0),l=box(streets,lx,.223,lz,1.3,.02,.055,'#e4e4c8');l.rotation.y=ang;}
-  const [bx,bz]=at(0,.62),back=box(streets,bx,.223,bz,.055,.02,3,'#e4e4c8');back.rotation.y=ang;}
+  const depth=b.width+.6,span=b.length+.16;
+  const pad=box(streets,x,.2,z,depth,.03,span,'#77867e');pad.rotation.y=ang;
+  const apronLen=dd-depth/2-hw,[ax,az]=at(0,-depth/2-apronLen/2),apron=box(streets,ax,.19,az,span,.03,apronLen+.05,'#a9a28f');apron.rotation.y=Math.atan2(n[0],n[1]);
+  for(const a of [-span/2,span/2]){const [lx,lz]=at(a,0),l=box(streets,lx,.223,lz,depth,.02,.035,'#e4e4c8');l.rotation.y=ang;}
+  const [bx,bz]=at(0,depth/2),back=box(streets,bx,.223,bz,.035,.02,span,'#e4e4c8');back.rotation.y=ang;}
  const sign=new THREE.Group();sign.position.set(-75.3,0,-12.2);root.add(sign);box(sign,0,1,0,.07,1.8,.07,'#465e58');label(sign,'P',0,1.8,.02,.65,.65);
  // Draw the same sidewalk and crossing edges that the residents use.
  const paving='#d6ceb5', joints=new Map(), jointGeometry=new THREE.CylinderGeometry(1,1,.035,12);
@@ -103,15 +106,9 @@ export async function createTraffic(scene,town,residents,world){
  streets.updateMatrixWorld(true);const batches=new Map();streets.traverse(o=>{if(!o.isMesh)return;const geometries=batches.get(o.material)||[];geometries.push(o.geometry.clone().applyMatrix4(o.matrixWorld));batches.set(o.material,geometries);});
  for(const [mat,geometries] of batches){const m=new THREE.Mesh(mergeGeometries(geometries),mat);m.receiveShadow=true;m.userData.weatherPaving=({'77867e':'road','d6ceb5':'sidewalk','a9a28f':'road'})[mat.color.getHexString()];root.add(m);geometries.forEach(g=>g.dispose());}
  jointGeometry.dispose();
- // Owned pack vehicles, re-tooned on load and fitted inside the simulation
- // footprint (traffic-fleet.js). Body colours retint a cloned geometry.
- async function packVehicle({model,colour},footprint){
-  const m=FLEET_MODELS[model],fit=fitModel(model,footprint),base=await loadPackGeometry(m.path);
-  const g=new THREE.Group(),geometry=m.retint&&colour!==LIVERY?retintGeometry(base,m.retint,colour):base;
-  g.add(toonModel(geometry,{scale:fit.scale,offset:fit.offset}));g.userData.fleet={model,colour,pack:m.pack,size:fit.size};return g;
- }
- async function bicycle(index){
-  const g=new THREE.Group(),bike=await place('cv-bicycle',{scale:.68});g.add(bike);
+ async function bicycle(vehicle){
+  const index=vehicle.id;
+  const g=new THREE.Group(),bike=await packVehicle(vehicle);g.add(bike);g.userData.fleet=bike.userData.fleet;
   // The owned bicycle faces +Z. A compact posed rider has pedalling knees,
   // a helmet and hands on the bars; no dialogue or floating status bubbles.
   box(g,0,1.17,-.1,.32,.48,.28,['#ce815f','#4d9291','#c3a459'][index%3]).rotation.x=.28;
@@ -121,8 +118,14 @@ export async function createTraffic(scene,town,residents,world){
   const legs=[];for(const x of [-.13,.13])legs.push(box(g,x,.8,-.05,.12,.43,.15,'#3b575e'));g.userData.legs=legs;return g;
  }
  const fleet=assignFleet(simulation.vehicles),parked=parkedFleet(PARKING_BAYS);
- const objects=await Promise.all(simulation.vehicles.map(async (v,i)=>{const g=v.kind==='cycle'?await bicycle(v.id):await packVehicle(fleet[i],FOOTPRINT[v.kind]);g.name=`traffic-${v.kind}-${v.id}`;root.add(g);return g;}));
- const parkedObjects=await Promise.all(PARKING_BAYS.map(async (b,i)=>{if(b.type==='driveway')return null;const g=await packVehicle(parked[i],{length:b.length,width:b.width});g.name=`parked-${b.id}`;g.position.set(b.center[0],.215,b.center[1]);g.rotation.y=b.yaw;root.add(g);return g;}));
+ const objects=await Promise.all(simulation.vehicles.map(async v=>{const g=v.kind==='cycle'?await bicycle(v):await packVehicle(v);g.name=`traffic-${v.kind}-${v.id}`;root.add(g);return g;}));
+ const parkedObjects=await Promise.all(simulation.parked.slice(0,PARKING_BAYS.length).map(async b=>{
+  const g=await packVehicle(b);g.name=`parked-${b.id}`;g.position.set(b.center[0],b.type==='driveway'?.02:.215,b.center[1]);g.rotation.y=b.yaw;
+  if(b.type==='driveway')tagAssembly(g,b.lot);
+  root.add(g);return g;
+ }));
+ for(const [i,v] of simulation.vehicles.entries())if(v.civic)tagAssembly(objects[i],'civic-green');
+ world.civicQuarter.setVehicles(simulation.vehicles.filter(v=>v.civic));
  // Kerbside furniture and bus shelters, instanced per model.
  const byModel=new Map();for(const it of streetPlan.items){if(!byModel.has(it.model))byModel.set(it.model,[]);byModel.get(it.model).push(it);}
  const furniture=new THREE.Group();furniture.name='Street furniture';root.add(furniture);
@@ -130,10 +133,13 @@ export async function createTraffic(scene,town,residents,world){
   if(fm.catalog){const template=await instantiate(fm.catalog);furniture.add(batchInstances(template,items.map(it=>({pos:it.pos,rotY:it.yaw,scale:fm.scale}))));}
   else furniture.add(await instancedModel(fm.path,items,{scale:fm.scale,y:0,name:model}));
  }));
+ // streetlights: every kerbside lamp gets a lit head, halo and ground pool.
+ // These posts were never registered with the town.props-only night glow.
+ const lampGlow=buildLampGlow(lampPosts(town,{streetPlan}).filter(p=>p.source==='street-plan'),{name:'street-plan lamps'});root.add(lampGlow.group);
  const sync=()=>{simulation.vehicles.forEach((v,i)=>{const g=objects[i];g.position.set(v.position[0],.215,v.position[1]);g.rotation.y=Math.atan2(...v.direction);g.userData.wheels?.forEach(w=>w.rotation.x=v.distance/.22);g.userData.legs?.forEach((leg,k)=>leg.rotation.x=Math.sin(v.distance*5+k*Math.PI)*.65);});};
  sync();
  const pickBounds=new THREE.Box3(),hitPoint=new THREE.Vector3();
- return {simulation,root,objects,parkedObjects,fleet,parked,streetPlan,pick(ray){
+ return {simulation,root,objects,parkedObjects,fleet,parked,streetPlan,lampGlow,pick(ray){
   let closest=null,best=Infinity;
   for(const [i,g] of objects.entries()){
    pickBounds.setFromObject(g);const hit=ray.intersectBox(pickBounds,hitPoint);if(!hit)continue;
@@ -144,13 +150,15 @@ export async function createTraffic(scene,town,residents,world){
    const story=v.kind==='bus'?'The town bus connects the shops, campus, quay and market. It pauses at each gold stop and gives people crossing the street time to pass.':role?.story||'Following the streets, slowing for the neighbours and waiting a turn at the junctions.';
    closest={type:'traffic',name,distance,bounds:pickBounds.clone(),object:g,data:{name,detail,story:story+' '+v.status+'.'}};
   }return closest;
- },update(dt){
+ },update(dt,hour){
   const pedestrians=residents.people.filter(p=>!p.actor.riding).map(p=>residentPedestrian(p.actor,residents.life.walkPace(p.actor)));
   if(world?.railway)pedestrians.push(...world.railway.service.pedestrians);
-  const civic=world?.civicQuarter?.audit();if(civic){for(const p of civic.people)if(p.visible)pedestrians.push({x:p.position[0],z:p.position[2]});for(const p of [civic.engine,civic.delivery])pedestrians.push({x:p[0],z:p[2]});}
+  const civic=world?.civicQuarter?.audit();if(civic){for(const p of civic.people)if(p.visible)pedestrians.push({x:p.position[0],z:p.position[2]});}
   // Kids walking to and from the ballgame are pedestrians too (civic.js / ballgame.js).
   for(const k of world?.districts?.civic?.audit?.().ballgame?.kids||[])pedestrians.push({x:k.position[0],z:k.position[2]});
   pedestrians.push(...(world?.districts?.civic?.school?.pedestrians ?? []));
-  simulation.update(dt,pedestrians);sync();
+  const regional=world.landscape.traffic.vehicles;
+  const lot=world.expansions.fairlot.sim.vehicles();
+  simulation.update(dt,pedestrians,[...regional,...lot],hour);sync();
  },audit:()=>({...simulation.audit(),fleet:fleet.map(f=>({id:f.id,model:f.model,colour:f.colour})),parked:parked.map(p=>({...p})),streets:{classes:streetPlan.classes,furniture:streetPlan.items.length,shelters:streetPlan.items.filter(i=>i.kind==='shelter').map(i=>i.stop),strips:streetPlan.strips.map(s=>s.id)}})};
 }

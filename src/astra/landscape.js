@@ -1,3 +1,4 @@
+import {packVehicle} from './vehicle-models.js';
 import { pedestrianGraph } from '../roads/pedestrian.js';
 import { midpoint } from '../roads/crosswalks.js';
 import * as THREE from 'three';
@@ -108,15 +109,13 @@ export async function buildLandscape(scene,town) {
   kit.root.children.slice(start).forEach(o=>tagObject(o,r.registryId));
  }
  // Vehicles come from the pure regional simulation; render only mirrors it.
- const traffic=createRegionalTraffic(town),vehicles=[];
- for(const v of traffic.vehicles){
-  if(v.mapleHollow)continue; // family cars and the school bus are drawn by maple-hollow.js
-  const g=new THREE.Group();scene.add(g);g.name=`Regional ${v.kind==='bus'?'shuttle':'car'} · ${v.regionalId}`;
-  const bus=v.kind==='bus',w=v.width,l=v.length,col=bus?'#d8b36f':['#c87e62','#80ada3','#ebdfbc'][v.regionalId%3];
-  box(0,.65,0,w,.8,l,col,g);box(0,1.3,-.2,w*.86,.7,l*.65,'#52777b',g);box(0,1.7,-.2,w*.9,.15,l*.68,col,g);
-  for(const side of [-1,1])for(const z of [-l*.32,l*.32])orb(side*w*.5,.35,z,.32,'#354b49',g);
-  tagObject(g,town.roads[v.regionalId]?.registryId);vehicles.push({object:g,sim:v,road:v.regionalId,routeGroup:town.roads[v.regionalId]?.routeGroup});
- }
+ const traffic=createRegionalTraffic(town);
+ const vehicles=await Promise.all(traffic.vehicles.map(async sim=>{
+  const object=await packVehicle(sim);scene.add(object);object.name=sim.id;
+  const road=sim.regionalId;
+  tagObject(object,road<0?'maple-hollow':town.roads[road]?.registryId);
+  return {object,sim,road,routeGroup:town.roads[road]?.routeGroup};
+ }));
  // The tour ferry and sailboats use the same Gulf as the working cutters and
  // recovery ship. Waypoints stay outside the preserved beach and launch pads.
  function boat(id,sail=false){const g=new THREE.Group();scene.add(g);const parts=[];const b=(...args)=>parts.push(box(...args,g));
@@ -140,5 +139,5 @@ export async function buildLandscape(scene,town) {
   for(const v of vehicles){v.object.position.set(v.sim.position[0],.1,v.sim.position[1]);v.object.rotation.y=Math.atan2(v.sim.direction[0],v.sim.direction[1]);}
   const pose=cruiserPose(hour??10);ferry.position.set(pose.pos[0],waterlineAt(pose.pos)+Math.sin(t)*.05,pose.pos[1]);ferry.rotation.y=pose.yaw;ferry.userData.state=pose.state;
   sails.forEach((s,i)=>{const a=t*.015+i*2;s.position.set(340+i*18+Math.sin(a)*12,-.1,94+i*65+Math.cos(a)*24);s.rotation.y=Math.atan2(Math.cos(a)*12,-Math.sin(a)*24);});
- },audit(){return {ground:plan.outline,ownedPlacements:plan.models.length,hills:plan.hills.length,roads:routes.length,vehicles:vehicles.map(v=>({road:v.road,position:v.object.position.toArray(),distance:v.sim.s,routeGroup:v.routeGroup})),ferry:ferry.position.toArray(),ferryState:ferry.userData.state,ferryRouteLength:ferryLength,ocean:1};}};
+ },audit(){return {ground:plan.outline,ownedPlacements:plan.models.length,hills:plan.hills.length,roads:routes.length,vehicles:vehicles.filter(v=>!v.sim.mapleHollow).map(v=>({road:v.road,position:v.object.position.toArray(),distance:v.sim.s,routeGroup:v.routeGroup})),ferry:ferry.position.toArray(),ferryState:ferry.userData.state,ferryRouteLength:ferryLength,ocean:1};}};
 }

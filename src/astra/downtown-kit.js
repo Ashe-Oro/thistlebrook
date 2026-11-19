@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { place } from '../catalog/loader.js';
 import { toonMaterial } from '../toon.js';
+import { LAMP_LOOK } from './lamp-look.js';
 
 // District-local drawing tools. Shared geometry keeps the little details cheap.
 export function districtKit(scene) {
@@ -48,12 +49,13 @@ export function districtKit(scene) {
     const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({map:tex,side:THREE.DoubleSide}));
     m.position.set(x,y,z);m.rotation.x=tilt;parent.add(m);return m;
   }
-  function pool(x,z,r,color) {
+  // lamp=true marks a pool cast by a lamp post (streetlights brightness pass).
+  function pool(x,z,r,color,lamp=false) {
     const c=document.createElement('canvas');c.width=c.height=64;
     const ctx=c.getContext('2d'),g=ctx.createRadialGradient(32,32,0,32,32,32);
     g.addColorStop(0,color);g.addColorStop(1,'transparent');ctx.fillStyle=g;ctx.fillRect(0,0,64,64);
     const m=new THREE.Mesh(new THREE.PlaneGeometry(r*2,r*2),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(c),transparent:true,opacity:0,depthWrite:false}));
-    m.rotation.x=-Math.PI/2;m.position.set(x,.29,z);scene.add(m);lights.push(m);return m;
+    m.rotation.x=-Math.PI/2;m.position.set(x,.29,z);m.userData.lampPool=lamp;scene.add(m);lights.push(m);return m;
   }
   function bake() {
     root.updateMatrixWorld(true);const batches=new Map();
@@ -65,7 +67,7 @@ export function districtKit(scene) {
     }
     root.traverse(o=>{if(o.isLine){const l=o.clone();l.matrixAutoUpdate=false;l.matrix.copy(o.matrixWorld);scene.add(l);}});
   }
-  return {root,box,orb,drum,ring,wire,sign,pool,bake,update(night){emissive.forEach(m=>m.emissiveIntensity=night*1.3);lights.forEach(m=>m.material.opacity=night*.48);}};
+  return {root,box,orb,drum,ring,wire,sign,pool,bake,update(night){emissive.forEach(m=>m.emissiveIntensity=night*1.3);lights.forEach(m=>m.material.opacity=night*(m.userData.lampPool?LAMP_LOOK.kitLampPool:.48));}};
 }
 
 // Reuse the owned character meshes AND their ink hulls in instanced draws.

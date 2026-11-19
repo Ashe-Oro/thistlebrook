@@ -1,7 +1,9 @@
 import {tagDistrictModels} from './registry/district-models.js';
 import * as THREE from 'three';
 import { place } from '../catalog/loader.js';
-import { primitives, rocket, batchStatic } from './starbase-models.js';
+import { primitives, rocket, batchStatic, ROCKET_NOZZLE_BOTTOM } from './starbase-models.js';
+import { packVehicle } from './vehicle-models.js';
+import { convoyAtGate, starbaseRoadVehicles, TRAILER_LOAD_POINT } from './starbase-road.js';
 import { STARBASE_ORIGIN, flightState, routeAt } from './starbase-flight.js';
 
 export async function buildStarbase(scene,town){
@@ -78,32 +80,38 @@ export async function buildStarbase(scene,town){
  for(const x of [-54,-30]){asset('cv-tree-fruit',x,39,.8);box(x,1,32,.12,2,.12,'#6a7f71');}
  label('STARBASE',-42,4.2,32,21,3,'#355c66');label('TEXAS  ·  GATEWAY TO THE GULF',-42,2.3,32,21,.9,'#6c8785');
  box(-31,1.6,6,8,3.2,5,'#d7dcca');box(-31,3.3,6,8.6,.3,5.6,'#6e878b');label('CREW / RANGE CONTROL',-31,2.3,8.55,7,.6);
- const gate=box(-21,1.6,0,.18,.18,6,'#e7b765',moving);
+ const gate=new THREE.Group();gate.position.set(-21,1.6,2.9);moving.add(gate);
+ box(0,0,-2.9,.18,.18,5.8,'#e7b765',gate);
  for(let i=0;i<16;i++){const x=-53+i*2;box(x,.9,30,.08,1.8,.08,'#7f8f80');}box(-38,1.5,30,31,.08,.08,'#7f8f80');
  // Licensed townsfolk get routed along the visitor walk and sheltered work lanes.
- const workerRoutes=[ [[-33,9],[-24,9],[-24,-3],[-45,-3],[-45,-13],[-45,-3],[-33,9]], [[-33,9],[-24,9],[-24,3],[-48,3],[-48,18],[-48,3],[-24,3],[-24,9],[-33,9]] ];
+ const workerRoutes=[ [[-33,9],[-48,9],[-48,-3],[-45,-3],[-45,-13],[-45,-3],[-48,-3],[-48,9],[-33,9]], [[-33,9],[-24,9],[-24,3],[-48,3],[-48,18],[-48,3],[-24,3],[-24,9],[-33,9]] ];
  for(let i=0;i<16;i++){const worker=i<6;asset('townsfolk-'+(worker?'farmhand':['elder','merchant','child','innkeeper'][i%4]),0,0,worker?.9:.92,0,moving).then(o=>{const route=worker?workerRoutes[i%2]:i>=12?[[-51+(i-12)*5,38],[-51+(i-12)*5,42],[-51+(i-12)*5,38]]:[[-99,-20],[-99,-12],[-77,-12],[-66,0],[-46,0],[-46,32],[-53+(i-6)*2,38],[-46,32],[-46,0],[-66,0],[-77,-12],[-99,-12],[-99,-20]];if(worker){const hat=cylinder(0,1.75,0,.3,.18,'#e4b75b',o);hat.position.y=1.75;}people.push({o,i,worker,route});});}
- // A modular transporter circulates on the paved factory-to-pad service road.
- const transporter=new THREE.Group();moving.add(transporter);box(0,.55,0,4,.6,7,'#c9a35a',transporter);box(0,.9,0,3.7,.18,6.8,'#637d82',transporter);
- for(const x of [-1.85,1.85])for(let i=0;i<7;i++){const w=cylinder(x,.32,-2.7+i*.9,.32,.3,'#354a4c',transporter);w.rotation.z=Math.PI/2;}
- const recoveryDolly=new THREE.Group();moving.add(recoveryDolly);box(0,1.4,0,4.5,2.7,4.5,'#566d73',recoveryDolly);for(const x of [-2.2,2.2])for(const z of [-1.4,0,1.4]){const w=cylinder(x,.4,z,.4,.35,'#30454c',recoveryDolly);w.rotation.z=Math.PI/2;}
- const cargo=rocket('ship');cargo.root.position.y=1.1;transporter.add(cargo.root);
+ // Tractor and load trailer share their road poses with the traffic checks.
+ const roadModels=await Promise.all(starbaseRoadVehicles(0).map(async v=>{
+  const model=await packVehicle(v);model.name=v.id;moving.add(model);return model;
+ }));
+ const cargo=rocket('ship');
+ cargo.root.position.set(...TRAILER_LOAD_POINT);
+ cargo.root.position.y-=ROCKET_NOZZLE_BOTTOM;
+ roadModels[1].add(cargo.root);
  // Reusable actors, exhaust, pool of smoke puffs: no per-frame scene allocation.
  const vehicles={booster:rocket('booster'),ship:rocket('ship'),f9:rocket('falcon'),upper:rocket('upper'),sides:[rocket('falcon'),rocket('falcon')]};
  for(const v of [vehicles.booster,vehicles.ship,vehicles.f9,vehicles.upper,...vehicles.sides])moving.add(v.root);
  const smoke=[];for(let i=0;i<38;i++){const m=orb(0,0,0,1,'#e2e2cd',moving);m.castShadow=false;smoke.push(m);}
  const vents=[];for(let i=0;i<12;i++){const m=orb(0,0,0,.3,'#eaf2e4',moving);m.castShadow=false;vents.push(m);}
  await Promise.all(jobs);tagDistrictModels(statics,town,'starbase',STARBASE_ORIGIN);people.sort((a,b)=>a.i-b.i);batchStatic(statics,root);
- let state=flightState(0),time=0;
+ let state=flightState(0),roadVehicles=starbaseRoadVehicles(0),time=0;
  const api={selectables,stats:{launchPads:2,landingPads:2,droneShips:1,workers:6,spectators:10},
-  audit(){return { ...state,transporter:transporter.position.toArray(),people:people.map(p=>({worker:p.worker,position:p.o.position.toArray(),visible:p.o.visible})),vehiclePositions:Object.fromEntries(['booster','ship','f9','upper'].map(k=>[k,vehicles[k].root.position.toArray()])),drone:drone.position.toArray()};},
+  audit(){return { ...state,transporter:roadModels[1].position.toArray(),roadVehicles,people:people.map(p=>({worker:p.worker,position:p.o.position.toArray(),visible:p.o.visible})),vehiclePositions:Object.fromEntries(['booster','ship','f9','upper'].map(k=>[k,vehicles[k].root.position.toArray()])),drone:drone.position.toArray()};},
   update(t,night=0,hour=10){time=t;state=flightState(t);for(const key of ['booster','ship','f9','upper'])vehicles[key].apply(state[key],t);vehicles.sides.forEach((v,i)=>v.apply(state.sides[i],t));
-   recoveryDolly.visible=state.t>=44;recoveryDolly.position.set(state.booster.x,0,state.booster.z);carriage.position.y=state.armY;arms.forEach((a,i)=>a.rotation.y=(i?1:-1)*state.arms*.28);strongback.rotation.x=state.t>=87&&state.t<134||state.t>=141?-.42:0;gate.rotation.x=state.gate?0:-Math.PI/2;
+   roadVehicles=starbaseRoadVehicles(t);
+   roadVehicles.forEach((v,i)=>{const o=roadModels[i];o.position.set(v.position[0]-STARBASE_ORIGIN[0],v.y,v.position[1]-STARBASE_ORIGIN[1]);o.rotation.y=Math.atan2(...v.direction);});
+   gate.rotation.x=!state.gate||convoyAtGate(roadVehicles)?Math.PI/2:0;
+   carriage.position.y=state.armY;arms.forEach((a,i)=>a.rotation.y=(i?1:-1)*state.arms*.28);strongback.rotation.x=state.t>=87&&state.t<134||state.t>=141?-.42:0;
    drone.position.set(state.droneX,0,state.droneZ);tug.position.set(state.droneX+3,0,state.droneZ+16);rope.position.set(state.droneX+1.5,.65,state.droneZ+11.8);rope.scale.y=6;rope.rotation.x=Math.PI/2;
    const record=selectables.find(s=>s.data.id==='drone-ship');record.bounds.set(new THREE.Vector3(state.droneX+STARBASE_ORIGIN[0]-6.5,0,state.droneZ+STARBASE_ORIGIN[1]-11),new THREE.Vector3(state.droneX+STARBASE_ORIGIN[0]+6.5,17,state.droneZ+STARBASE_ORIGIN[1]+11));
    smoke.forEach((m,i)=>{const launch=state.smoke>0,landing=(state.t>33&&state.t<39)||(state.t>111&&state.t<118)||(state.t>167&&state.t<174);m.visible=launch||landing;if(!m.visible)return;const u=((t*.3+i/38)%1),a=i*2.399;const x=launch?(state.mode==='starship'?20:48):state.t<40?20:state.t<120?state.droneX:i%2?27:-8;const z=launch?(state.mode==='starship'?-24:12):state.t<40?-24:state.t<120?state.droneZ:i%2?55:43;m.position.set(x+Math.cos(a)*u*(launch?15:7),.5+u*3,z+Math.sin(a)*u*(launch?15:7));m.scale.setScalar((.8+u*2.5)*(1-u*.6));});
    vents.forEach((m,i)=>{const u=(t*.21+i/12)%1;m.position.set(28+(i%3)*5+u*2,5+u*3,-11+Math.floor(i/6)*7);m.scale.setScalar(.15+u*.7);m.visible=state.t<11||state.t>78&&state.t<90||state.t>133&&state.t<143;});
-   const tr=routeAt([[-45,-12],[-45,0],[4,0],[4,-6],[4,0],[-45,0],[-45,-12]],t,1.4,8);transporter.position.set(tr.x,0,tr.z);transporter.rotation.y=tr.heading;
    people.forEach(p=>{p.o.visible=p.worker||hour>=6&&hour<22;const route=p.route;const v=routeAt(route,t+p.i*9,p.worker?1.1:.75,p.worker?4:14);p.o.position.set(v.x,.12+(v.walking?Math.sin(t*8+p.i)*.035:0),v.z);p.o.rotation.y=v.walking?v.heading:Math.atan2(20-v.x,-24-v.z);});
    waves.forEach(({m,x,n})=>{m.position.x=x+Math.sin(t*.4+n)*.5;m.scale.x=2+n%5+Math.sin(t*.6+n)*.4;});
   },get time(){return time;}};

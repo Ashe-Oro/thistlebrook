@@ -10,7 +10,8 @@ import {buildMidway} from './themepark-midway.js';
 import {createGuestSim,buildGuestCrowd} from './themepark-guests.js';
 import {parkNight,parkTime} from './themepark-assets.js';
 import {residentPoses,registerRidePoses} from './life/visuals.js';
-import {LOT_RESERVE} from './fair-lot-plan.js';
+import {packVehicle} from './vehicle-models.js';
+import {LOT_RESERVE,pinecrestModel,shuttlePose} from './fair-lot-plan.js';
 
 export async function buildThemePark(scene,town){
  const root=new THREE.Group();root.name='Pinecrest Adventure Park';root.position.set(PARK_ORIGIN[0],0,PARK_ORIGIN[1]);scene.add(root);
@@ -60,8 +61,9 @@ export async function buildThemePark(scene,town){
   const pose=rides.seatWorld(rideId,s);return pose;
  });
  // A pair of shuttle buses makes the trip from the edge of town visible.
- const shuttles=[];
- for(let i=0;i<2;i++){const bus=new THREE.Group();scene.add(bus);landKit.box(0,1,0,2.1,1.7,4.8,i?'#d5a366':'#649a8e',bus);landKit.box(0,2,0,2.15,.3,4.8,'#eee2b8',bus);for(const x of [-1.06,1.06])for(let j=0;j<4;j++)landKit.box(x,1.5,-1.65+j*1.05,.05,.65,.8,'#466b70',bus);landKit.box(0,1.55,2.43,1.8,.7,.08,'#466b70',bus);for(const x of [-1.05,1.05])for(const z of [-1.5,1.5])landKit.orb(x,.4,z,.38,'#485c59',bus);shuttles.push(bus);}
+ const shuttles=await Promise.all([0,1].map(async i=>{
+  const bus=await packVehicle(pinecrestModel(i));bus.name='Pinecrest shuttle '+i;scene.add(bus);return bus;
+ }));
  landKit.sign('PINECREST  ↗',78,3,-13,10,1.3,'#527a66');for(const x of [74,82])landKit.box(x,1.5,-13,.16,3,.16,'#8d825c');
  for(const r of [...RIDES,BIG_TOP]){
   const w=r.w||12,d=r.d||12,h=r.h||12,story=r.story||'The circus tent at the end of the north walk. Guests file in through the flap for the next show.';
@@ -73,5 +75,5 @@ export async function buildThemePark(scene,town){
  tagDistrictModels(moving,town,'themepark',PARK_ORIGIN);
  await Promise.all(jobs);tagDistrictModels(kit.root,town,'themepark',PARK_ORIGIN);tagDistrictModels(landKit.root,town,'themepark');kit.bake();landKit.bake();
  let lastT=0;
- return{root,selectables,rides,sim,update(t,night,hour){lastT=t;parkNight.value=night;parkTime.value=t;rides.update(t);sim.step(t);crowd.update(t);midway.update(t);kit.update(night);shuttles.forEach((bus,i)=>{const u=(t/95+i*.5)%1,forward=u<.5,v=forward?u*2:(1-u)*2,p=road.getPointAt(v),tangent=road.getTangentAt(v);bus.position.copy(p);bus.position.x+=tangent.z*(forward?1.25:-1.25);bus.position.z-=tangent.x*(forward?1.25:-1.25);bus.rotation.y=Math.atan2(tangent.x,tangent.z)+(forward?0:Math.PI);});},audit(){return{time:lastT,rides:rides.audit(),guests:sim.audit(),positions:sim.guests.map(g=>({id:g.i,state:g.state,position:g.position})),shuttles:shuttles.map(s=>s.position.toArray()),rideCount:RIDES.length};}};
+ return{root,selectables,rides,sim,update(t,night,hour){lastT=t;parkNight.value=night;parkTime.value=t;rides.update(t);sim.step(t);crowd.update(t);midway.update(t);kit.update(night);shuttles.forEach((bus,i)=>{const v=shuttlePose(i,t);bus.position.set(v.position[0],.06,v.position[1]);bus.rotation.y=Math.atan2(...v.direction);});},audit(){return{time:lastT,rides:rides.audit(),guests:sim.audit(),positions:sim.guests.map(g=>({id:g.i,state:g.state,position:g.position})),shuttles:shuttles.map(s=>s.position.toArray()),rideCount:RIDES.length};}};
 }

@@ -1,3 +1,6 @@
+import {packVehicle} from './vehicle-models.js';
+import {vehicleModel} from './traffic-fleet.js';
+import {CIVIC_PARKED} from './civic-quarter-life.js';
 import { CAFE_COUNTER } from './life/animation-places.js';
 import { tagObject, tagComponents, tagBatch } from './registry/render-tags.js';
 import * as THREE from 'three';
@@ -38,12 +41,10 @@ export async function buildCivic(scene,town){
  assembly='built:school-3';box(11,3.5,-56,.08,7,.08,'#9b977f');box(12,6.1,-56,2,1.05,.05,'#607f68');label('OWLS',12,6.12,-55.96,1.75,.5,'#607f68');
  for(const p of town.supplemental.filter(p=>p.key.startsWith('school-bench')))jobs.push(place(p.asset,{x:p.pos[0],z:p.pos[1],rotY:p.rot,scale:p.scale}).then(o=>root.add(tagObject(o,p.registryId))));
  // Parked school transport gives the campus a recognisable arrival point.
- assembly='built:school-5';box(21,.06,-61,4,.12,10,'#8d9991');const bus=new THREE.Group();bus.position.set(21,0,-61);root.add(bus);
- assembly='built:school-6';box(0,1.3,0,2,1.7,6.4,'#d7ad51',bus);box(0,2.25,0,2.1,.2,6.5,'#edc365',bus);box(0,.65,0,2.05,.25,6.5,'#6b7568',bus);
- for(const x of [-1.025,1.025])for(let n=0;n<5;n++)box(x,1.75,-2.5+n*1.1,.03,.7,.83,'#587c7b',bus);
- box(0,1.75,3.22,1.7,.7,.03,'#70918a',bus);box(0,1.55,-3.22,1.5,.6,.03,'#789c92',bus);
- for(const x of [-1.05,1.05])for(const z of [-2.1,2.1]){const wheel=cylinder(x,.5,z,.46,.22,'#46524e',bus);wheel.rotation.z=Math.PI/2;}
- label('ASTRA SCHOOL BUS',0,1,3.25,1.8,.28,'#cda34c',bus);
+ assembly='built:school-5';box(21,.06,-61,4,.12,10,'#8d9991');
+ const schoolBus=CIVIC_PARKED.find(v=>v.id==='astra-school-bus');
+ const bus=await packVehicle(vehicleModel(schoolBus.model));bus.position.set(schoolBus.center[0],.12,schoolBus.center[1]);bus.rotation.y=schoolBus.yaw;root.add(bus);tagObject(bus,'built:school-6');
+
  // school-day: Room 4's pupils and Ms Hart follow the weekday timetable in
  // school-plan.js. Outside they walk the sidewalk graph; in class they are
  // indoors (school-interior.js draws the classroom).

@@ -5,7 +5,8 @@ export function supplementalPlacements(town) {
  const add=(key,asset,pos,rot=0,scale=1,owner=null)=>items.push({key,asset,pos,rot,scale,owner});
  for(const b of town.buildings.filter(b=>b.pos[1]<0&&b.district==='willowbank')){
   const z=b.box.min[1]-1.15;
-  for(const [i,x] of [-2.5,0,2.5].entries())add(`${b.key}/fence-${i}`,'cv-picket-fence',[b.pos[0]+x,z],0,.76,b.key);
+  const fenceX=b.pos[0]+(b.key==='parcel-1'?0.95:0); // clear the wider campus approach
+  for(const [i,x] of [-2.5,0,2.5].entries())add(`${b.key}/fence-${i}`,'cv-picket-fence',[fenceX+x,z],0,.76,b.key);
   if(b.kind==='home')add(`${b.key}/laundry`,'cv-laundry-line',[b.pos[0],z-.65],0,.7,b.key);
  }
  for(const [i,x] of [-35,-31,-13,-5,5,13,31,35].entries())add(`bank-rock-${i}`,'cv-rock-stone-pile',[x,0]);

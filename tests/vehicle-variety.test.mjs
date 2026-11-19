@@ -5,7 +5,7 @@ import {readFileSync} from 'node:fs';
 import {resolveAll} from '../src/catalog/resolve-all.js';
 import {compileWorld} from '../src/compiler/world-plan.js';
 import {createTrafficSimulation, PARKING_BAYS, CYCLE_STRIPS, TRAFFIC_STOPS, WEST_STOPS} from '../src/astra/traffic-simulation.js';
-import {FLEET_MODELS, assignFleet, parkedFleet, sameLook, fitModel, FOOTPRINT} from '../src/astra/traffic-fleet.js';
+import {FLEET_MODELS, assignFleet, parkedFleet, sameLook, vehicleModel} from '../src/astra/traffic-fleet.js';
 import {planStreets, streetFindings, DOWNTOWN, FURNITURE_MODELS} from '../src/astra/street-plan.js';
 import * as water from '../src/astra/water-traffic-plan.js';
 import {TOWN_RULE} from '../src/compiler/town-rules.js';
@@ -24,8 +24,8 @@ test('every moving and parked vehicle is a pack model sized to its sim footprint
   for (const [i, v] of sim.vehicles.entries()) {
     if (v.kind === 'cycle') continue;
     assert.equal(FLEET_MODELS[fleet[i].model].kind, v.kind, `vehicle ${v.id}`);
-    const fit = fitModel(fleet[i].model, FOOTPRINT[v.kind]);
-    assert(fit.size[2] <= v.length + 1e-6 && fit.size[0] <= v.width + 1e-6, `${fleet[i].model} fits ${v.kind}`);
+    const {fit} = vehicleModel(fleet[i].model, fleet[i].colour);
+    assert(Math.abs(fit.size[2] - v.length) <= 1e-6 && Math.abs(fit.size[0] - v.width) <= 1e-6, `${fleet[i].model} fits ${v.kind}`);
   }
 });
 
@@ -125,7 +125,7 @@ test('the lot sim knows where the Pinecrest park footpath crosses the apron', ()
 });
 
 test(`${TOWN_RULE.surface}: parked cars clear structures and fit their documented driveway`, async () => {
-  PARKING_BAYS.push({id: 'fault-garden', center: [-10, -5.4], yaw: 0, length: 2.05, width: .9, road: [-7, -5.4]});
+  PARKING_BAYS.push({id: 'fault-garden', model: 'city-sedan', center: [-10, -5.4], yaw: 0, length: 2.05, width: .9, road: [-7, -5.4]});
   try {
     const r = await runAudit({mutate(t) {
       const bay = t.mapleHollow.bays[0];

@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { LIGHT_KEYS, sampleLightCycle, lightPeriod } from './light-cycle.js';
 import { weatherPlan } from './weather-plan.js';
 import { patchSkinShader } from './skin/material.js';
+import { LAMP_LOOK } from './lamp-look.js';
+import { setLampHaloSkin } from './lamp-glow.js';
 
 // Astra-only lighting. No shared catalog/toon factory, district, asset or
 // compiler changes. Call register(root) for districts added after startup.
@@ -115,7 +117,7 @@ export function createAstraLighting({ scene, camera, controls, renderer, town })
    uniform vec3 haloColor;
    void main(){
     float d=length(vUv-.5)*2.;
-    float a=pow(max(0.,1.-d),3.)*.27*night;
+    float a=pow(max(0.,1.-d),3.)*${LAMP_LOOK.halo.toFixed(3)}*night;
     gl_FragColor=vec4(haloColor,a);
     #include <colorspace_fragment>
    }`,
@@ -181,6 +183,8 @@ export function createAstraLighting({ scene, camera, controls, renderer, town })
   lanterns.visible = skin.halos?.visible ?? true;
   if (skin.halos?.color) haloMaterial.uniforms.haloColor.value.set(...new THREE.Color(skin.halos.color).toArray());
   else haloMaterial.uniforms.haloColor.value.set(1, .63, .24);
+  // Street-plan and district lamps share the same halo look (lamp-glow.js).
+  setLampHaloSkin(skin.halos);
   const nextStyled = !!skin.material;
   if (nextStyled !== styled) { styled = nextStyled; for (const m of materials) m.needsUpdate = true; }
   state.skin = skin.id;

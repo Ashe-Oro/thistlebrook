@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createSkyLook } from './sky.js';
 import { updateLightingFog } from './fog.js';
+import { LAMP_LOOK } from '../astra/lamp-look.js';
 
 const smooth = THREE.MathUtils.smoothstep;
 export function lightingWeights(hour) {
@@ -64,8 +65,8 @@ export function withLightingPolish(createBase) {
       const horizon = sky(w);
       updateLightingFog(stage, horizon, w);
       base.windows.forEach(m => { m.opacity = w.night * .95; });
-      base.lamps.forEach(({ light, lens }) => { light.intensity = w.night * 16; lens.material.opacity = w.night; });
-      pools.forEach(p => { p.material.opacity = w.night * .8; });
+      base.lamps.forEach(({ light, lens }) => { light.intensity = w.night * LAMP_LOOK.lifeLight; lens.material.opacity = w.night; });
+      pools.forEach(p => { p.material.opacity = w.night * LAMP_LOOK.lifePool; });
     } };
   };
 }

@@ -12,10 +12,11 @@ const args = process.argv.slice(2), opt = (k, d) => { const i = args.indexOf(k);
 const here = new URL('..', import.meta.url).pathname;
 const root = opt('--root', here).replace(/\/$/, '') + '/';
 
-export async function simulateDay({root: tree = root, hours = 24, seed = 831, dt = .2, weather = 'clear', log = false} = {}) {
+export async function simulateDay({root: tree = root, hours = 24, seed = 831, dt = .2, weather = 'clear', log = false, trafficSample, startHour = 0, trafficOnly = false} = {}) {
+  tree = tree.replace(/\/$/, '') + '/';
   const imp = (p) => import(pathToFileURL(tree + p).href), mine = (p) => import(pathToFileURL(here + p).href);
   const {resolveAll} = await imp('src/catalog/resolve-all.js');
-  const {compileWorld} = await imp('src/compiler/world-plan.js');
+  const {compileWorld,WORLD_OFFSETS} = await imp('src/compiler/world-plan.js');
   const {createLife} = await imp('src/astra/life/runtime.js');
   const sim = await imp('src/astra/traffic-simulation.js');
   const loadWalk = existsSync(tree + 'src/roads/pedestrian.js') ? imp : mine;
@@ -24,7 +25,7 @@ export async function simulateDay({root: tree = root, hours = 24, seed = 831, dt
   const {footprint, footprintsOverlap, pointInFootprint, crossingClear} = await mine('src/roads/collisions.js');
   const catalog = resolveAll(JSON.parse(readFileSync(tree + 'src/catalog/bounds.json')));
   const town = compileWorld(catalog, seed);
-  const life = createLife(town, {hour: 0, weather});
+  const life = createLife(town, {hour:startHour, weather});
   const traffic = sim.createTrafficSimulation(town);
   const graph = pedestrianGraph(town), surf = graph.index;
   // Regional vehicles: current module, or the legacy render-side logic.
@@ -47,10 +48,43 @@ export async function simulateDay({root: tree = root, hours = 24, seed = 831, dt
   // Pinewood hikers (grok-woods): clock-driven trail walkers, pedestrians too.
   let hikers = () => [];
   if (town.woods && existsSync(tree + 'src/astra/woods-hikers.js')) { const m = await imp('src/astra/woods-hikers.js'), rosters = new Map(); hikers = (hour) => { const w = (4 + life.day) % 7; if (!rosters.has(w)) rosters.set(w, m.hikerRoster(town.woods, w)); return rosters.get(w).map((h) => [h, m.hikerPose(h, town.woods, hour)]).filter(([, p]) => p).map(([h, p]) => ({x: p.x, z: p.z, walking: p.walking, id: h.id})); }; }
-  const parked = sim.PARKING_BAYS ? sim.PARKING_BAYS.map((b) => ({position: b.center, direction: [Math.sin(b.yaw), Math.cos(b.yaw)], length: b.length, width: b.width, speed: 0, parked: b.id}))
-    : [[-73, -16], [-69, -16], [-31, -33]].map(([x, z], i) => ({position: [x, z + .82], direction: [1, 0], length: 1.85, width: .88, speed: 0, parked: 'legacy-' + i}));
+  const parked = traffic.parked ?? (sim.PARKING_BAYS ? sim.PARKING_BAYS.map((b) => ({id:b.id,position:b.center,direction:[Math.sin(b.yaw),Math.cos(b.yaw)],length:b.length,width:b.width,speed:0,parked:true}))
+    : [[-73,-16],[-69,-16],[-31,-33]].map(([x,z],i)=>({id:'legacy-'+i,position:[x,z+.82],direction:[1,0],length:1.85,width:.88,speed:0,parked:true})));
+  const civic = !traffic.parked && existsSync(tree+'src/astra/civic-quarter-life.js') ? await imp('src/astra/civic-quarter-life.js') : null;
+  const apron = existsSync(tree+'src/astra/airport/ground-traffic.js') ? (await imp('src/astra/airport/ground-traffic.js')).apronVehicles : null;
+  const starbase = existsSync(tree+'src/astra/starbase-road.js') ? (await imp('src/astra/starbase-road.js')).starbaseRoadVehicles : null;
+  function apronNow(t) {
+    const local=(t%210+210)%210;
+    if(local>=20&&local<200)return [];
+    const offset=WORLD_OFFSETS?.airport??[0,0];
+    if(apron)return apron(t).map(v=>({...v,position:v.position.map((x,i)=>x+offset[i])}));
+    if(!civic)return [];
+    const angle=t*.12;
+    const p=[87+Math.sin(angle)*1.4,-72+Math.cos(angle)*3].map((x,i)=>x+offset[i]);
+    const yaw=Math.atan2(1.4*Math.cos(angle),-3*Math.sin(angle)), direction=[Math.sin(yaw),Math.cos(yaw)];
+    const pose=(id,kind,displacement,length,width)=>({id,kind,position:p.map((x,i)=>x+direction[i]*displacement),direction,length,width});
+    return [pose('apron-tug','tug',0,2,1.48),pose('apron-carts','cart',-3.2,3,1.48)];
+  }
+  function legacyCivic(t,hour) {
+    if (!civic) return [];
+    const state=civic.civicLifeState(t,hour), cycle=t%95;
+    const pose=(id,route,progress,reversing,status)=>{
+      const p=civic.sampleRoute(route,progress), yaw=p.heading+(reversing?Math.PI:0);
+      return {id,civic:true,kind:'van',position:[p.x,p.z],direction:[Math.sin(yaw),Math.cos(yaw)],length:4.46,width:2.47,status};
+    };
+    const engine=pose('civic-engine',civic.FIRE_ROUTE,state.fireProgress,state.phase==='returning',
+      {ready:'At depot',assisting:'Assisting at fire scene'}[state.phase]??state.phase);
+    const delivery=pose('civic-delivery',civic.DELIVERY_ROUTE,cycle<18?0:cycle<54?(cycle-18)/36:1-(cycle-54)/41,cycle>=54,cycle<18?'At depot':'Delivering');
+    const parked = [
+      {id:'civic-reserve',position:[-94,-84],direction:[0,1]},
+      {id:'civic-ambulance',position:[-65.5,-82.6],direction:[1,0]},
+      {id:'civic-patrol',position:[-87,-57],direction:[1,0]},
+      {id:'astra-school-bus',position:[21,-61],direction:[0,1],length:6.5,width:2.56},
+    ].map(v=>({civic:true,parked:true,kind:'van',length:4.46,width:2.47,...v}));
+    return [engine,...(state.deliveryActive?[delivery]:[]),...parked];
+  }
   // Funfair Parking (grok-fairlot): parked and moving lot cars, and the visitors walking to the gate.
-  const lot = existsSync(tree + 'src/astra/fair-lot-sim.js') ? (await imp('src/astra/fair-lot-sim.js')).createFairLotSim({hour: 0, seed}) : null;
+  const lot = existsSync(tree + 'src/astra/fair-lot-sim.js') ? (await imp('src/astra/fair-lot-sim.js')).createFairLotSim({hour:startHour, seed}) : null;
   let lotVehicles = lot ? lot.vehicles() : [];
   const shuttlePose = lot ? (await imp('src/astra/fair-lot-plan.js')).shuttlePose : null;
   // Thistlebrook Loop Line (railway-loop): train cars are vehicles, barriers stop
@@ -69,7 +103,7 @@ export async function simulateDay({root: tree = root, hours = 24, seed = 831, dt
     const plan = mod.planSchool(town, graph, walkBetween);
     school = {mod, plan, day: mod.createSchoolDay?.(plan), seen: new Set(), maxOut: 0};
   }
-  const trainNow = () => railway ? railway.cars.filter((c) => !c.hidden && (c.y ?? 0) < 2.8).map((c) => ({position: c.pos, direction: c.dir, length: c.length, width: c.width, speed: railway.train.speed, kind: 'train', train: true})) : [];
+  const trainNow = () => railway ? railway.cars.filter((c) => !c.hidden && (c.y ?? 0) < 2.8).map((c) => ({id:'train-'+c.centre,position: c.pos, direction: c.dir, length: c.length, width: c.width, speed: railway.train.speed, kind: 'train', train: true})) : [];
   const allVehicles = () => [...traffic.vehicles, ...regional.vehicles, ...parked, ...lotVehicles, ...trainVehicles];
   const clearRoad = (a, b) => crossingClear(a, b, allVehicles());
   life.setCrossingGuard?.(clearRoad);
@@ -90,7 +124,7 @@ export async function simulateDay({root: tree = root, hours = 24, seed = 831, dt
   const keepOut = water ? water.boatKeepOut(town) : [];
   let quarter = -1, hulls = [];
   const note = (kind, key, detail) => { counts[kind]++; if (!seen[kind].has(key)) { seen[kind].add(key); if (firsts[kind].length < 12) firsts[kind].push(detail); } };
-  let hour = 0, t = 0; const steps = Math.round(hours * 90 / dt);
+  let hour = startHour, t = 0; const steps = Math.round(hours * 90 / dt);
   for (let n = 0; n < steps; n++) {
     t += dt; hour = (hour + dt / 90) % 24;
     if (railway) { railway.update(hour, dt); trainVehicles = trainNow(); const closed = railway.crossings.map((c) => c.closed); closed.forEach((c, i) => { if (c && !wasClosed[i]) railStats.crossingClosures++; }); wasClosed = closed; }
@@ -111,13 +145,36 @@ export async function simulateDay({root: tree = root, hours = 24, seed = 831, dt
       ?? school.mod.schoolState(school.plan, hour, weekday)) : [];
     if (school) { pupils.forEach((p) => school.seen.add(p.id)); school.maxOut = Math.max(school.maxOut, pupils.length); }
     const people = [...townPeople, ...visitors, ...travellers, ...pupils];
-    traffic.update(dt, people); regional.update(dt, hour, people, traffic.vehicles);
-    if (lot) { lot.update(dt, hour, [...townPeople, ...travellers], t); lotVehicles = lot.vehicles(); }
+    const townFleet=[...traffic.vehicles,...parked];
+    const shared=[...townFleet,...regional.vehicles];
+    const historicCivic=legacyCivic(t,hour);
+    const civicPoints=historicCivic.filter(v=>!v.parked).map(v=>({x:v.position[0],z:v.position[1]}));
+    traffic.update(dt,civicPoints.length?[...people,...civicPoints]:people,[...regional.vehicles,...lotVehicles],hour);
+    regional.update(dt,hour,people,[...townFleet,...lotVehicles]);
+    if (lot) { lot.update(dt,hour,[...townPeople,...travellers],t,shared); lotVehicles=lot.vehicles(); }
+    if (trafficSample) trafficSample({
+      t,hour,people,
+      closedGates:new Set(town.railway?.crossings.filter((c,i)=>railway.crossings[i].closed).map(c=>c.pos.join(','))??[]),
+      systems:{
+        town:traffic.vehicles.filter(v=>!v.civic),
+        civic:[...traffic.vehicles.filter(v=>v.civic),...parked.filter(v=>v.id.startsWith('civic-')||v.id==='astra-school-bus'),...historicCivic],
+        parked:parked.filter(v=>!v.id.startsWith('civic-')&&v.id!=='astra-school-bus'),
+        regional:regional.vehicles.filter(v=>!v.mapleHollow),
+        maple:regional.vehicles.filter(v=>v.mapleHollow),
+        lot:lotVehicles,
+        shuttles:shuttlePose?[0,1].map(i=>({id:'pinecrest-shuttle-'+i,kind:'bus',...shuttlePose(i,t)})):[],
+        apron:apronNow(t),
+        ...(starbase ? {starbase:starbase(t).map(v=>({...v,position:v.position.map((x,i)=>x+WORLD_OFFSETS.starbase[i])}))} : {}),
+        trains:trainVehicles.filter(v=>town.railway.crossings.some(c=>Math.hypot(c.pos[0]-v.position[0],c.pos[1]-v.position[1])<v.length/2+6)),
+      },
+      releases:[traffic.events.deadlocksReleased??[],regional.events?.deadlocksReleased??[]],
+    });
+    if (trafficOnly) continue;
     if (n % 2) continue; counts.samples++;
     if (water && Math.floor(hour * 4) !== quarter) { quarter = Math.floor(hour * 4); const list = water.watercraftAt(quarter / 4); hulls = list.map((b) => ({b, f: water.boatFootprint(b.model, b.world, b.yaw)}));
       for (const f of water.watercraftFindings({roads: keepOut, hours: [quarter / 4], boats: () => list})) note('boatClash', f.detail.replace(/ at [\d.]+h$/, ''), {hour: quarter / 4, detail: f.detail, at: f.at}); }
     const vs = allVehicles(), fps = vs.map(footprint);
-    for (let i = 0; i < vs.length; i++) for (let j = i + 1; j < vs.length; j++) if (!(vs[i].train && vs[j].train) && Math.hypot(fps[i].c[0] - fps[j].c[0], fps[i].c[1] - fps[j].c[1]) < 6 && footprintsOverlap(fps[i], fps[j])) note('carCar', `${i}-${j}`, {hour: +hour.toFixed(2), a: vs[i].kind || vs[i].parked, b: vs[j].kind || vs[j].parked, id: vs[i].id, line: vs[i].line?.id, s: vs[i].s, d: vs[i].direction, status: vs[i].status, at: fps[i].c.map((v) => +v.toFixed(1))});
+    for (let i = 0; i < vs.length; i++) for (let j = i + 1; j < vs.length; j++) if (!(vs[i].train && vs[j].train) && Math.abs(fps[i].c[0] - fps[j].c[0]) <= fps[i].hl+fps[i].hw+fps[j].hl+fps[j].hw && Math.abs(fps[i].c[1] - fps[j].c[1]) <= fps[i].hl+fps[i].hw+fps[j].hl+fps[j].hw && footprintsOverlap(fps[i], fps[j])) note('carCar', `${i}-${j}`, {hour: +hour.toFixed(2), a: vs[i].kind || vs[i].parked, b: vs[j].kind || vs[j].parked, id: vs[i].id, line: vs[i].line?.id, s: vs[i].s, d: vs[i].direction, status: vs[i].status, at: fps[i].c.map((v) => +v.toFixed(1))});
     if (railway) {
       const shuttles = shuttlePose ? [0, 1].map((i) => ({...shuttlePose(i, t), id: 'pinecrest-shuttle-' + i})) : [];
       for (const v of [...vs.filter((car) => !car.train), ...shuttles]) {
@@ -145,7 +202,7 @@ export async function simulateDay({root: tree = root, hours = 24, seed = 831, dt
   return {school: school ? {walkers: school.seen.size, mostOutAtOnce: school.maxOut} : null, lot: lot ? lot.audit() : null, railway: railway ? railStats : null, transit: regional.transit ? {busStops: regional.events.busStops, vehicles: regional.transit.vehicles.length, ...rides} : null, counts, unique: Object.fromEntries(Object.entries(seen).map(([k, s]) => [k, s.size])), firsts, vehicles: allVehicles().length, residents: life.actors.length};
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const result = await simulateDay({hours: +opt('--hours', 24), weather: opt('--weather', 'clear'), log: true});
   console.log(JSON.stringify(result, null, args.includes('--json') ? 0 : 2));
   if (Object.entries(result.counts).some(([kind, count]) => kind !== 'samples' && count > 0)) process.exitCode = 1;

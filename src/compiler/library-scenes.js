@@ -67,7 +67,7 @@ export function compileTownScenes(town){
   const [x0,z0,x1,z1]=regions[district.id],candidates=[];
   for(const road of town.roads.filter(r=>!r.owner)){
    const dx=road.b[0]-road.a[0],dz=road.b[1]-road.a[1],length=Math.hypot(dx,dz);if(length<4||dx&&dz)continue;
-   for(let d=2;d<length-1;d+=2)for(const side of [-1,1])for(const offset of [2.2,3.8,5.2]){
+   for(let d=2;d<length-1;d+=2)for(const side of [-1,1])for(const offset of [2.2,3.8,5.2,6.6,8]){
     const street=[road.a[0]+dx*d/length,road.a[1]+dz*d/length],normal=[dz/length*side,-dx/length*side],center=street.map((v,i)=>v+normal[i]*offset),yaw=Math.atan2(-normal[0],-normal[1]);
     if(center[0]<x0||center[0]>x1||center[1]<z0||center[1]>z1)continue;
     const scene={...compileScene('neighbourhood-rest',center,yaw,'rest-'+district.id),district:district.id,street,name:district.name+' rest garden'};
@@ -79,10 +79,10 @@ export function compileTownScenes(town){
     if(carriageways.some(r=>overlap(roadBox(scene.aisle[0],scene.aisle.at(-1),.45),roadBox(r.a,r.b,r.width/2))||scene.slots.some(sl=>overlap(roadBox([sl.approach[0],sl.approach[2]],[sl.approach[0],sl.approach[2]],.38),roadBox(r.a,r.b,r.width/2)))))continue;
     const entry=scene.aisle.reduce((a,b)=>Math.hypot(a[0]-street[0],a[1]-street[1])<Math.hypot(b[0]-street[0],b[1]-street[1])?a:b),join=[street[0],entry[1]];
     if([[street,join],[join,entry]].some(([a,b])=>[...lots,...scene.members.map(m=>m.box)].some(box=>overlap(box,roadBox(a,b,.45)))))continue;
-    candidates.push({scene,score:Math.hypot(center[0]-district.center[0],center[1]-district.center[1])});
+    candidates.push({scene,extended:offset>5.2,score:Math.hypot(center[0]-district.center[0],center[1]-district.center[1])});
    }
   }
-  candidates.sort((a,b)=>a.score-b.score);if(!candidates.length)throw Error('No safe catalog rest garden in '+district.id);scenes.push(candidates[0].scene);
+  candidates.sort((a,b)=>Number(a.extended)-Number(b.extended)||a.score-b.score);if(!candidates.length)throw Error('No safe catalog rest garden in '+district.id);scenes.push(candidates[0].scene);
  }
  // Southern promenade meets the existing orchard bridge; no new water crossing.
  town.roads.push({a:[-76,20.5],b:[-22,20.5],width:1.1,kind:'lane',owner:'catalog-promenade'});

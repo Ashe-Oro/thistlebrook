@@ -1,3 +1,4 @@
+import {vehicleModel} from './traffic-fleet.js';
 // OWNER: grok-fairlot lane. Funfair Parking: the lot between Pinecrest's gate,
 // the end of the mountain road and the Coral Coast blocks. Pure layout (no
 // renderer, DOM, timers or global random); fair-lot-sim.js drives it and
@@ -6,7 +7,7 @@ import * as THREE from 'three';
 import {APPROACH} from './themepark-plan.js';
 import {footprintsOverlap} from '../roads/collisions.js';
 
-// Lot cars: Tesla-sized toys (sedan 1.08 x 2.3, wedge truck 1.14 x 2.5).
+// Largest body the marked bays and their access curves are designed to accept.
 export const CAR = {length: 2.6, width: 1.2};
 export const LOT = {minX: 223, maxX: 268.4, minZ: 4.6, maxZ: 32.2, min: [223, 4.6], max: [268.4, 32.2]};
 // Kept clear of the scattered park pines and anything else that would sit on the lot.
@@ -88,11 +89,23 @@ export function lanePoint(s, inbound) {
   return {p: [p[0] + t[1] * k, p[1] - t[0] * k], t: inbound ? t : [-t[0], -t[1]]};
 }
 export const SPAWN_S = ROAD_LENGTH - 30, TURN_IN_S = ROAD_LENGTH - 8, TURN_OUT_S = ROAD_LENGTH - 9.5;
-// The shuttle pair in themepark.js: 95 s round trips, half a cycle apart.
-export function shuttlePose(i, t) {
-  const u = ((t / 95 + i * .5) % 1 + 1) % 1, forward = u < .5, v = forward ? u * 2 : (1 - u) * 2, s = v * ROAD_LENGTH;
-  const {p, t: tan} = roadPose(s), k = forward ? 1.25 : -1.25;
-  return {s, forward, position: [p[0] + tan[1] * k, p[1] - tan[0] * k], direction: forward ? tan : [-tan[0], -tan[1]], length: 4.8, width: 2.1};
+export const pinecrestModel = i => vehicleModel('city-bus',i?'#d5a366':'#649a8e');
+// Two shuttles offset by half a round trip. The ends use the whole
+// carriageway to turn, with continuous headings and no jump across the lanes.
+export function shuttlePose(i,t) {
+  const halfTrip=47.5, turnTime=2.4, driveTime=halfTrip-turnTime;
+  const time=((t+i*halfTrip)%95+95)%95;
+  const forward=time<halfTrip, local=time%halfTrip;
+  const start=8, end=ROAD_LENGTH-2.7;
+  const progress=Math.min(1,local/driveTime);
+  const s=forward?start+(end-start)*progress:end-(end-start)*progress;
+  const {p,t:tan}=roadPose(s), h=forward?tan:tan.map(x=>-x), right=[h[1],-h[0]];
+  const theta=Math.PI*Math.max(0,(local-driveTime)/turnTime);
+  const c=Math.cos(theta), d=Math.sin(theta);
+  return {id:'pinecrest-shuttle-'+i,kind:'bus',s,forward,
+    position:p.map((x,j)=>x+1.25*(right[j]*c+h[j]*d)),
+    direction:h.map((x,j)=>x*c-right[j]*d),speed:local<driveTime?(end-start)/driveTime:1.25*Math.PI/turnTime,
+    status:local<driveTime?'Cruising':'Turning around',...pinecrestModel(i)};
 }
 // Apron: the paved mouth joining the road end to aisle A0 (rendered as a hull).
 export const APRON = {min: [211.5, 3.2], max: [LANES.W + 2.2, 14.5]};

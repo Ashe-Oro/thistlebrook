@@ -2,6 +2,9 @@ import {furnitureId} from './registry/district-furniture.js';
 import {tagNewFurniture} from './registry/furniture-tags.js';
 import {tagDistrictModels} from './registry/district-models.js';
 import * as THREE from 'three';
+import {lampPosts,PARK_LAMPS} from './lamp-posts.js';
+import {buildLampGlow} from './lamp-glow.js';
+import {WORLD_OFFSETS} from '../compiler/world-plan.js';
 import { place } from '../catalog/loader.js';
 import { toonMaterial } from '../toon.js';
 import { fairSchedule } from '../compiler/astra-fair.js';
@@ -179,7 +182,7 @@ export async function buildFairground(scene,town){
   for(const [x,z,scale]of [[-74,-98,1],[-45,-98,.8],[-74,-81,.8],[-74,-58,.85],[-58,-58,.8],[-57,-78,.8],[-46,-79,.75],[-74,-38,.8],[-58,-38,.85]])jobs.push(load('cv-tree-oak',x,z,scale));
   jobs.push(load('cv-tree-fruit',-46,-84,.85));
   for(const [x,z]of [[-74,-61],[-60,-75],[-73,-95],[-45,-92],[-58,-40]])jobs.push(load('cv-flower-bed',x,z,.85));
-  for(const [x,z]of [[-76,-79],[-43,-79],[-76,-57],[-43,-57],[-43,-37]])jobs.push(load('cv-streetlamp',x,z,1));
+  for(const [x,z]of PARK_LAMPS)jobs.push(load('cv-streetlamp',x,z,1));
   for(const z of [-79,-57]){
     for(const x of [-76,-43])box(x,2.7,z,.13,5.4,.13,C.wood);
     for(let n=0;n<24;n++){
@@ -198,6 +201,8 @@ export async function buildFairground(scene,town){
   for(const {o,matrices,ids}of batches.values()){
     const instance=new THREE.InstancedMesh(o.geometry,o.material,matrices.length);matrices.forEach((m,i)=>instance.setMatrixAt(i,m));instance.userData.registryIds=ids;instance.castShadow=o.castShadow;instance.receiveShadow=o.receiveShadow;scene.add(instance);
   }
+  // streetlights: Merrymead Park's lamp posts had no night glow at all.
+  scene.add(buildLampGlow(lampPosts(town).filter(p=>p.source==='park'),{name:'Merrymead Park lamps',offset:WORLD_OFFSETS.fair}).group);
   const [life, festival] = await Promise.all([createFairLife(scene,town), buildFestivalStage(scene,sign,town)]);
   const lights=[[-64,-91],[-50,-68],[-49,-46]].map(([x,z])=>{const l=new THREE.PointLight('#ffd498',0,17,1.6);l.position.set(x,5,z);scene.add(l);return l;});
   let lastTime=null,rideTime=0,schedule=fairSchedule(4,10);

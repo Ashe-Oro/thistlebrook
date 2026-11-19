@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import { lampPosts, WORKS_LAMPS } from './lamp-posts.js';
+import { buildLampGlow } from './lamp-glow.js';
+import { DISTRICT_OFFSETS } from '../compiler/astra-placement.js';
 import { place } from '../catalog/loader.js';
 import { toonMaterial } from '../toon.js';
 import { trainState, workPeriod } from '../compiler/astra-work.js';
@@ -84,13 +87,15 @@ export async function buildWorkDistrict(scene,town){
  asset('cv-horse-cart',-52,-78,.85,Math.PI/2);label('WEST FREIGHT EXCHANGE',-60,4.15,-80.4,11,.85,'#6c7c67');
  // Modest border planting makes the expanded land read as a district.
  for(const [x,z] of [[-113,-42],[-113,-51],[-113,-61],[-113,-76],[-111,-100],[-102,-100],[-78,-42],[-78,-54],[-44,-41],[-44,-54],[-44,-80],[-44,-99]])asset('cv-tree-pine',x,z,.75);
- for(const x of [-108,-97,-82,-72,-52]){asset('cv-streetlamp',x,-71.4,1);const bulb=orb(x,2.6,-71.4,.18,'#ffe0a0',moving);bulb.material=new THREE.MeshBasicMaterial({color:'#ffe0a0'});lamps.push(bulb);}
+ for(const [x] of WORKS_LAMPS){asset('cv-streetlamp',x,-71.4,1);const bulb=orb(x,2.6,-71.4,.18,'#ffe0a0',moving);bulb.material=new THREE.MeshBasicMaterial({color:'#ffe0a0'});lamps.push(bulb);}
  // Waiting passengers are scenery; named workers below use real graph routes.
  const passengers=[];
  if(!town.railway)for(let n=0;n<5;n++)loads.push(place(['townsfolk-merchant','townsfolk-watch','townsfolk-carpenter'][n%3],{x:-104+n*4,z:-92,scale:1.05}).then(o=>{o.position.y=.76;moving.add(o);passengers.push(o);}));
  await Promise.all(loads);
  root.updateMatrixWorld(true);const batches=new Map();root.traverse(o=>{if(!o.isMesh)return;const key=o.geometry.uuid+':'+o.material.uuid;if(!batches.has(key))batches.set(key,{source:o,matrices:[]});batches.get(key).matrices.push(o.matrixWorld.clone());});
  for(const {source,matrices} of batches.values()){const m=new THREE.InstancedMesh(source.geometry,source.material,matrices.length);matrices.forEach((v,i)=>m.setMatrixAt(i,v));m.castShadow=source.castShadow;m.receiveShadow=source.receiveShadow;scene.add(m);}
+ // streetlights: the yard lamps had bulbs but no ground pool or halo.
+ scene.add(buildLampGlow(lampPosts(town).filter(p=>p.source==='works'),{name:'works lamps',offset:DISTRICT_OFFSETS.works}).group);
  const records=town.venues.filter(v=>v.district==='works').map(v=>({type:'venue',data:v,bounds:new THREE.Box3(new THREE.Vector3(v.box.min[0],0,v.box.min[1]),new THREE.Vector3(v.box.max[0],.4,v.box.max[1]))}));
  // The parcel selects its ground, not an invisible solid volume above the
  // whole yard. Buildings have their own bounds, leaving workers clickable.

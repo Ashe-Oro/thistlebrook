@@ -1,7 +1,11 @@
+import {packVehicle} from './vehicle-models.js';
+import {vehicleModel} from './traffic-fleet.js';
 import * as THREE from 'three';
+import {lampPosts,CIVIC_LAMPS} from './lamp-posts.js';
+import {buildLampGlow} from './lamp-glow.js';
 import {place} from '../catalog/loader.js';
 import {toonMaterial} from '../toon.js';
-import {civicLifeState,sampleRoute,FIRE_ROUTE,DELIVERY_ROUTE,STORY_ROUTE} from './civic-quarter-life.js';
+import {civicLifeState,sampleRoute,CIVIC_PARKED,STORY_ROUTE} from './civic-quarter-life.js';
 
 export async function buildCivicQuarter(scene,town) {
   const root=new THREE.Group(),moving=new THREE.Group();moving.name='Civic Green activity';scene.add(moving);
@@ -29,7 +33,7 @@ export async function buildCivicQuarter(scene,town) {
   for(let x=-98;x<-44;x+=5)box(x,.13,-77,2,.025,.1,'#eee2bc');
   for(let z=-73;z<-35;z+=5)box(-80,.13,z,.1,.025,2,'#eee2bc');
   for(const z of [-72.5,-54])for(let n=0;n<6;n++)box(-81.65+n*.65,.15,z,.34,.025,2,'#f0e5c9');
-  for(const [x,z]of [[-99,-75],[-83,-79],[-62,-79],[-44,-75],[-76,-61],[-76,-39],[-97,-39]])lamp(x,z);
+  for(const [x,z]of CIVIC_LAMPS)lamp(x,z);
   // Fire station: two open apparatus bays, red brick and a hose tower.
   building(-91,-90,16,11,5.2,'#b67a62','#735f54');
   box(-91,.14,-82.5,17,.16,4.4,'#b7b6a1');
@@ -50,11 +54,11 @@ export async function buildCivicQuarter(scene,town) {
   building(-71,-91,14,10,4.5,'#e2d8bd','#6c9284');
   for(const x of [-76,-73.6,-68.4,-66])window(x,2.5,-85.91,1.6,1.9);
   box(-71,1.7,-85.85,1.9,2.8,.14,'#567c75');window(-71,1.9,-85.72,1.35,1.9);
-  box(-71,3.65,-84.5,6,.24,3,'#789e8b');for(const x of [-73.7,-68.3])box(x,1.9,-83.2,.13,3.5,.13,'#d6cbb1');
+  box(-71,3.65,-84.5,6,.24,3,'#789e8b');box(-73.7,1.9,-85.1,.13,3.5,.13,'#d6cbb1');box(-68.3,1.9,-83.2,.13,3.5,.13,'#d6cbb1');
   for(const x of [-75,-70,-65]){const panel=box(x,5.3,-92.4,3,.12,2.6,'#486e7e');panel.rotation.x=.18;for(let n=0;n<3;n++)box(x-1+n,5.43,-92.4,.025,.025,2.4,'#94afb0');}
   label('WILLOW COMMUNITY CLINIC',-71,4.7,-85.78,12,.7,'#477f73');
   box(-71,5.7,-90,2.4,2.1,.45,'#f1e9d0');cross(-71,5.7,-89.7,'#568b73');
-  box(-71,.13,-82.9,14,.14,2.8,'#d4cbb0');asset('cv-bench',-76,-83,.8);
+  box(-71,.13,-82.9,14,.14,2.8,'#d4cbb0');box(-73.48,.11,-82.2,3.6,.12,5.5,'#b6b4a1');asset('cv-bench',-77.4,-82.8,.8);
   for(const x of [-77,-65]){box(x,.5,-84,1.3,.7,1.2,'#aa9a79');orb(x,1.1,-84,.65,'#7c9d74');}
   // Public library: taller terracotta reading hall, high glazing, open book crest.
   building(-52,-91,16,11,6.7,'#ceb393','#65847c');
@@ -101,23 +105,10 @@ export async function buildCivicQuarter(scene,town) {
   const slide=box(-52,1.2,-45.7,1.1,.15,3.6,'#ccad64');slide.rotation.x=.6;box(-52,2.2,-48,2.5,.15,2.7,'#b89b69');
   for(let n=0;n<5;n++)box(-53.7,.4+n*.4,-49.2,.6,.12,.17,'#bd9b61');
   for(const x of [-73,-44.8])for(const z of [-64,-43]){box(x,.4,z,1,.5,1,'#b6a37d');for(let n=0;n<3;n++)orb(x+(n-1)*.25,.85,z,.2,['#c68e91','#ead49e','#d4a26e'][n]);}
-  // Vehicles are authored at town scale and do not require additional assets.
-  const vehicle=(color,x,z,kind)=>{
-    const g=new THREE.Group();g.position.set(x,.16,z);moving.add(g);
-    box(0,.7,0,2,.55,4.3,color,g);box(0,1.5,-.55,1.94,1.25,2.7,color,g);box(0,1.3,1.25,1.9,.95,1.3,color,g);
-    box(0,1.65,1.93,1.6,.55,.05,'#6d999e',g);for(const side of [-1,1])box(side*.98,1.65,1.2,.04,.55,.9,'#6d999e',g);
-    box(0,.68,2.2,2.05,.17,.16,'#d6d0b6',g);for(const x of [-.7,.7])box(x,1,2.17,.3,.2,.05,'#f7e2a2',g);
-    for(const x of [-1.02,1.02])for(const z of [-1.4,1.35]){const w=disc(x,.45,z,.43,.22,'#414d47',g);w.rotation.z=Math.PI/2;}
-    if(kind==='fire'){for(const x of [-.5,.5])box(x,2.25,-.6,.09,.12,3,'#d8cfb3',g);for(let n=0;n<8;n++)box(0,2.25,-1.85+n*.35,1,.1,.07,'#d8cfb3',g);label('01',0,1.3,2.19,.65,.4,'#b75f4b',g);}
-    if(kind==='ambulance')cross(0,1.6,-1.94,'#608c76',g);
-    if(kind==='delivery')label('COMMUNITY SUPPLIES',0,1.55,1.98,1.7,.4,'#a2865a',g);
-    const beacons=[];if(kind!=='delivery'){for(const side of [-1,1]){const m=box(side*.5,2.15,1.1,.65,.19,.3,side<0?'#d96850':'#759db7',g);m.material=new THREE.MeshBasicMaterial({color:side<0?'#e17050':'#6cadd2'});beacons.push(m);}}
-    return {o:g,beacons};
-  };
-  const engine=vehicle('#b65a48',-88,-84,'fire');vehicle('#ae5a48',-94,-84,'fire');
-  const ambulance=vehicle('#e4dfc8',-65.5,-82.6,'ambulance');ambulance.o.rotation.y=Math.PI/2;
-  const patrol=vehicle('#5b7888',-87,-57,'police');patrol.o.rotation.y=Math.PI/2;
-  const delivery=vehicle('#c0a473',-71,-79,'delivery');
+  for(const v of CIVIC_PARKED.slice(0,3)){
+    const object=await packVehicle(vehicleModel(v.model));
+    object.name=v.id;object.position.set(v.center[0],.18,v.center[1]);object.rotation.y=v.yaw;moving.add(object);
+  }
   // A contained bin fire is resolved visibly by the crew on each authored loop.
   box(-93,.7,-51,1.2,1.2,1,'#697e6c');box(-93,1.35,-51,1.4,.16,1.1,'#83917a');
   const flames=[],smoke=[];for(let n=0;n<5;n++){
@@ -127,35 +118,39 @@ export async function buildCivicQuarter(scene,town) {
   const hoseGeometry=new THREE.BufferGeometry().setFromPoints(Array.from({length:20},(_,i)=>{const u=i/19;return new THREE.Vector3(-91-u*2,1.4+Math.sin(u*Math.PI)*1.1,-50.3-u*.7);}));
   const hose=new THREE.Line(hoseGeometry,new THREE.LineBasicMaterial({color:'#d8eeee'}));moving.add(hose);
   actor('blacksmith','Captain Ellis',-91,-50.3,'firefighter');actor('carpenter','Jo · station crew',-97,-81,'station');
-  actor('herbalist','Nurse Sana',-73,-82.2,'clinic');actor('elder','Mrs. Bell',-76,-82.5,'waiting');
-  actor('merchant','Ren · deliveries',-72.5,-79,'delivery');actor('watch','Officer Lane',-85,-60,'patrol');
+  actor('herbalist','Nurse Sana',-70.1,-82.7,'clinic');actor('elder','Mrs. Bell',-77.4,-82.3,'waiting');
+  actor('merchant','Ren · deliveries',-75.25,-81.9,'delivery');actor('watch','Officer Lane',-85,-60,'patrol');
   actor('elder','Mara · librarian',-60,-47,'librarian');
   for(let n=0;n<6;n++)actor('child',['Ari','Sol','Max','Nell','Bo','Zee'][n],-60,-47,'child',n,.95+n%2*.1);
   for(let n=0;n<3;n++)actor(['carpenter','farmhand','shopkeeper'][n],['Evan','Dee','Ollie'][n],-70,-54,'jogger',n,.95);
   actor('innkeeper','A picnic with Rose',-90,-47,'picnic');actor('child','A very tall slide',-52,-47,'play');
   const parcel=new THREE.Group();box(0,.6,0,.5,.5,.5,'#c4a16c',parcel);box(0,.86,0,.1,.02,.5,'#e6d1a2',parcel);moving.add(parcel);
-  for(let n=0;n<3;n++)box(-74+n*.7,.4,-81.5,.6,.6,.6,'#baa074');
+  for(let n=0;n<3;n++)box(-76.75+n*.62,.4,-81.5,.6,.6,.6,'#baa074');
   await Promise.all(jobs);
   // Batch architecture, furniture and owned trees; preserve moving people.
   root.updateMatrixWorld(true);const batches=new Map();root.traverse(o=>{if(!o.isMesh)return;const key=o.geometry.uuid+':'+o.material.uuid;if(!batches.has(key))batches.set(key,{source:o,matrices:[]});batches.get(key).matrices.push(o.matrixWorld.clone());});
   for(const {source,matrices}of batches.values()){const m=new THREE.InstancedMesh(source.geometry,source.material,matrices.length);matrices.forEach((v,i)=>m.setMatrixAt(i,v));m.castShadow=source.castShadow;m.receiveShadow=source.receiveShadow;scene.add(m);}
+  // streetlights: the avenue posts had bulbs but no ground pool or halo.
+  scene.add(buildLampGlow(lampPosts(town).filter(p=>p.source==='civic'),{name:'Civic Green lamps'}).group);
   const venueRecords=town.venues.filter(v=>v.district==='civic-green').map(v=>({type:'venue',data:v,bounds:new THREE.Box3(new THREE.Vector3(v.box.min[0],0,v.box.min[1]),new THREE.Vector3(v.box.max[0],v.height,v.box.max[1]))}));
-  let state=civicLifeState(0,10);
+  let state=civicLifeState(0,10), engine, delivery;
+  const position=v=>v?[v.position[0],.215,v.position[1]]:[0,0,0];
   const move=(o,path,u,reverse=false)=>{const p=sampleRoute(path,u);o.position.set(p.x,.18,p.z);o.rotation.y=p.heading+(reverse?Math.PI:0);};
   const parkLoop=[[-70,-54],[-70,-66],[-48,-66],[-48,-42],[-70,-42],[-70,-54]];
   return {venueRecords,stats:{facilities:4,park:1,localPeople:actors.length,vehicles:5},
-    audit:()=>({state:{...state},engine:engine.o.position.toArray(),delivery:delivery.o.position.toArray(),people:actors.map(a=>({name:a.name,position:a.o.position.toArray(),visible:a.o.visible})),ducks:ducks.map(a=>a.o.position.toArray())}),
+    setVehicles(vehicles){[engine,delivery]=vehicles;},
+    audit:()=>({state:{...state},engine:position(engine),delivery:position(delivery),people:actors.map(a=>({name:a.name,position:a.o.position.toArray(),visible:a.o.visible})),ducks:ducks.map(a=>a.o.position.toArray())}),
     update(t,hour,night){
-      state=civicLifeState(t,hour);move(engine.o,FIRE_ROUTE,state.fireProgress,state.phase==='returning');
-      engine.beacons.forEach((m,n)=>m.material.color.set((state.phase==='responding'||state.phase==='assisting')&&Math.sin(t*8+n*Math.PI)>0?'#fff3ca':n?'#6c9fbf':'#bd634f'));
-      const deliveryCycle=t%95;delivery.o.visible=state.deliveryActive;move(delivery.o,DELIVERY_ROUTE,deliveryCycle<18?0:deliveryCycle<54?(deliveryCycle-18)/36:1-(deliveryCycle-54)/41,deliveryCycle>=54);
+      const phase=!engine||engine.stoppedAt==='depot'?'ready':engine?.stoppedAt==='destination'?'assisting':engine?.lastStop==='destination'||engine?.returning?'returning':'responding';
+      state={...civicLifeState(t,hour),phase,fireVisible:phase==='responding'||phase==='assisting'&&engine.wait>7,waterVisible:phase==='assisting'};
+      const deliveryCycle=delivery?.stoppedAt==='depot'?t%18:18;
       flames.forEach((m,n)=>{m.visible=state.fireVisible;m.position.set(-93+Math.sin(t*5+n)*.28,1.5+Math.sin(t*6+n)*.2,-51+Math.cos(n)*.25);m.scale.set(.18,.35+Math.abs(Math.sin(t*7+n))*.5,.18);});
       smoke.forEach((m,n)=>{m.visible=state.fireVisible;const u=(t*.4+n/5)%1;m.position.set(-93+u*.7,2+u*2,-51);m.scale.setScalar(.18+u*.5);});hose.visible=state.waterVisible;
       for(const a of actors){const {o,n,behavior}=a;o.visible=true;o.position.set(a.x,.18,a.z);o.rotation.z=0;
         if(behavior==='firefighter'){o.visible=state.phase==='assisting';o.rotation.y=-1.9;}
         if(behavior==='station'){o.rotation.y=Math.sin(t*.4)*.35;}
         if(behavior==='clinic'||behavior==='waiting')o.visible=hour>=8&&hour<19;
-        if(behavior==='delivery'){o.visible=state.deliveryActive&&deliveryCycle<18;o.position.x=-72.5-Math.sin(deliveryCycle/18*Math.PI)*1.5;o.position.z=-79-Math.sin(deliveryCycle/18*Math.PI)*2;o.rotation.y=-2;parcel.position.copy(o.position);parcel.position.y+=.6;}
+        if(behavior==='delivery'){o.visible=state.deliveryActive&&deliveryCycle<18;o.position.x=-75.25+Math.sin(deliveryCycle/18*Math.PI)*.9;o.position.z=-81.9-Math.sin(deliveryCycle/18*Math.PI)*1.3;o.rotation.y=-2;parcel.position.copy(o.position);parcel.position.y+=.6;}
         if(behavior==='patrol'){move(o,[[-85,-60],[-80,-60],[-80,-54],[-70,-54],[-70,-42],[-48,-42],[-48,-66],[-70,-66],[-70,-54],[-80,-54],[-80,-60],[-85,-60]],(t%160)/160);}
         if(behavior==='child'||behavior==='librarian'){
           o.visible=state.libraryOpen;const local=(t+n*1.4)%160;
