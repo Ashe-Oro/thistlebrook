@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { toonMaterial, outlineMaterial } from '../../toon.js';
-import { createLineupVehicle } from './lineup-models.js';
+import { createLineupVehicle, stageLamps } from './lineup-models.js';
 
 // Original, logo-free toy proportions. +Z is forward; origin is the ground
 // contact point. No asset loading, timers, scene ownership or traffic logic.
@@ -93,7 +93,7 @@ export function createTeslaVehicle(kind='sedan', { color, scale=1 }={}) {
   }
   // Slim lamps, rear light bar, undercut front intake. No badges or logos.
   const light=new THREE.MeshBasicMaterial({color:'#f7f4d5'}),tail=new THREE.MeshBasicMaterial({color:'#fa7961'});
-  const lightMesh=(x,y,z,width,material)=>{const m=new THREE.Mesh(cube.clone().scale(width,.035,.025),material);m.position.set(x,y,z);body.add(m);owned.push(m.geometry);};
+  const lightMesh=(x,y,z,width,material)=>{const m=new THREE.Mesh(cube.clone().scale(width,.035,.025),material);m.position.set(x,y,z);m.userData.lamp=material===tail?'tail':'head';body.add(m);owned.push(m.geometry);};
   if(truck)lightMesh(0,.49,len+.005,w*1.65,light);
   else for(const side of [-1,1])lightMesh(side*w*.57,.41,len+.005,w*.48,light);
   lightMesh(0,truck?.52:.42,-len-.008,w*1.55,tail);
@@ -117,9 +117,9 @@ export function createTeslaVehicle(kind='sedan', { color, scale=1 }={}) {
     const flame=new THREE.Mesh(new THREE.ConeGeometry(.085,.55,8),jetMaterial);flame.rotation.z=Math.PI;flame.position.set(x,-.075,z);jets.add(flame);owned.push(flame.geometry);
   }
   root.userData={kind,wheels,wheelRadius:.22*scale,pivot,jets,dimensions:{width:spec.width*scale,length:spec.length*scale,height:(spec.height+.03)*scale},
-    animate({distance=0,braking=false,night=0,lift=0,time=0}={}){
+    animate({distance=0,braking=false,night=0,lift=0,time=0,stage=false}={}){
       wheels.forEach(wheel=>wheel.rotation.x=distance/(.22*scale));
-      tail.color.set(braking?'#ffb58d':'#fa7961');light.color.set(night>.25?'#fffde1':'#e5eedc');
+      stageLamps(light,tail,night,braking,stage);
       jets.visible=lift>0;jets.scale.y=lift*(.85+.15*Math.sin(time*32));
     },
     dispose(){owned.forEach(g=>g.dispose());light.dispose();tail.dispose();jetMaterial.dispose();root.removeFromParent();},

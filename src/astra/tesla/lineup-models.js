@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { toonVertexColorMaterial, outlineMaterial } from '../../toon.js';
+import { LANDMARK_LOOK, emitterLevel } from '../landmark-look.js';
 
 // Stylised, logo-free Teslas for the Roadster lineup and town traffic.
 // Every body is a loft of 8-point cross-sections (bottom, rocker, belt, roof
@@ -11,6 +12,19 @@ import { toonVertexColorMaterial, outlineMaterial } from '../../toon.js';
 
 const INK = '#22333a', GLASS = '#2a4250', ROOF_GLASS = '#1d2c33', TRIM = '#2c3b40', RIM = '#9fb0b4';
 const linear = hex => new THREE.Color(hex);
+
+// Lamp colours, preallocated (animate runs every frame). Head lamps switch to
+// night white at the streetlamp threshold; on stage (the arena lineup and the
+// performing Roadster) both lamps are also pushed into HDR so they read and
+// bloom after dark (TOWN-28). Braking keeps its own tint.
+const HEAD_DAY = new THREE.Color('#e5eedc'), HEAD_NIGHT = new THREE.Color('#fffde1');
+const TAIL = new THREE.Color('#fa7961'), BRAKE = new THREE.Color('#ffb58d');
+export function stageLamps(light, tail, night = 0, braking = false, stage = false) {
+  tail.color.copy(braking ? BRAKE : TAIL); light.color.copy(night > LANDMARK_LOOK.headOn ? HEAD_NIGHT : HEAD_DAY);
+  if (!stage) return;
+  const k = emitterLevel(night);
+  light.color.multiplyScalar(1 + LANDMARK_LOOK.carHead * k); tail.color.multiplyScalar(1 + LANDMARK_LOOK.carTail * k);
+}
 
 // station: {z, y:[bottom, rocker, belt, (windowTop,) roof], w:[same], zone}
 // zone names the segment from this station to the next one behind it. The
@@ -311,9 +325,9 @@ export function createLineupVehicle(kind, spec, { color, scale = 1 } = {}) {
   const light = new THREE.MeshBasicMaterial({ color: '#e5eedc' }), tail = new THREE.MeshBasicMaterial({ color: '#fa7961' });
   const fronts = [], tails = [];
   design.lights(g => fronts.push(g), g => tails.push(g));
-  for (const [list, material] of [[fronts, light], [tails, tail]]) {
+  for (const [list, material, lamp] of [[fronts, light, 'head'], [tails, tail, 'tail']]) {
     const g = mergeGeometries(list); list.forEach(p => p.dispose()); g.deleteAttribute('color');
-    const m = new THREE.Mesh(g, material); body.add(m); owned.push(g);
+    const m = new THREE.Mesh(g, material); m.userData.lamp = lamp; body.add(m); owned.push(g);
   }
   const wheels = [], r0 = design.wheels[0].r;
   const wheelGeometry = new Map();
@@ -327,9 +341,9 @@ export function createLineupVehicle(kind, spec, { color, scale = 1 } = {}) {
   root.userData = {
     kind, wheels, wheelRadius: r0 * scale, pivot, jets,
     dimensions: { width: spec.width * scale, length: spec.length * scale, height: (bounds.max.y / scale + .03) * scale },
-    animate({ distance = 0, braking = false, night = 0 } = {}) {
+    animate({ distance = 0, braking = false, night = 0, stage = false } = {}) {
       for (let i = 0; i < wheels.length; i++) wheels[i].rotation.x = distance / (design.wheels[i >> 1].r * scale);
-      tail.color.set(braking ? '#ffb58d' : '#fa7961'); light.color.set(night > .25 ? '#fffde1' : '#e5eedc');
+      stageLamps(light, tail, night, braking, stage);
     },
     dispose() { owned.forEach(g => g.dispose()); light.dispose(); tail.dispose(); root.removeFromParent(); },
   };

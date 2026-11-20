@@ -5,6 +5,7 @@ import { primitives, rocket, batchStatic, ROCKET_NOZZLE_BOTTOM } from './starbas
 import { packVehicle } from './vehicle-models.js';
 import { convoyAtGate, starbaseRoadVehicles, TRAILER_LOAD_POINT } from './starbase-road.js';
 import { STARBASE_ORIGIN, flightState, routeAt } from './starbase-flight.js';
+import { buildStarbaseLights } from './starbase-lights.js';
 
 export async function buildStarbase(scene,town){
  const root=new THREE.Group();root.name='Starbase Texas';root.position.set(STARBASE_ORIGIN[0],0,STARBASE_ORIGIN[1]);scene.add(root);
@@ -100,8 +101,10 @@ export async function buildStarbase(scene,town){
  const smoke=[];for(let i=0;i<38;i++){const m=orb(0,0,0,1,'#e2e2cd',moving);m.castShadow=false;smoke.push(m);}
  const vents=[];for(let i=0;i<12;i++){const m=orb(0,0,0,.3,'#eaf2e4',moving);m.castShadow=false;vents.push(m);}
  await Promise.all(jobs);tagDistrictModels(statics,town,'starbase',STARBASE_ORIGIN);people.sort((a,b)=>a.i-b.i);batchStatic(statics,root);
+ // Night landmarks (TOWN-28): floods, beams, beacons and pad lights sit outside the static batches.
+ const lights=buildStarbaseLights(root,{follow:{ship:vehicles.ship.root,booster:vehicles.booster.root,f9:vehicles.f9.root,upper:vehicles.upper.root,side0:vehicles.sides[0].root,side1:vehicles.sides[1].root,strongback}});
  let state=flightState(0),roadVehicles=starbaseRoadVehicles(0),time=0;
- const api={selectables,stats:{launchPads:2,landingPads:2,droneShips:1,workers:6,spectators:10},
+ const api={selectables,lights,stats:{launchPads:2,landingPads:2,droneShips:1,workers:6,spectators:10},
   audit(){return { ...state,transporter:roadModels[1].position.toArray(),roadVehicles,people:people.map(p=>({worker:p.worker,position:p.o.position.toArray(),visible:p.o.visible})),vehiclePositions:Object.fromEntries(['booster','ship','f9','upper'].map(k=>[k,vehicles[k].root.position.toArray()])),drone:drone.position.toArray()};},
   update(t,night=0,hour=10){time=t;state=flightState(t);for(const key of ['booster','ship','f9','upper'])vehicles[key].apply(state[key],t);vehicles.sides.forEach((v,i)=>v.apply(state.sides[i],t));
    roadVehicles=starbaseRoadVehicles(t);
@@ -114,6 +117,7 @@ export async function buildStarbase(scene,town){
    vents.forEach((m,i)=>{const u=(t*.21+i/12)%1;m.position.set(28+(i%3)*5+u*2,5+u*3,-11+Math.floor(i/6)*7);m.scale.setScalar(.15+u*.7);m.visible=state.t<11||state.t>78&&state.t<90||state.t>133&&state.t<143;});
    people.forEach(p=>{p.o.visible=p.worker||hour>=6&&hour<22;const route=p.route;const v=routeAt(route,t+p.i*9,p.worker?1.1:.75,p.worker?4:14);p.o.position.set(v.x,.12+(v.walking?Math.sin(t*8+p.i)*.035:0),v.z);p.o.rotation.y=v.walking?v.heading:Math.atan2(20-v.x,-24-v.z);});
    waves.forEach(({m,x,n})=>{m.position.x=x+Math.sin(t*.4+n)*.5;m.scale.x=2+n%5+Math.sin(t*.6+n)*.4;});
+   lights.update(t,night);
   },get time(){return time;}};
  api.update(0);return api;
 }

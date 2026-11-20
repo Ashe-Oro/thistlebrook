@@ -36,7 +36,7 @@ export function createTeslaTown(scene,town,{traffic=null,residents=null}={}){
       fleet.forEach((o,i)=>{const v=simulation.vehicles[i];o.position.set(v.x,.15,v.z);o.rotation.y=v.yaw;o.userData.animate({distance:v.distance,braking:v.speed<.5,night});});
     }else adapter.update(night);
     pose=roadsterPose(time);roadster.phase=pose.phase;object.position.set(pose.x,pose.y,pose.z);roadster.cameraTarget.set(pose.x,pose.y*.8,pose.z);
-    object.userData.pivot.quaternion.fromArray(pose.orientation);object.userData.animate({distance:pose.distance,time,night});
+    object.userData.pivot.quaternion.fromArray(pose.orientation);object.userData.animate({distance:pose.distance,time,night,stage:true});
     shadow.position.set(pose.x,DEMO.ground+.012,pose.z);shadow.scale.set(1.3+pose.altitude*.03,.65+pose.altitude*.02,1);shadow.material.opacity=.18/(1+pose.altitude*.12);
     arena.update(time,pose,night);
     if(button)button.title='Watch Roadster · '+pose.phase;
