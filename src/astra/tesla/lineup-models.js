@@ -274,8 +274,25 @@ function makeWheel(r, style, paint) {
   const g = mergeGeometries(parts); parts.forEach(p => p.dispose()); return g;
 }
 
+const baseKind = kind => ({ 'model-s': 'sedan', 'model-x': 'crossover' })[kind] ?? kind;
+
+export function lineupProportions(kind, spec) {
+  const base = baseKind(kind), design = LINEUP_DESIGNS[base]();
+  const stretch = kind === 'model-s' ? [spec.width / 1.19, spec.height / .775, spec.length / 2.31]
+    : kind === 'model-x' ? [spec.width / 1.19, spec.height, spec.length / 2.35] : [1, 1, 1];
+  const roof = Math.fround(Math.max(...design.stations.map(station => station.y.at(-1)))) * stretch[1];
+  const wheels = design.wheels.flatMap(({x, r, z}) => [-1, 1].map(side => ({
+    position: [side * x * stretch[0], r * stretch[1], z * stretch[2]],
+    tireRadius: r,
+    radius: r * stretch[1],
+  })));
+  return { design, stretch, roof, wheels };
+}
+
 export function createLineupVehicle(kind, spec, { color, scale = 1 } = {}) {
-  const design = LINEUP_DESIGNS[kind](), paint = color || spec.color;
+  const { design, stretch, roof, wheels: wheelLayout } = lineupProportions(kind, spec);
+  const paint = color || spec.color;
+  const stretchGeometry = g => baseKind(kind) === kind ? g : g.scale(...stretch);
   const root = new THREE.Group(); root.name = spec.name; root.scale.setScalar(scale);
   const pivot = new THREE.Group(); pivot.position.y = .43; root.add(pivot);
   const body = new THREE.Group(); body.position.y = -.43; pivot.add(body);
@@ -317,7 +334,7 @@ export function createLineupVehicle(kind, spec, { color, scale = 1 } = {}) {
     const x = design.stations[2].w[1] + .002;
     add(sidePlate(pts, x, s, design.archColor));
   }
-  const geometry = mergeGeometries(parts); parts.forEach(p => p.dispose());
+  const geometry = stretchGeometry(mergeGeometries(parts)); stretchGeometry(outline); parts.forEach(p => p.dispose());
   const mesh = new THREE.Mesh(geometry, toonVertexColorMaterial()); mesh.castShadow = true; mesh.receiveShadow = true; body.add(mesh);
   const hull = new THREE.Mesh(outline, outlineMaterial(kind === 'semi' ? .016 : .011)); hull.userData.outline = true; body.add(hull);
   owned.push(geometry, outline);
@@ -326,23 +343,22 @@ export function createLineupVehicle(kind, spec, { color, scale = 1 } = {}) {
   const fronts = [], tails = [];
   design.lights(g => fronts.push(g), g => tails.push(g));
   for (const [list, material, lamp] of [[fronts, light, 'head'], [tails, tail, 'tail']]) {
-    const g = mergeGeometries(list); list.forEach(p => p.dispose()); g.deleteAttribute('color');
+    const g = stretchGeometry(mergeGeometries(list)); list.forEach(p => p.dispose()); g.deleteAttribute('color');
     const m = new THREE.Mesh(g, material); m.userData.lamp = lamp; body.add(m); owned.push(g);
   }
-  const wheels = [], r0 = design.wheels[0].r;
+  const wheels = [], r0 = wheelLayout[0].radius;
   const wheelGeometry = new Map();
-  for (const w of design.wheels) for (const s of [-1, 1]) {
-    if (!wheelGeometry.has(w.r)) { const g = makeWheel(w.r, design.rimStyle, paint); wheelGeometry.set(w.r, g); owned.push(g); }
-    const wheel = new THREE.Mesh(wheelGeometry.get(w.r), toonVertexColorMaterial());
-    wheel.position.set(s * w.x, w.r, w.z); wheel.castShadow = true; body.add(wheel); wheels.push(wheel);
+  for (const { tireRadius, position } of wheelLayout) {
+    if (!wheelGeometry.has(tireRadius)) { const g = stretchGeometry(makeWheel(tireRadius, design.rimStyle, paint)); wheelGeometry.set(tireRadius, g); owned.push(g); }
+    const wheel = new THREE.Mesh(wheelGeometry.get(tireRadius), toonVertexColorMaterial());
+    wheel.position.set(...position); wheel.castShadow = true; body.add(wheel); wheels.push(wheel);
   }
   const jets = new THREE.Group(); body.add(jets); jets.visible = false;
-  const bounds = new THREE.Box3().setFromObject(root);
   root.userData = {
     kind, wheels, wheelRadius: r0 * scale, pivot, jets,
-    dimensions: { width: spec.width * scale, length: spec.length * scale, height: (bounds.max.y / scale + .03) * scale },
+    dimensions: { width: spec.width * scale, length: spec.length * scale, height: (roof + .03) * scale },
     animate({ distance = 0, braking = false, night = 0, stage = false } = {}) {
-      for (let i = 0; i < wheels.length; i++) wheels[i].rotation.x = distance / (design.wheels[i >> 1].r * scale);
+      for (let i = 0; i < wheels.length; i++) wheels[i].rotation.x = distance / (wheelLayout[i].radius * scale);
       stageLamps(light, tail, night, braking, stage);
     },
     dispose() { owned.forEach(g => g.dispose()); light.dispose(); tail.dispose(); root.removeFromParent(); },

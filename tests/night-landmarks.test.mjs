@@ -1,3 +1,4 @@
+import {teslaLampSpots} from '../src/astra/tesla/models.js';
 // Night landmarks (docs/specs/NIGHT-LANDMARKS.md, TOWN-28): Starbase Texas and
 // the Roadster proving ground light up after dark. Tower floods and sky beams,
 // a glowing tank farm, red aviation beacons, lit hulls, pads, LZ rings and an
@@ -11,7 +12,7 @@ import {readFileSync} from 'node:fs';
 import * as THREE from 'three';
 import {TOWN_RULE} from '../src/compiler/town-rules.js';
 import {sampleLightCycle} from '../src/astra/light-cycle.js';
-import {starbaseFixtures, arenaFixtures, landmarkFixtures, REQUIRED_KINDS, ARENA_MASTS, CAR_LAMPS, PERIMETER_KEEP_OUT, LANDMARK_LOOK, STARBASE_SITE, beaconLevel} from '../src/astra/night-landmarks.js';
+import {starbaseFixtures, arenaFixtures, landmarkFixtures, REQUIRED_KINDS, ARENA_MASTS, PERIMETER_KEEP_OUT, LANDMARK_LOOK, STARBASE_SITE, beaconLevel} from '../src/astra/night-landmarks.js';
 import {buildStarbaseLights} from '../src/astra/starbase-lights.js';
 import {glowLevel, landmarkMaterials, landmarkState} from '../src/astra/landmark-glow.js';
 import {createTeslaVehicle} from '../src/astra/tesla/models.js';
@@ -101,7 +102,11 @@ test('fixtures sit where they belong and are not lamp posts', () => {
         assert(lamp[which].containsPoint(new THREE.Vector3(...f.pos)), `${f.key} on the ${which} lamp of ${v.kind}`);
     car.userData.dispose();
   }
-  assert.deepEqual(Object.keys(CAR_LAMPS).sort(), [...LINEUP.map((l) => l.kind), 'roadster'].sort());
+  for (const kind of [...LINEUP.map((item) => item.kind), 'roadster']) {
+    const {head, tail} = teslaLampSpots(kind);
+    assert.equal(head.length, 2);
+    assert.equal(tail.length, 2);
+  }
 });
 
 test('fixtures are off by day, fade in with the night factor, and are on at dusk and night', () => {

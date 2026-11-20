@@ -1,13 +1,13 @@
 import {tagDistrictModels} from './registry/district-models.js';
 import * as THREE from 'three';
 import { place } from '../catalog/loader.js';
-import { primitives, rocket, batchStatic, ROCKET_NOZZLE_BOTTOM } from './starbase-models.js';
+import { primitives, rocket, displayRocket, batchStatic, ROCKET_NOZZLE_BOTTOM } from './starbase-models.js';
 import { packVehicle } from './vehicle-models.js';
 import { convoyAtGate, starbaseRoadVehicles, TRAILER_LOAD_POINT } from './starbase-road.js';
 import { STARBASE_ORIGIN, flightState, routeAt } from './starbase-flight.js';
 import { buildStarbaseLights } from './starbase-lights.js';
 
-export async function buildStarbase(scene,town){
+export async function buildStarbase(scene,town,{hy3d}={}){
  const root=new THREE.Group();root.name='Starbase Texas';root.position.set(STARBASE_ORIGIN[0],0,STARBASE_ORIGIN[1]);scene.add(root);
  const statics=new THREE.Group(),moving=new THREE.Group();root.add(moving);
  const {box,cylinder,orb,beam,ring,label,mesh}=primitives(statics),jobs=[],selectables=[],people=[],waves=[];
@@ -35,7 +35,7 @@ export async function buildStarbase(scene,town){
   label(name,x,h-.9,z+d/2+.42,w*.9,1.3);box(x,h+1,z,1,1.5,d*.8,'#879d9e');
   selectable(name,name,x,z,w,d,h,'Assembly halls along Highway 4. Transporters collect completed stainless-steel vehicles here and roll them to the orbital launch site.');
  }
- for(const [x,z,kind]of [[-24,-15,'ship'],[-9,-17,'booster'],[0,-34,'ship']]){const r=rocket(kind);r.root.position.set(x,.3,z);statics.add(r.root);r.flame.visible=false;cylinder(x,.15,z,2.4,.3,'#7f9492');}
+ for(const [x,z,kind]of [[-24,-15,'ship'],[-9,-17,'booster'],[0,-34,'ship']]){const display=displayRocket(kind,hy3d);display.position.set(x,.3,z);statics.add(display);cylinder(x,.15,z,2.4,.3,'#7f9492');}
  label('ROCKET GARDEN',-12,.22,-11,15,1.9,'#637d78',statics,true);
  // Launch mount with clamps and a flame trench pointing away from the road.
  cylinder(20,.25,-24,10.5,.5,'#c8c8b7');ring(20,.52,-24,9.7,.13,'#eee3b9');

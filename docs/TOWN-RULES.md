@@ -234,6 +234,14 @@ Road vehicles use owned ThreeJS Assets models with cel shading and an ink outlin
 
 Starbase Texas and the Roadster proving ground are night-time showpieces: tower floods and beams, a glowing tank farm, blinking red aviation beacons, lit pads and perimeters, stadium masts and cones, grandstand and LED track lighting, a backlit sign, and bright headlights and taillights on the parked Teslas. Fixtures follow the existing day/night clock. `tests/night-landmarks.test.mjs` checks that the fixtures exist and are on at night and off by day.
 
+## TOWN-29 · Generated models keep the authored footprint
+
+2026-11-20
+
+> Is the vehicles, altho the roadster should be the new white version that was demoed a few weeks ago
+
+Generated bodies retain the authored vehicle's published dimensions, collision footprint and show clearances. Night fixtures follow the lamps on the fitted body. Each GLB meets its triangle budget and the full set stays under 1.5 MB. An unavailable vehicle model uses its procedural body. Road traffic continues to use owned pack models under TOWN-27.
+
 ## Rules in progress on other lanes
 
 These are already Ashe's rules. Their checks land with the lanes building those features.

@@ -9,7 +9,7 @@ export { installTeslaTraffic } from './adapter.js';
 
 // One optional traffic adapter, one preview fallback, exactly one Roadster.
 // Absolute simulation time makes pause, speed and deterministic capture agree.
-export function createTeslaTown(scene,town,{traffic=null,residents=null}={}){
+export function createTeslaTown(scene,town,{traffic=null,residents=null,hy3d}={}){
   const root=new THREE.Group();root.name='Thistlebrook electric vehicles';scene.add(root);
   const adapter=traffic?installTeslaTraffic(traffic,{count:0}):null;
   const simulation=adapter?null:createPreviewFleetSimulation();
@@ -22,8 +22,9 @@ export function createTeslaTown(scene,town,{traffic=null,residents=null}={}){
     const p=simulation.path.sample(d);
     if(!town.roads.some(r=>!r.owner&&r.width>=2.4&&segmentDistance(p,r)<r.width/2-.1))throw Error('Tesla preview needs the downtown avenue loop; pass the merged traffic system instead');
   }
-  const arena=createDemoArena(root,{residents});
-  const object=createTeslaVehicle('roadster',{scale:DEMO.carScale});root.add(object);
+  const object=createTeslaVehicle('roadster',{scale:DEMO.carScale,hy3d});
+  const arena=createDemoArena(root,{residents,hy3d,roadster:object});
+  root.add(object);
   const roadster={name:'White Roadster',object,followLerp:12,cameraTarget:new THREE.Vector3(),phase:'Ready at the ramp'};
   const shadowMaterial=new THREE.MeshBasicMaterial({color:'#263c3d',transparent:true,opacity:.18,depthWrite:false});
   const shadow=new THREE.Mesh(new THREE.CircleGeometry(1,32),shadowMaterial);shadow.rotation.x=-Math.PI/2;root.add(shadow);

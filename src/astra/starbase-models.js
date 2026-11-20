@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { toonMaterial } from '../toon.js';
+import { createHy3dBody } from './hy3d/index.js';
+import { STARBASE_SITE } from './night-landmarks.js';
 const cube=new THREE.BoxGeometry(1,1,1),ball=new THREE.IcosahedronGeometry(1,1);
 const cylinders=new Map();
 export function primitives(root){
@@ -35,5 +37,13 @@ export function rocket(kind){
  const inner=cylinder(0,-1.6,0,r*.47,3.5,cream,flame,0.01);inner.rotation.z=Math.PI;flame.visible=false;
  return {root,flame,legs,apply(state,t){root.visible=state.visible;root.position.set(state.x,state.y,state.z);root.rotation.z=state.tilt;legs.forEach(l=>l.rotation.x=state.legs*1.8);flame.visible=state.burn>0;flame.scale.set(1,state.burn*(.9+.1*Math.sin(t*36)),1);}};
 }
+export function displayRocket(kind, hy3d) {
+ const template = kind === 'ship' ? hy3d?.get('starship') : null;
+ if (template) return createHy3dBody(template, STARBASE_SITE.rockets.ship.top / template.dims.height);
+ const { root, flame } = rocket(kind);
+ flame.removeFromParent();
+ return root;
+}
+
 // Static architecture uses shared geometry/material instances, including kit hulls.
-export function batchStatic(source,parent){source.updateMatrixWorld(true);const batches=new Map();source.traverse(o=>{if(!o.isMesh)return;const key=o.geometry.uuid+':'+o.material.uuid;if(!batches.has(key))batches.set(key,{o,matrices:[],ids:[]});batches.get(key).matrices.push(o.matrixWorld.clone());batches.get(key).ids.push(o.userData.registryId);});for(const {o,matrices,ids}of batches.values()){const m=new THREE.InstancedMesh(o.geometry,o.material,matrices.length);matrices.forEach((v,i)=>m.setMatrixAt(i,v));m.userData.registryIds=ids;m.castShadow=o.castShadow;m.receiveShadow=o.receiveShadow;parent.add(m);}}
+export function batchStatic(source,parent){source.updateMatrixWorld(true);const batches=new Map();source.traverse(o=>{if(!o.isMesh)return;const key=o.geometry.uuid+':'+o.material.uuid;if(!batches.has(key))batches.set(key,{o,matrices:[],ids:[]});batches.get(key).matrices.push(o.matrixWorld.clone());batches.get(key).ids.push(o.userData.registryId);});for(const {o,matrices,ids}of batches.values()){const m=new THREE.InstancedMesh(o.geometry,o.material,matrices.length);matrices.forEach((v,i)=>m.setMatrixAt(i,v));m.userData.registryIds=ids;if(o.userData.outline)m.userData.outline=true;m.castShadow=o.castShadow;m.receiveShadow=o.receiveShadow;parent.add(m);}}

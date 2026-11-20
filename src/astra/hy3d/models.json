@@ -1,0 +1,20 @@
+{
+  "about": "Hunyuan3D-2 photo-to-cel models (pipeline /workspace/pipelines/hunyuan3d-image-to-cel-model). Built by tools/build-hy3d-models.mjs into the gitignored public/licensed/hy3d/ and shipped via deploy:dist + models:upload like pack models. Units: metres, ground at y=0, +Z forward.",
+  "dir": "licensed/hy3d/",
+  "models": {
+    "roadster-white": {"source": "roadster-white-tex-smooth.glb", "look": "tex", "tris": 12000, "texture": 1024, "dims": [2.00, 1.15, 4.30]},
+    "model-3":        {"source": "model-3-tex-smooth.glb",        "look": "tex", "tris": 6000, "texture": 512, "dims": [1.85, 1.44, 4.69]},
+    "model-y":        {"source": "model-y-tex-smooth.glb",        "look": "tex", "tris": 6000, "texture": 512, "dims": [1.92, 1.62, 4.75]},
+    "model-s":        {"source": "model-s-tex-smooth.glb",        "look": "tex", "tris": 6000, "texture": 512, "dims": [1.99, 1.43, 4.97]},
+    "model-x":        {"source": "model-x-tex-smooth.glb",        "look": "tex", "tris": 6000, "texture": 512, "dims": [2.00, 1.68, 5.04]},
+    "cybertruck":     {"source": "cybertruck-tex-smooth.glb",     "look": "tex", "tris": 6000, "texture": 512, "yaw": 180, "dims": [2.20, 1.79, 5.68]},
+    "cybercab":       {"source": "cybercab-tex-smooth.glb",       "look": "tex", "tris": 6000, "texture": 512, "dims": [1.85, 1.40, 4.30]},
+    "semi":           {"source": "semi-tex-smooth.glb",           "look": "tex", "tris": 8000, "texture": 512, "dims": [2.55, 4.00, 7.50]},
+    "optimus":        {"source": "optimus-tex-smooth.glb",        "look": "tex", "tris": 4000, "texture": 512, "dims": [0.60, 1.73, 0.37]},
+    "supercharger":   {"source": "supercharger-tex-smooth.glb",   "look": "tex", "tris": 2000, "texture": 256, "yaw": 90, "dims": [0.65, 2.10, 0.31]},
+    "powerwall":      {"source": "powerwall-tex-smooth.glb",      "look": "tex", "tris": 1000, "texture": 256, "dims": [0.75, 1.15, 0.15]},
+    "megapack":       {"source": "megapack-tex-smooth.glb",       "look": "tex", "tris": 2000, "texture": 512, "dims": [7.20, 2.80, 1.65]},
+    "starship":       {"source": "starship-smooth.glb",           "look": "flat", "tris": 6000, "color": "#b9c3c8", "dims": [9, 50, 9]},
+    "falcon9":        {"source": "falcon9-smooth.glb",            "look": "flat", "tris": 4000, "color": "#eef0f2", "dims": [3.7, 70, 3.7]}
+  }
+}

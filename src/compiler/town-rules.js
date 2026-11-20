@@ -29,6 +29,7 @@ export const TOWN_RULE = Object.freeze({
   trafficFlow: 'TOWN-26',
   packVehicles: 'TOWN-27',
   nightLandmarks: 'TOWN-28',
+  generatedFootprint: 'TOWN-29',
 });
 
 export const ROAD_RULE = Object.freeze({

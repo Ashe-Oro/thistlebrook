@@ -58,6 +58,7 @@
     "map:river": "node tools/river-map.mjs",
     "models:upload": "node tools/upload-licensed-models.mjs",
     "models:fetch": "node tools/fetch-licensed-models.mjs",
+    "models:hy3d": "node tools/build-hy3d-models.mjs",
     "test:ci": "node --test --test-concurrency=1 tests/*.mjs tools/life-routines.test.mjs && npm run test:checks && npm run sim:collisions -- --weather rain && npm run sim:collisions -- --weather snow && npm run sim:traffic",
     "test:woods": "node --test tests/grok-woods.test.mjs",
     "shots:woods": "node tools/shots-grok-woods.mjs",

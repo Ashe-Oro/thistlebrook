@@ -40,8 +40,8 @@ function masts(fixtures) {
 }
 
 /** `signs`: the board label materials (front/back name + phase caption). */
-export function buildArenaLights(root, {signs = []} = {}) {
-  const fixtures = arenaFixtures();
+export function buildArenaLights(root, {signs = [], lineup, roadster: performer, charging} = {}) {
+  const fixtures = arenaFixtures({lineup, roadster: performer, charging});
   // The performing Roadster: a matrix-only proxy rebuilt from the show pose
   // (object at pose, scale carScale, pivot .43 above the contact point).
   const roadster = new THREE.Object3D(); roadster.matrixAutoUpdate = false;

@@ -2,6 +2,7 @@ import {tagAssembly,renderCoverage} from './registry/render-tags.js';
 import {mountWorldNavigation} from './navigation.js';
 import {placeInfo} from './place-info.js';
 import {createTeslaTown} from './tesla/index.js';
+import {loadHy3dModels} from './hy3d/index.js';
 import {WORLD_OFFSETS} from '../compiler/world-plan.js';
 import {createWorldRegistry} from './registry/index.js';
 import {compileWorld,WORLD_VIEWS} from '../compiler/world-plan.js';
@@ -34,6 +35,7 @@ const q=new URLSearchParams(location.search);
 const loading=document.createElement('div');loading.className='loading';loading.innerHTML='<div class="sprout">❧</div><h1>A little world awaits.</h1><p>Opening the shutters, putting the kettle on…</p>';document.body.append(loading);
 start().catch(error=>{console.error(error);loading.innerHTML='<h1>The village is taking a moment.</h1><p>Could not load the village. Check that the private asset library is available.</p>';window.__astraError=String(error);});
 async function start(){
+ const hy3dModels=loadHy3dModels();
  const seed=Number(q.get('seed')??831);const town=compileWorld(RESOLVED,Number.isFinite(seed)?seed:831,{capture:q.has('registryCapture')});
  town.captureRegistry=q.has('registryCapture');const scene=new THREE.Scene();scene.background=new THREE.Color('#e8ede3');
  const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,preserveDrawingBuffer:q.has('capture'),powerPreference:'high-performance'});renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));renderer.setSize(innerWidth,innerHeight);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.NoToneMapping;document.querySelector('#app').append(renderer.domElement);
@@ -43,7 +45,7 @@ async function start(){
  const calendar=createCalendar(town.seed,q);
  const dayQuery=q.has('day')?Number(q.get('day')):-1;
  const initialDay=Number.isInteger(dayQuery)&&dayQuery>=0&&dayQuery<7?(dayQuery+3)%7:0;
- const world=await buildAstra(scene,town),residents=await createResidents(scene,town,{hour,day:initialDay,weather:calendar.weather});
+ const world=await buildAstra(scene,town,{hy3dModels}),residents=await createResidents(scene,town,{hour,day:initialDay,weather:calendar.weather});
  world.districts.civic.setActivityOwner?.('baseball',true);
  const traffic=await createTraffic(scene,town,residents,world);tagAssembly(traffic.root,'market');
  // grok-roads: residents look both ways before a crossing; regional cars also
@@ -60,7 +62,8 @@ async function start(){
  if(railway){residents.life.setRailGuard(railway.clear);railway.setCrossingGuard(clearRoad);}
  // Maple Hollow (opus-suburb): kids board and leave the school bus through the life runtime.
  if(world.landscape?.traffic?.transit)residents.life.setTransit(world.landscape.traffic.transit);
- const tesla=createTeslaTown(scene,town,{traffic,residents});tesla.root.position.set(WORLD_OFFSETS.roadster[0],0,WORLD_OFFSETS.roadster[1]);tagAssembly(tesla.root,'roadster');for(const item of tesla.adapter.installed)tagAssembly(item.object,'market');
+ const hy3d=await hy3dModels;
+ const tesla=createTeslaTown(scene,town,{traffic,residents,hy3d});tesla.root.position.set(WORLD_OFFSETS.roadster[0],0,WORLD_OFFSETS.roadster[1]);tagAssembly(tesla.root,'roadster');for(const item of tesla.adapter.installed)tagAssembly(item.object,'market');
  const raycaster=new THREE.Raycaster();
  let ui, cameraUI,activeView=null;
  const selection=createSelection(scene);

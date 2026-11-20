@@ -24,6 +24,7 @@
 //   mast   toon steel stadium mast (structure only; its lamps are lens/halo/cone fixtures)
 import {DEMO, RAMP, LINEUP, ROW_AXIS, LINEUP_JUMP, HOVER_PAD, rampContact} from './tesla/demo-motion.js';
 import {LANDMARK_COLORS} from './landmark-look.js';
+import {teslaLampSpots} from './tesla/models.js';
 
 export {LANDMARK_LOOK, LANDMARK_COLORS, emitterLevel, beaconFlash, beaconLevel} from './landmark-look.js';
 
@@ -194,17 +195,6 @@ export const PERIMETER_KEEP_OUT = Object.freeze({
 
 // --------------------------------------------------------------- Roadster arena
 
-/** Lamp spots on each Tesla body, unscaled car-local: [half spread, y, z]
- * (measured from the tagged lamp meshes in models.js / lineup-models.js). */
-export const CAR_LAMPS = Object.freeze({
-  cybercab: {head: [.3, .325, 1.0], tail: [.28, .44, -.98]},
-  cybertruck: {head: [.38, .555, 1.405], tail: [.38, .61, -1.405]},
-  semi: {head: [.48, .64, 1.6], tail: [.3, .47, -1.765]},
-  crossover: {head: [.33, .47, 1.07], tail: [.3, .54, -1.125]},
-  sedan: {head: [.33, .35, 1.05], tail: [.32, .5, -1.095]},
-  roadster: {head: [.25, .41, 1.165], tail: [.3, .42, -1.168]},
-});
-
 /** Grandstand-local point -> arena-local (arena.js standTransform:
  * T(18,0,-11.5) · Ry(-90°) · S(.6,1,.85) · T(-8.5,0,15.3)). */
 export function standPoint(x, y, z) { return [18 - .85 * (z + 15.3), y, -11.5 + .6 * (x - 8.5)]; }
@@ -229,7 +219,7 @@ export function mastFrame(m) {
 }
 export const MAST_BANK = Object.freeze({columns: [-1.05, -.35, .35, 1.05], rows: [-.3, .3], housing: [.62, .5, .32]});
 
-export function arenaFixtures() {
+export function arenaFixtures({lineup = [], roadster, charging = []} = {}) {
   const {list, add} = registry('arena'), g = DEMO.ground;
   const along = (p, v, k) => p.map((c, i) => c + v[i] * k);
 
@@ -286,24 +276,35 @@ export function arenaFixtures() {
   // Parked lineup: bright head and tail lamps, a short beam from each
   // headlamp and a ground slash in front of every car. The performing
   // Roadster's set follows its body (body-local, unscaled).
-  for (const v of LINEUP) {
-    const s = DEMO.carScale, L = CAR_LAMPS[v.kind], [hx, hy, hz] = L.head, [tx, ty, tz] = L.tail;
-    const front = v.z + hz * s;
-    for (const side of [-1, 1]) {
-      const head = [v.x + side * hx * s, g + hy * s, front + .04];
-      add('car-head', v.kind, 'halo', {pos: head, size: 1.5, color: AR.head, intensity: 1, car: v.kind});
-      add('car-tail', v.kind, 'halo', {pos: [v.x + side * tx * s, g + ty * s, v.z + tz * s - .04], size: 1.05, color: AR.red, intensity: 1, car: v.kind});
-      add('car-beam', v.kind, 'cone', {pos: head, aim: [v.x + side * (hx * s + .35), g, front + 4.2], spread: .3, length: 4.6, color: AR.head, intensity: .7, car: v.kind});
+  const parked = LINEUP.map((v, i) => ({...v, yaw: 0, vehicle: lineup[i]}));
+  for (const vehicle of charging) parked.push({
+    kind: vehicle.userData.kind, x: vehicle.position.x, z: vehicle.position.z, yaw: vehicle.rotation.y, vehicle,
+  });
+  for (const {kind, x, z, yaw, vehicle} of parked) {
+    const {head, tail} = teslaLampSpots(kind, vehicle);
+    const s = vehicle?.scale.x ?? DEMO.carScale;
+    const toArena = (lx, ly, lz) => [x + (lx * Math.cos(yaw) + lz * Math.sin(yaw)) * s,
+      g + ly * s, z + (lz * Math.cos(yaw) - lx * Math.sin(yaw)) * s];
+    for (const [hx, hy, hz] of head) {
+      const pos = toArena(hx, hy, hz + .04 / s);
+      add('car-head', kind, 'halo', {pos, size: 1.5, color: AR.head, intensity: 1, car: kind});
+      const aim = toArena(hx + Math.sign(hx) * .35 / s, 0, hz + 4.2 / s);
+      add('car-beam', kind, 'cone', {pos, aim, spread: .3, length: 4.6, color: AR.head, intensity: .7, car: kind});
     }
-    add('car-beam', v.kind, 'card', {pos: [v.x, g + .025, front + 2.6], size: [2.5, 4.4], color: AR.head, intensity: .55, car: v.kind});
+    for (const [tx, ty, tz] of tail)
+      add('car-tail', kind, 'halo', {pos: toArena(tx, ty, tz - .04 / s), size: 1.05, color: AR.red, intensity: 1, car: kind});
+    const front = Math.max(...head.map(([, , hz]) => hz));
+    add('car-beam', kind, 'card', {pos: toArena(0, .025 / s, front + 2.6 / s), size: [2.5, 4.4], color: AR.head, intensity: .55, car: kind});
   }
   {
-    const [hx, hy, hz] = CAR_LAMPS.roadster.head, [tx, ty, tz] = CAR_LAMPS.roadster.tail, follow = 'roadster';
-    for (const side of [-1, 1]) {
-      add('car-head', 'roadster', 'halo', {pos: [side * hx, hy, hz + .03], size: 1.2, color: AR.head, intensity: 1, follow});
-      add('car-tail', 'roadster', 'halo', {pos: [side * tx, ty, tz - .03], size: .85, color: AR.red, intensity: 1, follow});
-      add('car-beam', 'roadster', 'cone', {pos: [side * hx, hy, hz + .03], aim: [side * (hx + .25), 0, hz + 3.3], spread: .3, length: 3.5, color: AR.head, intensity: .65, follow});
+    const {head, tail} = teslaLampSpots('roadster', roadster), follow = 'roadster';
+    for (const [hx, hy, hz] of head) {
+      const pos = [hx, hy, hz + .03];
+      add('car-head', 'roadster', 'halo', {pos, size: 1.2, color: AR.head, intensity: 1, follow});
+      add('car-beam', 'roadster', 'cone', {pos, aim: [hx + Math.sign(hx) * .25, 0, hz + 3.3], spread: .3, length: 3.5, color: AR.head, intensity: .65, follow});
     }
+    for (const [tx, ty, tz] of tail)
+      add('car-tail', 'roadster', 'halo', {pos: [tx, ty, tz - .03], size: .85, color: AR.red, intensity: 1, follow});
   }
   return list;
 }

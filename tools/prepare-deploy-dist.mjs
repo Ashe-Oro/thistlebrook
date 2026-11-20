@@ -17,6 +17,7 @@ import {getAsset} from '../src/catalog/library/index.js';
 import {TOWNSFOLK} from '../src/catalog/townsfolk.js';
 import {TOWNSFOLK_VARIANTS} from '../src/catalog/townsfolk-variants.js';
 import {VILLAGERS} from '../src/catalog/villagers.js';
+import hy3d from '../src/astra/hy3d/models.json' with {type: 'json'};
 import {compressDir} from './compress-dist-glbs.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -81,6 +82,8 @@ function addUrl(urls, url) {
   if (!base || base === '.glb' || base === 'x.glb') return;
   urls.add(path);
 }
+
+const hy3dUrls = new Set(Object.keys(hy3d.models).map(slug => '/' + hy3d.dir + slug + '.glb'));
 
 function catalogPath(entry) {
   return entry?.source === 'mesh' && entry.path ? entry.path.replace(/^\//, '') : null;
@@ -215,6 +218,7 @@ function collectUrls(catalog) {
       addUrl(urls, `licensed/fairground/${rel}`);
     }
   }
+  for (const url of hy3dUrls) addUrl(urls, url);
   addUrl(urls, 'licensed/nature/rowboat.glb');
   for (const name of Object.keys(JSON.parse(readFileSync(join(root, 'src/astra/outskirts-bounds.json'), 'utf8')))) {
     addUrl(urls, `licensed/astra-outskirts/${name}.glb`);
@@ -448,7 +452,9 @@ if (!skipVerify) {
   stats = distStats();
   console.log(`dist after verify: ${formatMb(stats.bytes)} / ${stats.files} files / ${stats.glbs} glb|gltf (unique content ${formatMb(stats.uniqueBytes)})`);
   const assetReqs = verification.requests.filter((r) => isAssetRequest(r.url));
-  const notFound = assetReqs.filter((r) => r.status === 404 || r.status === 0);
+  const optionalMissing = new Set(copiedResult.missing.filter(({url}) => hy3dUrls.has(url)).map(({url}) => url));
+  const isExpectedMissing = (r) => r.status === 404 && optionalMissing.has(r.path);
+  const notFound = assetReqs.filter((r) => (r.status === 404 || r.status === 0) && !isExpectedMissing(r));
   console.log(`Headless: ready=${verification.ready} error=${verification.error || 'none'} asset-requests=${assetReqs.length} 404s=${notFound.length}`);
   if (!verification.ready || verification.error || notFound.length) {
     const detail = (verification.missing.length ? verification.missing : notFound).slice(0, 20);
@@ -456,7 +462,7 @@ if (!skipVerify) {
     throw new Error('Headless verification failed');
   }
   // Ensure every recorded asset request has a file in dist.
-  const missingOnDisk = assetReqs.filter((r) => !existsSync(join(distDir, r.path.replace(/^\//, ''))));
+  const missingOnDisk = assetReqs.filter((r) => !isExpectedMissing(r) && !existsSync(join(distDir, r.path.replace(/^\//, ''))));
   if (missingOnDisk.length) throw new Error(`Requested assets missing on disk: ${missingOnDisk.map((r) => r.path).join(', ')}`);
 }
 

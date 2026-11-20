@@ -18,7 +18,7 @@ import { buildRailway } from './railway.js';
 import { makeRng } from '../compiler/rng.js';
 import { LAMP_LOOK } from './lamp-look.js';
 import { setLampNight } from './lamp-glow.js';
-export async function buildAstra(scene,town){
+export async function buildAstra(scene,town,{hy3dModels}={}){
  const rng=makeRng(town.seed+100),random=()=>rng.float();
  const nightUniform={value:0},windowMaterials=new Map();
  const glowCanvas=document.createElement('canvas');glowCanvas.width=64;glowCanvas.height=64;const gc=glowCanvas.getContext('2d'),gradient=gc.createRadialGradient(32,32,0,32,32,32);gradient.addColorStop(0,'rgba(255,220,130,.8)');gradient.addColorStop(.4,'rgba(255,215,120,.35)');gradient.addColorStop(1,'rgba(255,215,120,0)');gc.fillStyle=gradient;gc.fillRect(0,0,64,64);const glowTexture=new THREE.CanvasTexture(glowCanvas);
@@ -55,7 +55,7 @@ export async function buildAstra(scene,town){
  for(const [bridgeIndex,x] of town.bridges.entries()){assembly=`built:bridge-${bridgeIndex}`;const z=riverZ(x);box(x,.24,z,3.3,.3,7.4,'#bca681');for(let k=0;k<18;k++)box(x,.43,z-3.5+k*.4,3.1,.09,.34,'#cbb592');for(const side of [-1,1]){for(let k=0;k<5;k++)box(x+side*1.48,1,z-3.4+k*1.7,.16,1.4,.16,'#a18b6e');box(x+side*1.48,1.54,z,.14,.17,7.3,'#bba17b');box(x+side*1.48,.91,z,.1,.12,7.3,'#bba17b');}}
  const landscape=await buildLandscape(scene,town);
  const woods=await buildWoods(scene,town);
- const expansions=await buildExpansions(scene,town);selectables.push(...expansions.selectables);
+ const expansions=await buildExpansions(scene,town,{hy3dModels});selectables.push(...expansions.selectables);
  const civicQuarter=await buildAssembly(buildCivicQuarter,scene,town,'civic-green');selectables.push(...civicQuarter.venueRecords);
  const districts=await buildAssembly(buildDistricts,scene,town,'common');selectables.push(...districts.venueRecords.filter(v=>!['civic-green','works','themepark','coral-coast'].includes(v.data.district)));
  const works=await buildPlacedDistrict(buildWorkDistrict,scene,town,'works');selectables.push(...works.records);

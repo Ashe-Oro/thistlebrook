@@ -19,7 +19,7 @@ export async function buildInFrame(builder,scene,town,id,offset=WORLD_OFFSETS[id
  for(const record of result.selectables||result.venueRecords||[]){record.bounds.translate(root.position);record.data={...record.data,district:id};}
  return {...result,root};
 }
-export async function buildExpansions(scene,town){
+export async function buildExpansions(scene,town,{hy3dModels}={}){
  const harbor=await buildInFrame(buildHarbor,scene,town,'harbor');
  const fair=await buildInFrame(buildFairground,scene,town,'fair');
  const outskirts=await buildInFrame(buildOutskirts,scene,town,'outskirts');
@@ -28,6 +28,7 @@ export async function buildExpansions(scene,town){
  const themepark=await buildInFrame(buildThemePark,scene,town,'themepark');
  const fairlot=await buildFairLot(scene,town);
  const coast=await buildInFrame(buildCoast,scene,town,'coral-coast');
- const starbase=await buildInFrame(buildStarbase,scene,town,'starbase');
+ const hy3d=await hy3dModels;
+ const starbase=await buildInFrame((root,local)=>buildStarbase(root,local,{hy3d}),scene,town,'starbase');
  return {harbor,fair,outskirts,airport,skatepark,themepark,fairlot,coast,starbase,get people(){return [...harbor.life.people,...outskirts.life.people];},selectables:[...outskirts.selectables,...themepark.selectables,...fairlot.selectables,...coast.selectables,...starbase.selectables],update(t,hour,night,day,people=[],weather){harbor.update(t,hour,night);fairlot.update(t,hour,night,people);fair.update(t,hour,night,day,weather);outskirts.update(t,night,hour);airport.update(t,night);skatepark.update(t,hour,night);themepark.update(t,night);coast.update(t,night,hour,weather);starbase.update(t,night,hour);starbase.selectables.find(r=>r.data.id==='drone-ship').bounds.translate(starbase.root.position);},audit(){return {harbor:harbor.audit(),fair:fair.audit(),outskirts:outskirts.audit(),airport:airport.audit(),skatepark:skatepark.audit(),themepark:themepark.audit(),fairlot:fairlot.audit(),coast:coast.audit(),starbase:starbase.audit()};}};
 }
