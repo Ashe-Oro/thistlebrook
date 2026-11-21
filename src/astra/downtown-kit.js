@@ -1,3 +1,4 @@
+import {inheritMeshDetail} from './model-detail.js';
 import * as THREE from 'three';
 import { place } from '../catalog/loader.js';
 import { toonMaterial } from '../toon.js';
@@ -62,7 +63,7 @@ export function districtKit(scene) {
     root.traverse(o=>{if(!o.isMesh)return;const key=o.geometry.uuid+o.material.uuid;
       if(!batches.has(key))batches.set(key,{source:o,matrices:[],ids:[]});batches.get(key).matrices.push(o.matrixWorld.clone());batches.get(key).ids.push(o.userData.registryId);});
     for(const {source,matrices,ids} of batches.values()) {
-      const m=new THREE.InstancedMesh(source.geometry,source.material,matrices.length);
+      const m=new THREE.InstancedMesh(source.geometry,source.material,matrices.length);inheritMeshDetail(source,m);
       matrices.forEach((matrix,i)=>m.setMatrixAt(i,matrix));m.userData.registryIds=ids;m.castShadow=source.castShadow;m.receiveShadow=source.receiveShadow;scene.add(m);
     }
     root.traverse(o=>{if(o.isLine){const l=o.clone();l.matrixAutoUpdate=false;l.matrix.copy(o.matrixWorld);scene.add(l);}});

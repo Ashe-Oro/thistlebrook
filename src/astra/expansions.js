@@ -4,10 +4,11 @@ import {buildThemePark} from './themepark.js';
 import {tagAssembly} from './registry/render-tags.js';
 import {buildSkatepark} from './skatepark.js';
 import {buildAirport} from './airport/index.js';
-import {buildOutskirts} from './outskirts.js';
+import {buildOutskirts,buildStillwaterSurface} from './outskirts.js';
 import * as THREE from 'three';
 import {move,moveRecord,WORLD_OFFSETS} from '../compiler/world-plan.js';
 import {buildFairground} from './fairground.js';
+import {districtPlaceholder} from './district-placeholder.js';
 import {buildHarbor} from './harbor.js';
 import {buildFairLot} from './fair-lot.js';
 export async function buildInFrame(builder,scene,town,id,offset=WORLD_OFFSETS[id]||[0,0]){
@@ -19,16 +20,49 @@ export async function buildInFrame(builder,scene,town,id,offset=WORLD_OFFSETS[id
  for(const record of result.selectables||result.venueRecords||[]){record.bounds.translate(root.position);record.data={...record.data,district:id};}
  return {...result,root};
 }
-export async function buildExpansions(scene,town,{hy3dModels}={}){
- const harbor=await buildInFrame(buildHarbor,scene,town,'harbor');
- const fair=await buildInFrame(buildFairground,scene,town,'fair');
- const outskirts=await buildInFrame(buildOutskirts,scene,town,'outskirts');
- const airport=await buildInFrame(buildAirport,scene,town,'airport');
- const skatepark=await buildInFrame(buildSkatepark,scene,town,'skatepark');
- const themepark=await buildInFrame(buildThemePark,scene,town,'themepark');
+export async function buildExpansions(scene,town,{hy3dModels,stream,isOpening,onDistrict,detail}={}){
+ const districts={};
+ if(stream){
+  const surface=buildStillwaterSurface(new THREE.Group());
+  tagAssembly(surface,town.districts.find(d=>d.id==='outskirts').registryId);
+  scene.add(surface);
+ }
+ const outskirtsBounds={minX:-75,maxX:63,minZ:38,maxZ:123};
+ const builders=[
+  ['harbor',buildHarbor],['fair',buildFairground],['outskirts',(root,local)=>buildOutskirts(root,local,{detail})],['airport',buildAirport],
+  ['skatepark',buildSkatepark],['themepark',(root,local)=>buildThemePark(root,local,{detail})],['coral-coast',buildCoast],
+  ['starbase',async (root,local)=>buildStarbase(root,local,{hy3d:await hy3dModels})],
+ ];
+ for(const [id,builder] of builders){
+  const bounds=id==='outskirts'?outskirtsBounds:town.regions.find(region=>region.id===id)?.bounds;
+  if(stream&&bounds){
+   const placeholder=districtPlaceholder(town,id,scene,bounds);
+   stream.add(id,bounds,{
+    opening:isOpening(bounds),
+    load:()=>buildInFrame(builder,new THREE.Group(),town,id),
+    attach(result){
+     scene.add(result.root);
+     placeholder.removeFromParent();
+     districts[id]=result;
+     onDistrict?.(result);
+    },
+   });
+  }else districts[id]=await buildInFrame(builder,scene,town,id);
+ }
  const fairlot=await buildFairLot(scene,town);
- const coast=await buildInFrame(buildCoast,scene,town,'coral-coast');
- const hy3d=await hy3dModels;
- const starbase=await buildInFrame((root,local)=>buildStarbase(root,local,{hy3d}),scene,town,'starbase');
- return {harbor,fair,outskirts,airport,skatepark,themepark,fairlot,coast,starbase,get people(){return [...harbor.life.people,...outskirts.life.people];},selectables:[...outskirts.selectables,...themepark.selectables,...fairlot.selectables,...coast.selectables,...starbase.selectables],update(t,hour,night,day,people=[],weather){harbor.update(t,hour,night);fairlot.update(t,hour,night,people);fair.update(t,hour,night,day,weather);outskirts.update(t,night,hour);airport.update(t,night);skatepark.update(t,hour,night);themepark.update(t,night);coast.update(t,night,hour,weather);starbase.update(t,night,hour);starbase.selectables.find(r=>r.data.id==='drone-ship').bounds.translate(starbase.root.position);},audit(){return {harbor:harbor.audit(),fair:fair.audit(),outskirts:outskirts.audit(),airport:airport.audit(),skatepark:skatepark.audit(),themepark:themepark.audit(),fairlot:fairlot.audit(),coast:coast.audit(),starbase:starbase.audit()};}};
+ return {
+  get harbor(){return districts.harbor;},get fair(){return districts.fair;},get outskirts(){return districts.outskirts;},
+  get airport(){return districts.airport;},get skatepark(){return districts.skatepark;},get themepark(){return districts.themepark;},
+  get coast(){return districts['coral-coast'];},get starbase(){return districts.starbase;},fairlot,
+  get people(){return [...(districts.harbor?.life.people||[]),...(districts.outskirts?.life.people||[])];},
+  get selectables(){return [...Object.values(districts).flatMap(d=>d.selectables||[]),...fairlot.selectables];},
+  update(t,hour,night,day,people=[],weather){
+   const {harbor,fair,outskirts,airport,skatepark,themepark,'coral-coast':coast,starbase}=districts;
+   harbor?.update(t,hour,night);fairlot.update(t,hour,night,people);fair?.update(t,hour,night,day,weather);
+   outskirts?.update(t,night,hour);airport?.update(t,night);skatepark?.update(t,hour,night);
+   themepark?.update(t,night);coast?.update(t,night,hour,weather);
+   if(starbase){starbase.update(t,night,hour);starbase.selectables.find(r=>r.data.id==='drone-ship').bounds.translate(starbase.root.position);}
+  },
+  audit(){return Object.fromEntries([...builders.map(([id])=>[id==='coral-coast'?'coast':id,districts[id]?.audit()]),['fairlot',fairlot.audit()]]);}
+ };
 }

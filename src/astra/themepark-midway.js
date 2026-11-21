@@ -7,9 +7,9 @@ import {PARK_NODES,PARK_EDGES,PLAZAS,COURTS,RIDE_QUEUES,STALLS,PICNIC_TABLES,BEN
  * entrance, stalls and booths, festoon lighting and landscaping. Every model is
  * an individually registered pack placement; the district kit batches them.
  */
-export async function buildMidway(kit,moving,{pine}={}){
+export async function buildMidway(kit,moving,{pine,detail}={}){
  const jobs=[],lamps=[],root=kit.root;
- const add=(asset,x,z,rot=0,scale=1,y=0,ordinal)=>{jobs.push(fairgroundModel(asset,{x,y,z,rot,scale,ordinal}).then(o=>{root.add(o);return o;}));};
+ const add=(asset,x,z,rot=0,scale=1,y=0,ordinal)=>{jobs.push(fairgroundModel(asset,{x,y,z,rot,scale,ordinal,detail}).then(o=>{root.add(o);return o;}));};
  // Lawn and darker ride pads under the paving.
  kit.box(0,.02,0,106,.1,108,'#9cbf6e');
 

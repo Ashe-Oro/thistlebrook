@@ -13,7 +13,7 @@ import {residentPoses,registerRidePoses} from './life/visuals.js';
 import {packVehicle} from './vehicle-models.js';
 import {LOT_RESERVE,pinecrestModel,shuttlePose} from './fair-lot-plan.js';
 
-export async function buildThemePark(scene,town){
+export async function buildThemePark(scene,town,{detail}={}){
  const root=new THREE.Group();root.name='Pinecrest Adventure Park';root.position.set(PARK_ORIGIN[0],0,PARK_ORIGIN[1]);scene.add(root);
  const kit=districtKit(root),landKit=districtKit(scene),{box,orb,drum,sign}=kit;
  const moving=new THREE.Group();root.add(moving);const jobs=[],selectables=[],rng=makeRng(5196),random=()=>rng.float();
@@ -49,8 +49,8 @@ export async function buildThemePark(scene,town){
  }
  // Inside the fence: the Fairground pack on a 4 m midway grid, animated rides
  // and Pinecrest's own crowd. Layout and activity points live in themepark-plan.js.
- const midway=await buildMidway(kit,moving,{pine});
- const rides=await buildParkRides(kit.root,moving);
+ const midway=await buildMidway(kit,moving,{pine,detail});
+ const rides=await buildParkRides(kit.root,moving,{detail});
  const sim=createGuestSim({rides});
  const crowd=await buildGuestCrowd(moving,sim,rides,{place,residentPoses});
  registerRidePoses((rideId,seat,t,startedAt)=>{

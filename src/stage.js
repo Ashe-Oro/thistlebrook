@@ -1,3 +1,4 @@
+import {configureGLTFTextures} from './gltf-loader.js';
 // Shared renderer, camera, controls and toon lighting for every page, so the
 // hamlet and the kit viewer are lit identically.
 //
@@ -38,6 +39,7 @@ export function createStage({
   const app = document.getElementById('app');
   // preserveDrawingBuffer lets headless screenshots read the canvas reliably.
   const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  configureGLTFTextures(renderer);
   const _rq = new URLSearchParams(location.search);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, Number(_rq.get('prmax')) || 2));
   window.__renderer = renderer;

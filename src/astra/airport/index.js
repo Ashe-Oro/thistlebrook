@@ -73,18 +73,18 @@ export async function buildAirport(scene,town) {
  // Landside cars and the station's fire tender are pack vehicles (TOWN-27).
  for(const [i,[model,colour]]of [['sn-family-sedan','#82aa9d'],['vb-pastel-sedan','#e9bd63'],['sn-minivan','#6e90a1']].entries())jobs.push(packVehicle(vehicleModel(model,colour)).then(o=>{o.position.set(bays[i],.15,-40.5);o.rotation.y=i%2?Math.PI:0;root.add(o);}));
  jobs.push(packVehicle(vehicleModel('af-fire-tender')).then(o=>{o.position.set(96,.12,-91.6);root.add(o);}));
- const aircraft=await Promise.all(FLEET.map(async spec=>{const model=spec.kind==='light'?await makeCessna(spec):makeAircraft(spec);dynamic.add(model.root);return {spec,...model};}));
+ const aircraftJob=Promise.all(FLEET.map(async spec=>{const model=spec.kind==='light'?await makeCessna(spec):makeAircraft(spec);dynamic.add(model.root);return {spec,...model};}));
  const heli=makeHelicopter();dynamic.add(heli.root);
  // Apron service vehicles: tug and baggage train at the airliner stand, the
  // fuel bowser on the GA row and the follow-me car's patrol loop.
- const groundVehicles=await Promise.all(apronVehicles(0).map(async v=>{
+ const groundVehiclesJob=Promise.all(apronVehicles(0).map(async v=>{
   const object=await packVehicle(v);object.name=v.id;dynamic.add(object);return object;
  }));
  // Night: edge, taxiway and PAPI lights, the swept beacon, floods and windows
  // through the landmark-glow registry (no new scene lights).
  const beaconHead=new THREE.Object3D();beaconHead.position.set(...BEACON_HEAD.pos);root.add(beaconHead);
  const glow=buildLandmarkGlow(airfieldFixtures(),{name:'Airfield',follow:{beaconHead}});root.add(glow.group);
- await Promise.all(jobs);tagDistrictModels(staticRoot,town,'airport',[0,0]);
+ const [aircraft,groundVehicles]=await Promise.all([aircraftJob,groundVehiclesJob,Promise.all(jobs)]);tagDistrictModels(staticRoot,town,'airport',[0,0]);
  // Repeated markings, buildings and private props use shared instanced draws.
  staticRoot.updateMatrixWorld(true);const batches=new Map();staticRoot.traverse(o=>{if(!o.isMesh)return;const key=o.geometry.uuid+o.material.uuid;if(!batches.has(key))batches.set(key,{o,matrices:[],ids:[]});batches.get(key).matrices.push(o.matrixWorld.clone());batches.get(key).ids.push(o.userData.registryId);});for(const {o,matrices,ids}of batches.values()){const m=new THREE.InstancedMesh(o.geometry,o.material,matrices.length);matrices.forEach((v,i)=>m.setMatrixAt(i,v));m.userData.registryIds=ids;m.castShadow=o.castShadow;m.receiveShadow=o.receiveShadow;root.add(m);}
  let states=[];

@@ -18,7 +18,7 @@ import { buildRailway } from './railway.js';
 import { makeRng } from '../compiler/rng.js';
 import { LAMP_LOOK } from './lamp-look.js';
 import { setLampNight } from './lamp-glow.js';
-export async function buildAstra(scene,town,{hy3dModels}={}){
+export async function buildAstra(scene,town,{hy3dModels,stream,isOpening,detail,sceneryInFrame}={}){
  const rng=makeRng(town.seed+100),random=()=>rng.float();
  const nightUniform={value:0},windowMaterials=new Map();
  const glowCanvas=document.createElement('canvas');glowCanvas.width=64;glowCanvas.height=64;const gc=glowCanvas.getContext('2d'),gradient=gc.createRadialGradient(32,32,0,32,32,32);gradient.addColorStop(0,'rgba(255,220,130,.8)');gradient.addColorStop(.4,'rgba(255,215,120,.35)');gradient.addColorStop(1,'rgba(255,215,120,0)');gc.fillStyle=gradient;gc.fillRect(0,0,64,64);const glowTexture=new THREE.CanvasTexture(glowCanvas);
@@ -53,9 +53,13 @@ export async function buildAstra(scene,town,{hy3dModels}={}){
  // Sparse small cobbles leave the broad paving calm at overview scale.
  for(let i=0;i<100;i++){const x=-6.5+random()*15,z=-1.2+random()*9.5;box(x,.17,z,.25+random()*.23,.025,.18+random()*.17,i%2?'#c9bea1':'#ece1c4');}
  for(const [bridgeIndex,x] of town.bridges.entries()){assembly=`built:bridge-${bridgeIndex}`;const z=riverZ(x);box(x,.24,z,3.3,.3,7.4,'#bca681');for(let k=0;k<18;k++)box(x,.43,z-3.5+k*.4,3.1,.09,.34,'#cbb592');for(const side of [-1,1]){for(let k=0;k<5;k++)box(x+side*1.48,1,z-3.4+k*1.7,.16,1.4,.16,'#a18b6e');box(x+side*1.48,1.54,z,.14,.17,7.3,'#bba17b');box(x+side*1.48,.91,z,.1,.12,7.3,'#bba17b');}}
- const landscape=await buildLandscape(scene,town);
- const woods=await buildWoods(scene,town);
- const expansions=await buildExpansions(scene,town,{hy3dModels});selectables.push(...expansions.selectables);
+ const buildOuter=parent=>buildExpansions(parent,town,{hy3dModels,stream,isOpening,detail,
+  onDistrict(result){selectables.push(...(result.selectables||[]));}
+ });
+ const [landscape,woods,expansions]=stream
+  ?await Promise.all([buildLandscape(scene,town,{detail,stream,sceneryInFrame}),buildWoods(scene,town),buildOuter(scene)])
+  :[await buildLandscape(scene,town),await buildWoods(scene,town),await buildOuter(scene)];
+ selectables.push(...expansions.selectables);
  const civicQuarter=await buildAssembly(buildCivicQuarter,scene,town,'civic-green');selectables.push(...civicQuarter.venueRecords);
  const districts=await buildAssembly(buildDistricts,scene,town,'common');selectables.push(...districts.venueRecords.filter(v=>!['civic-green','works','themepark','coral-coast'].includes(v.data.district)));
  const works=await buildPlacedDistrict(buildWorkDistrict,scene,town,'works');selectables.push(...works.records);
@@ -69,7 +73,7 @@ export async function buildAstra(scene,town,{hy3dModels}={}){
  }
  const sunbeam=await buildPlacedDistrict(buildSunbeam,scene,town,'sunbeam');selectables.push(...sunbeam.selectables);
  const mapleHollow=await buildMapleHollow(scene,town,{traffic:landscape.traffic});selectables.push(...mapleHollow.selectables);
- const catalogActivities=await buildCatalogScenes(scene,town,{residentsOwnSlots:true});
+ const catalogActivities=await buildCatalogScenes(scene,town,{residentsOwnSlots:true,stream,isOpening,detail});
  const loads=[];
  for(const b of town.buildings.filter(b=>!b.custom)){loads.push(asset(b.id,...b.pos,b.rot,1,statics,b.registryId).then(o=>{o.traverse(m=>{if(!m.isMesh||m.userData.outline||!m.material.vertexColors)return;const original=m.material;if(!windowMaterials.has(original)){const material=original.clone();material.onBeforeCompile=shader=>{shader.uniforms.uAstraNight=nightUniform;shader.fragmentShader='uniform float uAstraNight;\n'+shader.fragmentShader;shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\n#ifdef USE_COLOR\nif(vColor.b>vColor.r*1.08 && vColor.g>vColor.r*1.08 && vColor.b>.25){totalEmissiveRadiance+=vec3(1.0,.48,.09)*uAstraNight*.9;diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.8,.4,.1),uAstraNight); }\n#endif');};material.customProgramCacheKey=()=> 'astra-windows';windowMaterials.set(original,material);}m.material=windowMaterials.get(original);});o.updateMatrixWorld(true);const bounds=new THREE.Box3().setFromObject(o);selectables.push({type:'building',data:b,bounds,object:o});}));}
  for(const p of [...town.props,...town.trees])loads.push(asset(p.id,...p.pos,p.rot,p.scale,statics,p.registryId));

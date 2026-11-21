@@ -5,14 +5,24 @@ import { semantics } from '../catalog/library/index.js';
 import { toonMaterial } from '../toon.js';
 // Prop-local performers demonstrate the same slot contract the route planner
 // consumes. Every lease is exclusive, every motion uses an authored approach.
-export async function buildCatalogScenes(scene,town,{residentsOwnSlots=false}={}){
+export async function buildCatalogScenes(scene,town,{residentsOwnSlots=false,stream,isOpening,detail}={}){
  const root=new THREE.Group();root.name='compiled-library-scenes';scene.add(root);
  const actors=[],leases=new Map(),completed=[];
  for(const compiled of town.catalogScenes||[]){
   const group=new THREE.Group();group.name=compiled.id;root.add(group);
   const pad=new THREE.Mesh(new THREE.BoxGeometry(compiled.box.max[0]-compiled.box.min[0],.035,compiled.box.max[1]-compiled.box.min[1]),toonMaterial(compiled.group==='woodland-camp'?'#b6bd91':'#c6bc9d'));
   pad.position.set((compiled.box.min[0]+compiled.box.max[0])/2,.02+(compiled.elevation||0),(compiled.box.min[1]+compiled.box.max[1])/2);pad.receiveShadow=true;tagObject(pad,'built:'+compiled.id+'-pad');group.add(pad);
-  await Promise.all(compiled.members.map(async m=>{const o=await loadLibraryAsset(m.asset);o.position.set(m.pos[0],.06+(compiled.elevation||0),m.pos[1]);o.rotation.y=m.rot;tagObject(o,m.registryId);group.add(o);}));
+  async function load(){
+   return Promise.all(compiled.members.map(async m=>{
+    const o=await loadLibraryAsset(m.asset, {detail, centre:m.pos});
+    o.position.set(m.pos[0],.06+(compiled.elevation||0),m.pos[1]);o.rotation.y=m.rot;
+    tagObject(o,m.registryId);return o;
+   }));
+  }
+  if(stream&&residentsOwnSlots){
+   const bounds={minX:compiled.box.min[0],minZ:compiled.box.min[1],maxX:compiled.box.max[0],maxZ:compiled.box.max[1]};
+   stream.add(compiled.id,bounds,{load,opening:isOpening(bounds),attach:objects=>group.add(...objects)});
+  }else group.add(...await load());
   if(residentsOwnSlots)continue;
   for(const [index,slot] of compiled.slots.entries()){
    const style=['classic','chef','explorer'][actors.length%3],asset=`character-model-basic-wardrobe/character-model-basic-wardrobe-${style}-vanilla`;

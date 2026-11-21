@@ -19,6 +19,8 @@ import {TOWNSFOLK_VARIANTS} from '../src/catalog/townsfolk-variants.js';
 import {VILLAGERS} from '../src/catalog/villagers.js';
 import hy3d from '../src/astra/hy3d/models.json' with {type: 'json'};
 import {compressDir} from './compress-dist-glbs.mjs';
+import {AIRFIELD_MODELS,airfieldPath} from '../src/astra/airport/airfield-plan.js';
+import {stageFastLoad} from './stage-fast-load.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const distDir = join(root, 'dist');
@@ -32,6 +34,8 @@ const skipVerify = args.has('--skip-verify');
 // Raw pack GLBs are uncompressed flat-shaded meshes; ship them Draco/meshopt
 // compressed unless --no-compress (kept for before/after measurement).
 const skipCompress = args.has('--no-compress');
+const legacy = args.has('--legacy-models');
+const fromPreparedPack = existsSync(join(licensedRoot,'fast-load/prepared/routes.json'));
 const seed = Number((process.argv.find((a, i, all) => all[i - 1] === '--seed') || '831'));
 
 const MIME = {
@@ -60,10 +64,6 @@ function walkFiles(dir, acc = []) {
     else if (entry.isFile() || entry.isSymbolicLink()) acc.push(path);
   }
   return acc;
-}
-
-function readSrc(rel) {
-  return readFileSync(join(root, rel), 'utf8');
 }
 
 function listJs(dir, acc = []) {
@@ -152,7 +152,8 @@ function collectUrls(catalog) {
     if (existsSync(sourceForUrl(url))) addUrl(urls, url);
   }
 
-  const srcFiles = listJs(join(root, 'src'));
+  const inventoryFiles = new Set(['src/catalog/bounds.json','src/catalog/library/assets.json']);
+  const srcFiles = listJs(join(root,'src')).filter(file=>!inventoryFiles.has(relative(root,file)));
   const idRe = /\b(?:cv|farm|nat|townsfolk)-[a-z0-9-]+/g;
   const licensedRe = /(?:^|["'`])(licensed\/[a-z0-9_./-]+\.glb)/gi;
   const ownedNameRe = /(?:loadFairgroundGeometry|fairgroundModel|fairgroundMesh)\(\s*['"]([a-z0-9_./-]+)['"]/gi;
@@ -219,6 +220,7 @@ function collectUrls(catalog) {
     }
   }
   for (const url of hy3dUrls) addUrl(urls, url);
+  for (const name of Object.keys(AIRFIELD_MODELS)) addUrl(urls,airfieldPath(name));
   addUrl(urls, 'licensed/nature/rowboat.glb');
   for (const name of Object.keys(JSON.parse(readFileSync(join(root, 'src/astra/outskirts-bounds.json'), 'utf8')))) {
     addUrl(urls, `licensed/astra-outskirts/${name}.glb`);
@@ -278,10 +280,6 @@ function distStats() {
     const digest = createHash('sha1').update(buf).digest('hex');
     hashes.set(digest, (hashes.get(digest) || 0) + 1);
   }
-  const uniqueBytes = [...files].reduce((sum, file) => {
-    // recompute unique by first occurrence
-    return sum;
-  }, 0);
   const seen = new Set();
   let unique = 0;
   for (const file of files) {
@@ -330,7 +328,11 @@ async function verify() {
       executablePath: '/usr/bin/google-chrome',
       args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
     });
-    const page = await browser.newPage({viewport: {width: 1280, height: 900}});
+    const page = await browser.newPage({viewport: {width: 1000, height: 750}});
+    await page.addInitScript(() => {
+      const schedule = window.requestAnimationFrame.bind(window);
+      window.requestAnimationFrame = callback => window.__ready ? 0 : schedule(callback);
+    });
     page.on('response', (response) => {
       const url = response.url();
       if (!isAssetRequest(url) && !url.includes('/draco/')) return;
@@ -349,8 +351,10 @@ async function verify() {
     const outcome = await page.waitForFunction(() => window.__ready || window.__astraError, null, {timeout: 180000, polling: 200});
     const error = await page.evaluate(() => window.__astraError || null);
     const ready = await page.evaluate(() => !!window.__ready);
-    await page.waitForTimeout(1500);
-    return {origin, ready, error, requests, missing, outcome: !!outcome};
+    await page.evaluate(() => window.__astra?.streamed);
+    await page.waitForLoadState('networkidle');
+    const districts = await page.evaluate(() => window.__astra?.stream?.audit());
+    return {origin, ready, error, requests, missing, districts, outcome: !!outcome};
   } finally {
     await browser?.close();
     await new Promise((r) => server.close(r));
@@ -377,9 +381,12 @@ function writeAliases() {
     const canonical = urls.find((u) => u.startsWith('/owned-assets/')) || urls[0];
     for (const url of urls) if (url !== canonical) aliases[url] = canonical;
   }
+  const names = ['basis_transcoder.js','basis_transcoder.wasm'];
+  mkdirSync(join(distDir,'basis'),{recursive:true});
+  for (const name of names) copyFileSync(join(root,'node_modules/three/examples/jsm/libs/basis',name),join(distDir,'basis',name));
   const indexFile = join(distDir, 'index.html');
   let html = readFileSync(indexFile, 'utf8').replace(/<script id="asset-aliases">[\s\S]*?<\/script>\n?/, '');
-  html = html.replace('<head>', `<head>\n    <script id="asset-aliases">window.__assetAliases=${JSON.stringify(aliases)};</script>`);
+  html = html.replace('<head>', `<head>\n    <script id="asset-aliases">window.__assetAliases=${JSON.stringify(aliases)};window.__basisTextures=true;</script>`);
   writeFileSync(indexFile, html);
   console.log(`Asset aliases: ${Object.keys(aliases).length} duplicate URLs mapped to a canonical copy`);
 }
@@ -404,6 +411,7 @@ function formatMb(bytes) {
 const catalog = resolveAll(JSON.parse(readFileSync(join(root, 'src/catalog/bounds.json'), 'utf8')));
 if (!skipBuild) runBuild();
 if (!existsSync(join(distDir, 'index.html'))) throw new Error('dist/index.html missing; run without --skip-build');
+rmSync(join(distDir,'models'),{force:true,recursive:true});
 
 const collected = collectUrls(catalog);
 const copiedResult = copyUrls(collected.urls);
@@ -411,9 +419,11 @@ let copied = copiedResult.copied;
 let compression = null;
 async function compressAndAlias() {
   if (skipCompress) return;
-  compression = await compressDir(distDir);
-  console.log(`Compressed GLBs: ${formatMb(compression.before)} -> ${formatMb(compression.after)} across ${compression.files} files`);
-  for (const [k, v] of Object.entries(compression.byChoice)) console.log(`  ${k}: ${v.files} files ${formatMb(v.before)} -> ${formatMb(v.after)}`);
+  if (!fromPreparedPack) compression = await compressDir(distDir);
+  if (compression) {
+    console.log(`Compressed GLBs: ${formatMb(compression.before)} -> ${formatMb(compression.after)} across ${compression.files} files`);
+    for (const [k, v] of Object.entries(compression.byChoice)) console.log(`  ${k}: ${v.files} files ${formatMb(v.before)} -> ${formatMb(v.after)}`);
+  }
   writeAliases();
 }
 await compressAndAlias();
@@ -424,11 +434,6 @@ console.log(`dist: ${formatMb(stats.bytes)} / ${stats.files} files / ${stats.glb
 let verification = null;
 if (!skipVerify) {
   verification = await verify();
-  const needed = new Set();
-  for (const rec of verification.requests) {
-    if (rec.path.startsWith('/assets/')) continue;
-    needed.add(rec.path);
-  }
   if (verification.missing.length) {
     const extra = [];
     for (const rec of verification.missing) {
@@ -466,17 +471,32 @@ if (!skipVerify) {
   if (missingOnDisk.length) throw new Error(`Requested assets missing on disk: ${missingOnDisk.map((r) => r.path).join(', ')}`);
 }
 
+let fastLoad = null;
+if (!legacy && !skipCompress) {
+  fastLoad = await stageFastLoad(distDir,licensedRoot);
+  copyFileSync(join(root,'vercel.json'),join(distDir,'vercel.json'));
+  stats = distStats();
+  if (!skipVerify) {
+    const final = await verify();
+    const failed = final.missing.filter(request=>!hy3dUrls.has(request.path));
+    const districts = Object.entries(final.districts||{}).filter(([,state])=>state!=='loaded');
+    if(!final.ready||final.error||failed.length||districts.length) throw new Error('Fast Load verification failed: '+JSON.stringify({error:final.error,failed,districts}));
+    verification = final;
+  }
+}
 const manifest = writeManifest({
   seed: Number.isFinite(seed) ? seed : 831,
   urls: [...collected.urls].sort(),
   copied,
   stats,
   compression,
+  fastLoad,
   verification: verification && {
     ready: verification.ready,
     error: verification.error,
     requests: verification.requests,
     missing: verification.missing,
+    districts: verification.districts,
   },
 });
 console.log(`Manifest: ${relative(root, manifest)}`);

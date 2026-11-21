@@ -1,38 +1,29 @@
 #!/usr/bin/env node
-// Compress every pack GLB inside dist/ in place, keeping each URL path
-// unchanged so the app's loaders need no new routes. Each unique model (by
-// content hash) is encoded two ways and the smaller wins:
-//   draco   – KHR_draco_mesh_compression (edgebreaker; 14-bit positions,
-//             10-bit normals/colours). Decodes back to float positions in the
-//             original coordinate frame, so no node transforms change.
-//   meshopt – EXT_meshopt_compression with dedup/weld/reorder and quantized
-//             colours/normals. Positions stay float for the same reason.
-// The pack models are flat-shaded vertex-colour meshes (3 unwelded vertices
-// per triangle), which Draco's connectivity coder handles far better, so
-// Draco wins for nearly all of them; meshopt is the fallback where it is
-// smaller (e.g. tiny or animated files).
-// Every result is validated (node names, mesh/animation counts, scene bounds)
-// before it replaces the original; failures keep the original bytes.
-// Outputs are licensed-derived: they live only in dist/ and the gitignored
-// .licensed-cache/, never in git.
+// Compress model GLBs in place. Keep named nodes and exact material identity
+// for animated parts and application recolouring. Validate scene bounds and
+// topology metadata after the round trip, then select the smallest encoding.
+// Only the build output and the ignored licensed cache contain model bytes.
 import {NodeIO, PropertyType} from '@gltf-transform/core';
 import {ALL_EXTENSIONS, EXTMeshoptCompression} from '@gltf-transform/extensions';
-import {dedup, weld, reorder, quantize, draco, getBounds} from '@gltf-transform/functions';
+import {dedup, dequantize, weld, reorder, quantize, draco, getBounds} from '@gltf-transform/functions';
 import {MeshoptEncoder, MeshoptDecoder} from 'meshoptimizer';
 import draco3d from 'draco3dgltf';
 import {createHash} from 'node:crypto';
 import {spawn} from 'node:child_process';
-import {existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, statSync} from 'node:fs';
+import {existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, statSync, rmSync} from 'node:fs';
 import {cpus} from 'node:os';
 import {dirname, join, relative, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
+import {encodeTextures} from './model-textures.mjs';
+
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const cacheDir = join(root, '.licensed-cache', 'glb-compress-v2');
-const VERSION = 2;
-// Only identical accessors are merged: meshes and materials keep their
+
+const cacheDir = join(root, 'public/licensed/fast-load/compression-v3');
+const VERSION = 3;
+// Identical accessors and textures are merged. Meshes and materials keep their
 // one-per-node identity because app code recolours and swaps them per mesh.
-const DEDUP = {propertyTypes: [PropertyType.ACCESSOR]};
+const DEDUP = {propertyTypes: [PropertyType.ACCESSOR, PropertyType.TEXTURE]};
 
 async function makeIO() {
   await MeshoptEncoder.ready;
@@ -71,8 +62,10 @@ function sameShape(a, b) {
 
 const ATTR_SAFE = /^(COLOR|TEXCOORD)(_\d+)?$/;
 const VARIANTS = {
-  async draco(doc) {
-    await doc.transform(dedup(DEDUP), weld(), draco({method: 'edgebreaker', quantizePosition: 14, quantizeNormal: 10, quantizeColor: 10, quantizeTexcoord: 12, quantizeGeneric: 12}));
+  async draco(doc, precise) {
+    doc.getRoot().listExtensionsUsed().find(ext => ext.extensionName === 'EXT_meshopt_compression')?.dispose();
+    await doc.transform(dequantize(), dedup(DEDUP), weld(), draco({method: 'edgebreaker', quantizePosition: precise ? 14 : 13,
+      quantizeNormal: precise ? 10 : 9, quantizeColor: precise ? 10 : 8, quantizeTexcoord: 12, quantizeGeneric: 12}));
   },
   async meshopt(doc) {
     await doc.transform(dedup(DEDUP), weld(), reorder({encoder: MeshoptEncoder, target: 'size'}), quantize({pattern: ATTR_SAFE, quantizeColor: 16}));
@@ -80,16 +73,22 @@ const VARIANTS = {
   },
 };
 
-async function compressOne(io, raw) {
+async function compressOne(io, raw, file) {
   const original = await io.readBinary(new Uint8Array(raw));
   const used = original.getRoot().listExtensionsUsed().map((e) => e.extensionName);
-  if (used.some((n) => n === 'KHR_draco_mesh_compression' || n === 'EXT_meshopt_compression')) return {choice: 'kept', reason: 'already compressed', size: raw.length};
+  const compressed = used.some(n => ['KHR_draco_mesh_compression','EXT_meshopt_compression'].includes(n));
+  const precise = /(?:fairground|airfield|characters)[/\\]/.test(file);
+  // Vehicle rendering uses vertex colour or material base colour exclusively.
+  const untextured = file.endsWith('realistic_ambulance_01.glb');
   const ref = summary(original);
   const results = {};
   for (const [name, fn] of Object.entries(VARIANTS)) {
+    if ((compressed || untextured) && name === 'meshopt') continue;
     try {
       const doc = await io.readBinary(new Uint8Array(raw));
-      await fn(doc);
+      if (untextured) for (const texture of doc.getRoot().listTextures()) texture.dispose();
+      else encodeTextures(doc,join(cacheDir,'textures'),{smallModels:file.includes('/hy3d/')});
+      await fn(doc,precise);
       const bytes = Buffer.from(await io.writeBinary(doc));
       const back = summary(await io.readBinary(new Uint8Array(bytes)));
       const bad = sameShape(ref, back);
@@ -110,7 +109,7 @@ async function worker(listFile) {
   const jobs = JSON.parse(readFileSync(listFile, 'utf8'));
   for (const {file, hash} of jobs) {
     const raw = readFileSync(file);
-    const res = await compressOne(io, raw);
+    const res = await compressOne(io, raw, file);
     if (res.bytes) writeFileSync(join(cacheDir, `${hash}.glb`), res.bytes);
     const {bytes, ...meta} = res;
     writeFileSync(join(cacheDir, `${hash}.json`), JSON.stringify({version: VERSION, rawSize: raw.length, ...meta}));
@@ -129,7 +128,12 @@ function walk(dir, acc = []) {
 /** Compress all GLBs under `dir` in place. Returns per-file stats. */
 export async function compressDir(dir, {jobs = Math.max(1, Math.min(6, cpus().length - 2))} = {}) {
   mkdirSync(cacheDir, {recursive: true});
-  const files = walk(dir).map((file) => ({file, hash: createHash('sha1').update(readFileSync(file)).digest('hex')}));
+  const files = walk(dir).map(file => ({file, hash: createHash('sha256')
+    .update(/(?:fairground|airfield|characters)[/\\]/.test(file) ? 'precise:' : 'default:')
+    .update(file.endsWith('realistic_ambulance_01.glb') ? 'untextured:' : '')
+    .update(file.includes('/hy3d/') ? 'basis-v2:' : '')
+    .update(process.env.TOKTX || '')
+    .update(readFileSync(file)).digest('hex')}));
   const todo = new Map();
   for (const f of files) if (!existsSync(join(cacheDir, `${f.hash}.json`)) && !todo.has(f.hash)) todo.set(f.hash, f);
   const pending = [...todo.values()].sort((a, b) => statSync(b.file).size - statSync(a.file).size);
@@ -141,7 +145,12 @@ export async function compressDir(dir, {jobs = Math.max(1, Math.min(6, cpus().le
       const list = join(cacheDir, `.jobs-${process.pid}-${i}.json`);
       writeFileSync(list, JSON.stringify(bucket));
       const child = spawn(process.execPath, [fileURLToPath(import.meta.url), '--worker', list], {stdio: ['ignore', 'inherit', 'inherit'], cwd: root});
-      child.on('exit', (code) => (code === 0 ? ok() : fail(new Error(`worker ${i} exited ${code}`))));
+      child.once('error',fail);
+      child.once('exit', code => {
+        rmSync(list,{force:true});
+        if (code === 0) ok();
+        else fail(new Error(`worker ${i} exited ${code}`));
+      });
     })));
   }
   const stats = {files: files.length, before: 0, after: 0, byChoice: {}};

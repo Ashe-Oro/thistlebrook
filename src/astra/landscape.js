@@ -2,7 +2,8 @@ import {packVehicle} from './vehicle-models.js';
 import { pedestrianGraph } from '../roads/pedestrian.js';
 import { midpoint } from '../roads/crosswalks.js';
 import * as THREE from 'three';
-import {place} from '../catalog/loader.js';
+import {bindMeshDetail,lodUrl} from './model-detail.js';
+import {place,getEntry} from '../catalog/loader.js';
 import {toonMaterial} from '../toon.js';
 import {districtKit} from './downtown-kit.js';
 import {tagObject,tagBatch} from './registry/render-tags.js';
@@ -28,7 +29,7 @@ function strip(points,width,color,y,parent,id) {
 }
 const curve=points=>new THREE.CatmullRomCurve3(points.map(([x,z])=>new THREE.Vector3(x,0,z)),false,'centripetal');
 
-export async function buildLandscape(scene,town) {
+export async function buildLandscape(scene,town,{detail,stream,sceneryInFrame}={}) {
  const plan=town.landscape,kit=districtKit(scene),{box,orb,sign}=kit;
  const shape=new THREE.Shape(),coast=[];
  plan.outline.forEach((p,i)=>{const prev=plan.outline[(i+plan.outline.length-1)%plan.outline.length],next=plan.outline[(i+1)%plan.outline.length];const a=Math.hypot(prev[0]-p[0],prev[1]-p[1]),b=Math.hypot(next[0]-p[0],next[1]-p[1]),radius=Math.min(5,a/4,b/4),start=p.map((v,k)=>v+(prev[k]-v)/a*radius),end=p.map((v,k)=>v+(next[k]-v)/b*radius);if(i)shape.lineTo(...start);else shape.moveTo(...start);shape.quadraticCurveTo(...p,...end);});shape.closePath();
@@ -61,10 +62,23 @@ export async function buildLandscape(scene,town) {
  // compiler placement ID, including meadow grass and wildflowers.
  // Water's-edge Nature dressing (town.water.dressing) rides the same batches.
  const placed=[...plan.models,...(town.water?.dressing||[])];
- for(const asset of new Set(placed.map(p=>p.asset))) {
-  const template=await place(asset),members=placed.filter(p=>p.asset===asset);template.updateMatrixWorld(true);
+ await Promise.all([...new Set(placed.map(p=>p.asset))].map(async asset=>{
+  const members=placed.filter(p=>p.asset===asset);
+  if(stream&&sceneryInFrame&&!members.some(sceneryInFrame)){
+   const xs=members.map(p=>p.pos[0]),zs=members.map(p=>p.pos[1]);
+   const bounds={minX:Math.min(...xs),maxX:Math.max(...xs),minZ:Math.min(...zs),maxZ:Math.max(...zs)};
+   stream.add('scenery:'+asset,bounds,{load:()=>vegetation(asset,members),attach:objects=>scene.add(...objects)});
+  }else scene.add(...await vegetation(asset,members));
+ }));
+ async function vegetation(asset,members){
+  const path=getEntry(asset).path,modelPath=detail&&path&&lodUrl(path);
+  const template=await place(asset,{modelPath});template.updateMatrixWorld(true);
+  let full;
+  const meshes=object=>{const result=[];object.traverse(o=>{if(o.isMesh)result.push(o);});return result;};
+  const centres=members.map(p=>p.pos);
+  const parts=meshes(template);
   const transform=new THREE.Object3D(),matrix=new THREE.Matrix4();
-  template.traverse(part=>{if(!part.isMesh)return;const batch=new THREE.InstancedMesh(part.geometry,part.material,members.length);
+  return parts.map((part,index)=>{const batch=new THREE.InstancedMesh(part.geometry,part.material,members.length);
    members.forEach((p,i)=>{transform.position.set(p.pos[0],p.y||0,p.pos[1]);transform.rotation.y=p.rot;transform.scale.setScalar(p.scale);transform.updateMatrix();batch.setMatrixAt(i,matrix.multiplyMatrices(transform.matrix,part.matrixWorld));});
    tagBatch(batch, members.map(p => p.registryId));
    if (part.userData.outline) {
@@ -76,7 +90,11 @@ export async function buildLandscape(scene,town) {
      batch.receiveShadow = true;
    }
    if (part.userData.foliage) batch.userData.foliage = true;
-   scene.add(batch);
+   if(modelPath)bindMeshDetail(detail,centres,batch,async()=>{
+    full??=place(asset).then(meshes);
+    return (await full)[index]?.geometry;
+   });
+   return batch;
   });
  }
  // Regional roads (grok-roads): one record per chain with a single filleted
