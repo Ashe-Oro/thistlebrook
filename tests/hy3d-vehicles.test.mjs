@@ -245,12 +245,14 @@ test('static Starships use the shared generated body and retain their display he
     statics.add(ship);
   }
   batchStatic(statics, batches);
-  assert.equal(batches.children.length, 2);
-  for (const mesh of batches.children) {
+  const instances = [];
+  batches.traverse(mesh => {if (mesh.isInstancedMesh) instances.push(mesh);});
+  assert.equal(instances.length, 2);
+  for (const mesh of instances) {
     assert.equal(mesh.geometry, templates.get('starship').geometry);
     assert.equal(mesh.count, 2);
   }
-  assert.equal(batches.children.filter(mesh => mesh.userData.outline).length, 1);
+  assert.equal(instances.filter(mesh => mesh.userData.outline).length, 1);
 });
 
 test('locally built GLBs meet the file and triangle budgets and clear the arena', async (t) => {

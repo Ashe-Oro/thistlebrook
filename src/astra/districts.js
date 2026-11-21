@@ -1,4 +1,6 @@
-import { tagObject, tagComponents, tagBatch, buildAssembly } from './registry/render-tags.js';
+import {createRigidBatches} from './rigid-batches.js';
+import {batchStaticLines,batchStaticMeshes} from './static-batches.js';
+import { tagObject, tagComponents, buildAssembly } from './registry/render-tags.js';
 import * as THREE from 'three';
 import {place} from '../catalog/loader.js';
 import {buildCivic} from './civic.js';
@@ -68,7 +70,8 @@ export async function buildDistricts(scene,town){
  for(let n=0;n<8;n++)jobs.push(person(['elder','herbalist','carpenter','merchant','farmhand','watch','shopkeeper','blacksmith'][n],51.2+n%4*2.4,28.5+Math.floor(n/4)*2,1.1).then(o=>{nightActors.push({o,n,musician:false,x:o.position.x,z:o.position.z});}));
  for(let n=0;n<6;n++)jobs.push(person(['elder','herbalist','innkeeper','watch','carpenter','merchant'][n],town.courtyards[n<4?0:4].centre[0]+(n%2?1.25:-1.25),n<2?-17:n<4?-3:-12.5,1.05).then(o=>{nightActors.push({o,n:n+10,musician:false,terrace:true,x:o.position.x,z:o.position.z});}));
  // Keep additional static district geometry batched by shape and material.
- await Promise.all(jobs);tagComponents(root,town,'districts.js');tagComponents(dynamic,town,'districts.js');root.updateMatrixWorld(true);const groups=new Map();root.traverse(o=>{if(!o.isMesh)return;const key=o.geometry.uuid+o.material.uuid;if(!groups.has(key))groups.set(key,{o,matrices:[],ids:[]});groups.get(key).matrices.push(o.matrixWorld.clone());groups.get(key).ids.push(o.userData.registryId);});for(const {o,matrices,ids}of groups.values()){const m=new THREE.InstancedMesh(o.geometry,o.material,matrices.length);tagBatch(m,ids);matrices.forEach((v,i)=>m.setMatrixAt(i,v));m.castShadow=o.castShadow;m.receiveShadow=o.receiveShadow;scene.add(m);}root.traverse(o=>{if(o.isLine)scene.add(o.clone());});
+ await Promise.all(jobs);tagComponents(root,town,'districts.js');tagComponents(dynamic,town,'districts.js');root.name='Common scenery';batchStaticMeshes(root,scene);batchStaticLines(root,scene);
+ const rigid=createRigidBatches(dynamic);
  const warmLights=[[-12,55],[24,55]].map(([z,x])=>{const light=new THREE.PointLight('#ffd19b',0,18,1.3);light.position.set(x,5,z);scene.add(light);return light;});
  const venueRecords=town.venues.map(v=>({type:'venue',name:v.name,data:v,bounds:new THREE.Box3(new THREE.Vector3(v.box.min[0],0,v.box.min[1]),new THREE.Vector3(v.box.max[0],v.height||2,v.box.max[1]))}));
  venueRecords.push(...downtown.landmarkRecords);
@@ -81,5 +84,6 @@ export async function buildDistricts(scene,town){
   const cycle=t%10;for(const a of basket){a.o.visible=hour>6&&hour<22;const dx=Math.sin(t*.7+a.n*2)*2.6,dz=Math.cos(t*.8+a.n)*2;a.o.position.set(a.x+(a.n%2?2:-2)+dx,.22+Math.abs(Math.sin(t*7+a.n))*.04,a.z+(a.n<2?-2.5:2.5)+dz);a.o.rotation.y=Math.atan2(28-a.o.position.x,-44-a.o.position.z);}
   const shooter=basket[0]?.o;if(shooter){if(cycle<6)basketBall.position.set(shooter.position.x+.6,.4+Math.abs(Math.sin(t*8))*.75,shooter.position.z);else{const u=(cycle-6)/4;basketBall.position.set(26+(36.15-26)*u,1.4+1.7*u+Math.sin(Math.PI*u)*4,-45+u);}}basketBall.visible=hour>6&&hour<22;
   swings.forEach((s,n)=>s.rotation.x=Math.sin(t*1.5+n)*.38);nightActors.forEach(a=>{a.o.visible=hour>=17||hour<1;a.o.position.y=(a.musician?1.1:.22)+Math.abs(Math.sin(t*(a.musician?3:2)+a.n))*.07;a.o.rotation.y=a.terrace?(a.n%2?-Math.PI/2:Math.PI/2)+Math.sin(t*.5+a.n)*.1:a.musician?Math.sin(t+a.n)*.12:Math.PI+Math.sin(t*.7+a.n)*.2;a.o.rotation.z=Math.sin(t*2+a.n)*.045;});bulbs.forEach(m=>{m.visible=night>.15;});
+  rigid.update();
  }};
 }

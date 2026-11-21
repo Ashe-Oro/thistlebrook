@@ -154,5 +154,51 @@ test('clock settings work and mobile overlays fit in one touch-friendly row', { 
     assert.deepEqual(camera.linked, { x: 25, z: 30, zoom: 2, rotation: 0 });
     assert.deepEqual(camera.reset, { ...camera.home, rotation: 0 });
     assert.deepEqual(camera.coordinatesOnly, { x: 88.74, z: 18, zoom: camera.home.zoom, rotation: 0 });
+
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    const drag = await page.evaluate(async () => {
+      const { OrthographicCamera } = await import('three');
+      const { createMapCamera } = await import('/src/astra/camera.js');
+      const canvas = document.body.appendChild(document.createElement('canvas'));
+      // Synthetic pointer events do not have an active browser capture.
+      canvas.setPointerCapture = () => {};
+      const { left, top } = canvas.getBoundingClientRect();
+      const x = left + 30, y = top + 30;
+      const pointer = (type, dx = 0) => canvas.dispatchEvent(new PointerEvent(type, {
+        pointerId: 1, pointerType: 'touch', clientX: x + dx, clientY: y,
+      }));
+      let publications = 0;
+      const controls = createMapCamera(new OrthographicCamera(), canvas, {
+        bounds: { minX: -100, maxX: 100, minZ: -100, maxZ: 100 },
+        onChange() { publications++; },
+      });
+      try {
+        controls.update(0);
+        const ground = controls.groundAt(x, y);
+        pointer('pointerdown');
+        pointer('pointermove', 3);
+        pointer('pointermove', 20);
+        const groundError = ground.distanceTo(controls.groundAt(x + 20, y));
+        const changesBeforeFrame = publications;
+        const held = controls.state();
+        const panning = controls.panning();
+        controls.update(.05);
+        const afterFrame = controls.state();
+        pointer('pointerup', 20);
+        const afterRelease = controls.state();
+        controls.update(.05);
+        return { groundError, changesBeforeFrame, publications, panning, held, afterFrame, afterRelease, coast: controls.state() };
+      } finally {
+        controls.dispose();
+        canvas.remove();
+      }
+    });
+    assert(drag.groundError < 1e-8, 'the map point stays under the moving finger immediately');
+    assert.equal(drag.changesBeforeFrame, 1, 'pointer moves do not trigger view callbacks');
+    assert.equal(drag.publications, 3, 'each changed frame publishes once');
+    assert.equal(drag.panning, true);
+    assert.deepEqual(drag.held, drag.afterFrame, 'the camera does not coast while the finger stays down');
+    assert.deepEqual(drag.afterFrame, drag.afterRelease);
+    assert.notDeepEqual(drag.afterRelease, drag.coast, 'inertia starts on the first frame after release');
   } finally { await browser.close(); }
 });

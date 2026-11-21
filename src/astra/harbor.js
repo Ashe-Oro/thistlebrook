@@ -1,3 +1,4 @@
+import {createRigidBatches} from './rigid-batches.js';
 import {tagDistrictModels} from './registry/district-models.js';
 import * as THREE from 'three';
 import { QUAY_LAMPS } from './lamp-posts.js';
@@ -154,6 +155,7 @@ export async function buildHarbor(scene,town) {
   label('GULLWATCH PIER',70,1.7,53,4,.55);cylinder(68.2,.85,53,.06,1.7,'#8d7b59');
   await Promise.all(jobs);tagDistrictModels(root,town,'harbor',[0,0]);batchHarbor(root,scene);
   const life=await createHarborLife(dynamic,town);
+  const rigid=createRigidBatches(dynamic);
   let lastT=0;
   return {
     life, boats, watercraft, beacon, pick:life.pick,
@@ -166,6 +168,7 @@ export async function buildHarbor(scene,town) {
       for(const {o,wings,n} of gulls){const a=t*.13+n*.9;o.position.set(65+Math.cos(a)*23,7+n*.7+Math.sin(a*2),62+Math.sin(a)*13);o.rotation.y=-a;wings.forEach((w,i)=>w.rotation.z=(i?1:-1)*Math.sin(t*4+n)*.4);o.visible=hour>5&&hour<20;}
       beacon.rotation.y=t*.2;beacon.visible=night>.25;lamp.visible=night>.2;beaconLight.intensity=night*5;lantern.material.emissive.setRGB(night*.9,night*.4,night*.09);
       for(const m of lamps){if(m.isLight)m.intensity=night*LAMP_LOOK.harbourLight;else m.visible=night>.2;}
+      rigid.update();
     },
     audit(){return {...life.audit(),boats:boats.length+watercraft.boats.filter(b=>b.g.visible).length,watercraft:watercraft.audit(),lighthouseOn:beacon.visible,beaconAngle:beacon.rotation.y};},
   };

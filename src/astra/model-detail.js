@@ -1,6 +1,6 @@
 /** Choose geometry by zoom and map distance, with hysteresis for small pans. */
 export function createModelDetail(initial, {deferFull = false} = {}) {
-  let view = initial;
+  let view = initial, interactive = false;
   const models = new Set();
   const pending = new Set();
 
@@ -15,14 +15,14 @@ export function createModelDetail(initial, {deferFull = false} = {}) {
     if (model.task) return;
     model.task = Promise.resolve().then(model.load).then(high => {
       model.high = high;
-      if (model.full) model.apply(high);
+      if (model.full && !interactive) model.apply(high);
     }).catch(error => console.warn('Full-detail model unavailable', error)).finally(() => pending.delete(model.task));
     pending.add(model.task);
   }
 
   function refresh(model) {
     model.full = wantsFull(model);
-    if (!model.full) model.apply(model.low);
+    if (!model.full || interactive) model.apply(model.low);
     else if (model.high) model.apply(model.high);
     else loadFull(model);
   }
@@ -41,6 +41,13 @@ export function createModelDetail(initial, {deferFull = false} = {}) {
       refresh(model);
     },
     update,
+    setInteractive(value) {
+      if (interactive === value) return;
+      interactive = value;
+      // The lightweight geometry is already loaded. Reuse it while the
+      // camera is moving and restore the selected detail when the drag ends.
+      for (const model of models) if (model.full) refresh(model);
+    },
     start() {
       if (!deferFull) return;
       deferFull = false;
@@ -71,7 +78,7 @@ export function bindMeshDetail(detail, centres, mesh, load) {
   const low = mesh.geometry;
   let current = low;
   const binding = {
-    add(target) { meshes.add(target); target.geometry = current; },
+    add(target) { meshes.add(target); bindings.set(target,binding); target.geometry = current; },
   };
   bindings.set(mesh,binding);
   detail.track(centres,low,load,geometry => {
@@ -86,4 +93,8 @@ export function bindMeshDetail(detail, centres, mesh, load) {
 
 export function inheritMeshDetail(source, target) {
   bindings.get(source)?.add(target);
+}
+
+export function hasMeshDetail(mesh) {
+  return bindings.has(mesh);
 }

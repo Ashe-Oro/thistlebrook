@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Phone smoothness.** Thistlebrook plans the phone map in a worker, batches scenery and moving parts, and submits fewer offscreen meshes. The map follows the finger directly and applies inertia after release. Phones use lighter rendering during a drag and restore full detail afterward. [Profile and acceptance results](docs/specs/PHONE-SMOOTH-LOG.md).
+
 - **Village opening view.** Thistlebrook opens at Market Square, with a close portrait view and room for the adjoining streets on desktop. Home returns to the square. The whole island is available in Explore and with the zoom controls. Shared camera links still open at their saved coordinates.
 
 - **Fast Load.** Thistlebrook draws the opening view first, then streams distant districts. Explore jumps move their destination to the front of the queue. A district keeps its silhouette while loading and if its models fail to arrive. Distant vegetation, buildings, rides and vehicles use lighter meshes and load their full geometry when the camera moves in. The deployment shares identical model and texture payloads and caches hashed files for a year. [Fast Load decisions and measurements](docs/specs/FAST-LOAD-LOG.md).

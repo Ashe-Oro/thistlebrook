@@ -1,3 +1,4 @@
+import {batchStaticLines,batchStaticMeshes} from './static-batches.js';
 import * as THREE from 'three';
 import { toonMaterial } from '../toon.js';
 
@@ -36,15 +37,7 @@ export function harborGeometry(root) {
 }
 
 export function batchHarbor(root,scene) {
-  root.updateMatrixWorld(true);const batches=new Map();
-  root.traverse(o=>{
-    if(o.isMesh){const key=o.geometry.uuid+':'+o.material.uuid;
-      if(!batches.has(key))batches.set(key,{o,matrices:[],ids:[]});batches.get(key).matrices.push(o.matrixWorld.clone());batches.get(key).ids.push(o.userData.registryId);
-    }
-    if(o.isLine){const l=o.clone();l.applyMatrix4(o.parent.matrixWorld);scene.add(l);}
-  });
-  for(const {o,matrices,ids} of batches.values()){
-    const m=new THREE.InstancedMesh(o.geometry,o.material,matrices.length);
-    matrices.forEach((matrix,i)=>m.setMatrixAt(i,matrix));m.userData.registryIds=ids;m.castShadow=o.castShadow;m.receiveShadow=o.receiveShadow;scene.add(m);
-  }
+  root.name='Harbor scenery';
+  batchStaticMeshes(root,scene);
+  batchStaticLines(root,scene);
 }

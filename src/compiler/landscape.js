@@ -1,6 +1,7 @@
 import {makeRng} from './rng.js';
 import {distanceToSegment} from './astra.js';
 import {inRiver} from './water.js';
+import {indexSegments} from './box-index.js';
 
 // A mainland, a coastal peninsula, and a sheltered inlet. The inlet opens south
 // of Ocean Drive; Highway 4 crosses its mouth on a proper two-lane bridge.
@@ -32,17 +33,21 @@ export function planLandscape(town) {
   || x>-154-margin&&x<73+margin&&z>-180-margin&&z<132+margin;
  // Maple Hollow's roads are ignored here: the district sits inside the already
  // reserved core box, and a new rejection would shift this seeded stream.
- const roadDistance=p=>Math.min(...town.roads.filter(r=>!r.mapleHollow).map(r=>r.centerline?separation(p,r.centerline):distanceToSegment(p,r.a,r.b)));
+ const segments=town.roads.filter(r=>!r.mapleHollow).flatMap(r=>
+  r.centerline?r.centerline.slice(1).map((b,i)=>[r.centerline[i],b]):[[r.a,r.b]]);
+ const nearbyRoads=indexSegments(segments);
+ const nearRoad=(p,margin)=>nearbyRoads({min:p,max:p},margin,([a,b])=>distanceToSegment(p,a,b)<margin);
+ const shoreLine=[...MAINLAND,MAINLAND[0]];
  const hills=[],models=[];
  for(let i=0;i<240;i++) {
   const p=[-236+random()*520,-252+random()*620],radius=10+random()*16;
-  if(!insideLandscape(p)||reserved(p,radius)||roadDistance(p)<radius+8||MAINLAND.some(q=>Math.hypot(q[0]-p[0],q[1]-p[1])<radius))continue;
+  if(!insideLandscape(p)||reserved(p,radius)||nearRoad(p,radius+8)||MAINLAND.some(q=>Math.hypot(q[0]-p[0],q[1]-p[1])<radius))continue;
   hills.push({pos:p,radius,height:7+random()*25,mountain:i%3===0});
  }
  for(let i=0;i<8500;i++) {
   const p=[-242+random()*540,-263+random()*640];
-  if(!insideLandscape(p)||reserved(p,5)||roadDistance(p)<8)continue;
-  const shore=separation(p,[...MAINLAND,MAINLAND[0]]);if(shore<7)continue;
+  if(!insideLandscape(p)||reserved(p,5)||nearRoad(p,8))continue;
+  const shore=separation(p,shoreLine);if(shore<7)continue;
   const h=hills.find(h=>Math.hypot(h.pos[0]-p[0],h.pos[1]-p[1])<h.radius+3);if(h)continue;
   const clustered=Math.sin(p[0]*.063)+Math.cos(p[1]*.071)+Math.sin((p[0]+p[1])*.036);
   const asset=i%17===0?'cv-rock-boulder':clustered>-.2?(i%4?'cv-tree-pine':'cv-tree-oak'):(i%3?'nat-tall-grass':'nat-wildflower');

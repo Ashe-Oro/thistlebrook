@@ -1,7 +1,9 @@
+import {animatedInstances} from './animated-instances.js';
+import {batchStaticMeshes} from './static-batches.js';
 import {buildLandscape} from './landscape.js';
 import {buildWater} from './water.js';
 import {buildWoods} from './woods.js';
-import { tagObject, tagComponents, tagBatch, buildAssembly, tagAssembly } from './registry/render-tags.js';
+import { tagObject, tagComponents, buildAssembly, tagAssembly } from './registry/render-tags.js';
 import {buildExpansions} from './expansions.js';
 import { buildPlacedDistrict } from './placed-district.js';
 import * as THREE from 'three';
@@ -26,6 +28,7 @@ export async function buildAstra(scene,town,{hy3dModels,stream,isOpening,detail,
  let assembly='built:island';
  const mat=c=>toonMaterial(c);
  const mesh=(geo,color,x=0,y=0,z=0,parent=statics)=>{const m=new THREE.Mesh(geo,mat(color));m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);tagObject(m,parent.userData.registryId||assembly);return m;};
+ const animatedParts=new THREE.Group();
  const cubeGeo=new THREE.BoxGeometry(1,1,1),ballGeo=new THREE.IcosahedronGeometry(1,1);
  const box=(x,y,z,w,h,d,c,parent)=>{const m=mesh(cubeGeo,c,x,y,z,parent);m.scale.set(w,h,d);return m;};
  const sphere=(x,y,z,r,c,parent)=>{const m=mesh(ballGeo,c,x,y,z,parent);m.scale.setScalar(r);return m;};
@@ -40,7 +43,10 @@ export async function buildAstra(scene,town,{hy3dModels,stream,isOpening,detail,
  // The whole river system (falls, reaches, deltas, footbridges) is drawn
  // from town.water; the original trunk shimmer below keeps its seeded order.
  assembly='built:river';const water=buildWater(scene,town);
- for(let n=0;n<60;n++){const x=-38+random()*102,z=riverZ(x)+(random()-.5)*4;const m=box(x,.065,z,.35+random()*1.2,.015,.035,'#b7d7cf',scene);m.castShadow=false;animations.water.push({m,x,z,phase:random()*6,width:m.scale.x});}
+ for(let n=0;n<60;n++){const x=-38+random()*102,z=riverZ(x)+(random()-.5)*4;const m=box(x,.065,z,.35+random()*1.2,.015,.035,'#b7d7cf',animatedParts);m.castShadow=false;animations.water.push({m,x,z,phase:random()*6,width:m.scale.x});}
+ const shimmer=animatedInstances(scene,animations.water.map(({m})=>m),{
+  name:'Town center river shimmer',bounds:new THREE.Sphere(new THREE.Vector3(13,0,0),56)
+ });
  // Continuous soft lanes with rounded joins, plus an inset market square.
  const circleGeo=new THREE.CylinderGeometry(1,1,.06,12);
  for(const region of town.regions||[])if(region.ground){assembly=town.districts.find(d=>d.id===region.id).registryId;const b=region.bounds;box((b.minX+b.maxX)/2,-1.28,(b.minZ+b.maxZ)/2,b.maxX-b.minX+3,2.5,b.maxZ-b.minZ+3,'#a8bc7d');}
@@ -92,7 +98,15 @@ export async function buildAstra(scene,town,{hy3dModels,stream,isOpening,detail,
  assembly='built:mill-sails';
  if(mill){const rotor=new THREE.Group();rotor.position.set(mill.pos[0],6.3,mill.pos[1]+2.6);scene.add(rotor);sphere(0,0,0,.35,'#857253',rotor);for(let n=0;n<4;n++){const blade=new THREE.Group();blade.rotation.z=n*Math.PI/2;rotor.add(blade);box(0,1.7,0,.13,.12+3.4,.15,'#897357',blade);box(.42,2,0,.68,2.1,.06,'#e4d5ab',blade);for(let j=0;j<5;j++)box(.42,1.1+j*.46,.05,.8,.045,.06,'#a99068',blade);}animations.mills.push(rotor);}
  // Market bunting is light geometry; each pennant can stir independently.
- assembly='built:market-bunting';for(const z of [-.8,8.5]){for(const x of [-7.2,9])box(x,2.25,z,.12,4.5,.12,'#947a58');const pts=[];for(let n=0;n<=30;n++){const t=n/30;pts.push(new THREE.Vector3(-7.2+t*16.2,4.4-Math.sin(t*Math.PI)*.8,z));}const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),new THREE.LineBasicMaterial({color:'#7e795e'}));statics.add(tagObject(line,assembly));for(let n=1;n<20;n++){const t=n/20,x=-7.2+t*16.2,y=4.4-Math.sin(t*Math.PI)*.8;const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute([-.25,0,0,.25,0,0,0,-.55,0],3));geo.computeVertexNormals();const m=mesh(geo,['#c77c62','#edd29a','#7a9e92'][n%3],x,y,z,scene);m.material=m.material.clone();m.material.side=THREE.DoubleSide;animations.flags.push(m);}}
+ assembly='built:market-bunting';
+ const flagGeometry=new THREE.BufferGeometry();
+ flagGeometry.setAttribute('position',new THREE.Float32BufferAttribute([-.25,0,0,.25,0,0,0,-.55,0],3));
+ flagGeometry.computeVertexNormals();
+ const flagMaterials=['#c77c62','#edd29a','#7a9e92'].map(color=>{const material=mat(color).clone();material.side=THREE.DoubleSide;return material;});
+ for(const z of [-.8,8.5]){for(const x of [-7.2,9])box(x,2.25,z,.12,4.5,.12,'#947a58');const pts=[];for(let n=0;n<=30;n++){const t=n/30;pts.push(new THREE.Vector3(-7.2+t*16.2,4.4-Math.sin(t*Math.PI)*.8,z));}const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),new THREE.LineBasicMaterial({color:'#7e795e'}));statics.add(tagObject(line,assembly));for(let n=1;n<20;n++){const t=n/20,x=-7.2+t*16.2,y=4.4-Math.sin(t*Math.PI)*.8;const m=mesh(flagGeometry,'#c77c62',x,y,z,animatedParts);m.material=flagMaterials[n%3];animations.flags.push(m);}}
+ const flagBatches=flagMaterials.map(material=>animatedInstances(scene,animations.flags.filter(flag=>flag.material===material),{
+  name:'Market bunting',bounds:new THREE.Sphere(new THREE.Vector3(.5,3.5,4),10)
+ }));
  for(const b of town.buildings.filter((b,i)=>!b.custom&&i%3===0&&b.pos[1]<0)){assembly=`built:${b.key}-smoke`;const height=RESOLVED.get(b.id).bounds.max[1];for(let n=0;n<4;n++){const m=sphere(b.pos[0]+.6,height+1,b.pos[1],.3,'#e4e5d5',scene);m.material=new THREE.MeshBasicMaterial({color:'#edf0df',transparent:true,opacity:.3,depthWrite:false});m.castShadow=false;animations.smoke.push({m,x:b.pos[0]+.6,z:b.pos[1],y:height-.6,phase:n/4});}}
  for(const p of town.props.filter(p=>p.id==='cv-streetlamp')){assembly=`built:lamp-${town.props.indexOf(p)}`;const m=sphere(p.pos[0],2.55,p.pos[1],.17,'#ffe4a6',scene);m.material=new THREE.MeshBasicMaterial({color:'#ffe4a6'});animations.lamps.push(m);const glow=new THREE.Mesh(new THREE.CircleGeometry(2.6,24),new THREE.MeshBasicMaterial({map:glowTexture,transparent:true,opacity:0,depthWrite:false}));glow.rotation.x=-Math.PI/2;glow.position.set(p.pos[0],.19,p.pos[1]);scene.add(tagObject(glow,assembly));animations.lamps.push(glow);}
  // Owned animals remain individually animated.
@@ -101,9 +115,12 @@ export async function buildAstra(scene,town,{hy3dModels,stream,isOpening,detail,
  // Instance reused kit meshes, including their toon hulls. These are private
  // models fetched at runtime; neither this module nor builds embed the assets.
  tagComponents(statics,town,'world');tagComponents(scene,town,'world');
- statics.updateMatrixWorld(true);const batches=new Map();statics.traverse(o=>{if(!o.isMesh)return;const key=o.geometry.uuid+':'+o.material.uuid;if(!batches.has(key))batches.set(key,{source:o,matrices:[],ids:[]});batches.get(key).matrices.push(o.matrixWorld.clone());batches.get(key).ids.push(o.userData.registryId);});
- for(const {source,matrices,ids} of batches.values()){const m=new THREE.InstancedMesh(source.geometry,source.material,matrices.length);tagBatch(m,ids);matrices.forEach((v,i)=>m.setMatrixAt(i,v));m.castShadow=source.castShadow;m.receiveShadow=source.receiveShadow;scene.add(m);}
+ statics.name='Town center scenery';
+ // Weather maps pavement and roof-cap heights to individual instances.
+ const weatherIds=new Set(['built:market-paving',...town.roads.map(r=>r.registryId),...town.buildings.map(b=>b.registryId),
+  ...[...town.props,...town.trees,...town.supplemental].filter(p=>/streetlamp|hedge|bush/.test(p.asset||p.id)).map(p=>p.registryId)]);
+ batchStaticMeshes(statics,scene,{preserveOutlineGeometry:true,preserveIds:weatherIds});
  // Lines aren't mesh instances.
  statics.traverse(o=>{if(o.isLine){const line=o.clone();line.applyMatrix4(o.parent.matrixWorld);scene.add(line);}});
- return {landscape,woods,water,selectables,animations,expansions,districts,civicQuarter,works,railway,sunbeam,mapleHollow,catalogActivities,update(t,night,hour=10,people=[],day=4,weather='clear'){railway?.update(t,hour,night);const travellers=railway?.service.pedestrians??[];landscape.update(t,hour,people,[...travellers,...districts.civic.school.pedestrians]);woods.update(t,hour,day);mapleHollow.update(t,hour,night,people);water.update(t);expansions.update(t,hour,night,day,travellers.length?[...people,...travellers]:people,weather);catalogActivities.update(t);sunbeam.update(t,hour,night);works.update(t,hour,night,people);civicQuarter.update(t,hour,night);districts.update(t,hour,night,day,weather);nightUniform.value=night;setLampNight(night);for(const rotor of animations.mills)rotor.rotation.z=-t*.18;for(const s of animations.smoke){const phase=(t*.12+s.phase)%1;s.m.position.set(s.x+phase*1.8,s.y+phase*4,s.z+phase*.5);s.m.scale.setScalar(.15+phase*.72);s.m.material.opacity=(1-phase)*.23;}for(const r of animations.water){r.m.position.x=r.x+Math.sin(t*.4+r.phase)*.4;r.m.scale.x=r.width*(.8+Math.sin(t+r.phase)*.25);}animations.flags.forEach((m,n)=>m.rotation.y=Math.sin(t*1.8+n)*.15);for(const a of animations.animals){if(a.kind==='duck'){const x=-13+Math.sin(t*.08)*13-a.n*.85;a.o.position.set(x,.05+Math.sin(t*2+a.n)*.025,riverZ(x)+Math.sin(t*.3-a.n*.3)*.4);a.o.rotation.y=Math.cos(t*.08)>0?Math.PI/2:-Math.PI/2;}else{const p=t*.3+a.n*2;a.o.position.set(18+Math.sin(p)*1.5,.05+Math.abs(Math.sin(t*5+a.n))*.04,29+Math.cos(p*.7));a.o.rotation.y=Math.atan2(Math.cos(p),-.7*Math.sin(p*.7));}}for(const m of animations.lamps){if(m.geometry.type==='CircleGeometry')m.material.opacity=night*LAMP_LOOK.pool;else m.visible=night>.2;}}};
+ return {landscape,woods,water,selectables,animations,expansions,districts,civicQuarter,works,railway,sunbeam,mapleHollow,catalogActivities,update(t,night,hour=10,people=[],day=4,weather='clear'){railway?.update(t,hour,night);const travellers=railway?.service.pedestrians??[];landscape.update(t,hour,people,[...travellers,...districts.civic.school.pedestrians]);woods.update(t,hour,day);mapleHollow.update(t,hour,night,people);water.update(t);expansions.update(t,hour,night,day,travellers.length?[...people,...travellers]:people,weather);catalogActivities.update(t);sunbeam.update(t,hour,night);works.update(t,hour,night,people);civicQuarter.update(t,hour,night);districts.update(t,hour,night,day,weather);nightUniform.value=night;setLampNight(night);for(const rotor of animations.mills)rotor.rotation.z=-t*.18;for(const s of animations.smoke){const phase=(t*.12+s.phase)%1;s.m.position.set(s.x+phase*1.8,s.y+phase*4,s.z+phase*.5);s.m.scale.setScalar(.15+phase*.72);s.m.material.opacity=(1-phase)*.23;}for(const r of animations.water){r.m.position.x=r.x+Math.sin(t*.4+r.phase)*.4;r.m.scale.x=r.width*(.8+Math.sin(t+r.phase)*.25);}shimmer.update();animations.flags.forEach((m,n)=>m.rotation.y=Math.sin(t*1.8+n)*.15);flagBatches.forEach(batch=>batch.update());for(const a of animations.animals){if(a.kind==='duck'){const x=-13+Math.sin(t*.08)*13-a.n*.85;a.o.position.set(x,.05+Math.sin(t*2+a.n)*.025,riverZ(x)+Math.sin(t*.3-a.n*.3)*.4);a.o.rotation.y=Math.cos(t*.08)>0?Math.PI/2:-Math.PI/2;}else{const p=t*.3+a.n*2;a.o.position.set(18+Math.sin(p)*1.5,.05+Math.abs(Math.sin(t*5+a.n))*.04,29+Math.cos(p*.7));a.o.rotation.y=Math.atan2(Math.cos(p),-.7*Math.sin(p*.7));}}for(const m of animations.lamps){if(m.geometry.type==='CircleGeometry'){m.material.opacity=night*LAMP_LOOK.pool;m.visible=m.material.opacity>0;}else m.visible=night>.2;}}};
 }

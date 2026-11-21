@@ -1,3 +1,5 @@
+import {animatedInstances} from './animated-instances.js';
+import {batchStaticMeshes} from './static-batches.js';
 // OWNER: grok-river lane (village/grok-river). Contract: docs/specs/GROK-RIVER.md.
 // Renders town.water: every reach of the Willow River, the Spring Falls on
 // the Mountain Pass, the lake and Gulf deltas, and the footbridges. All
@@ -11,12 +13,13 @@ import {makeRng} from '../compiler/rng.js';
 
 export function buildWater(scene,town){
  const plan=town.water,rng=makeRng(town.seed+5150),random=()=>rng.float();
- const root=new THREE.Group();root.name='Willow River system';scene.add(root);
+ const root=new THREE.Group(),statics=new THREE.Group();
+ root.name='Willow River system';statics.name='Willow River banks';scene.add(root);
  const mats=new Map(),mat=c=>{if(!mats.has(c))mats.set(c,toonMaterial(c));return mats.get(c);};
  const geo=(vertices,indices)=>{const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));g.setIndex(indices);g.computeVertexNormals();return g;};
- const add=(g,color,id='built:river',shadow=true)=>{const m=new THREE.Mesh(g,mat(color));m.receiveShadow=true;m.castShadow=false;if(!shadow)m.receiveShadow=false;root.add(tagObject(m,id));return m;};
+ const add=(g,color,id='built:river',shadow=true)=>{const m=new THREE.Mesh(g,mat(color));m.receiveShadow=true;m.castShadow=false;if(!shadow)m.receiveShadow=false;statics.add(tagObject(m,id));return m;};
  const cube=new THREE.BoxGeometry(1,1,1),rockGeo=new THREE.DodecahedronGeometry(1,0);
- const box=(x,y,z,w,h,d,c,yaw=0,id='built:river')=>{const m=new THREE.Mesh(cube,mat(c));m.position.set(x,y,z);m.scale.set(w,h,d);m.rotation.y=yaw;m.castShadow=true;m.receiveShadow=true;root.add(tagObject(m,id));return m;};
+ const box=(x,y,z,w,h,d,c,yaw=0,id='built:river')=>{const m=new THREE.Mesh(cube,mat(c));m.position.set(x,y,z);m.scale.set(w,h,d);m.rotation.y=yaw;m.castShadow=true;m.receiveShadow=true;statics.add(tagObject(m,id));return m;};
  const frame=(pts,i)=>{const a=pts[Math.max(0,i-1)],b=pts[Math.min(pts.length-1,i+1)],dx=b[0]-a[0],dz=b[1]-a[1],l=Math.hypot(dx,dz)||1;return {tx:dx/l,tz:dz/l,nx:-dz/l,nz:dx/l};};
  // Ribbon across a polyline: offsets[k] = [lateral factor, y fn].
  const ribbon=(pts,cols)=>{const v=[],idx=[],n=cols.length;
@@ -46,10 +49,10 @@ export function buildWater(scene,town){
    const surf=(p,o,f)=>Math.max(.075,(mountainSurface(p[0]+f.nx*o,p[1]+f.nz*o)??-.09)+.1);
    add(ribbon(pts,[[p=>-p[3]-.18,(p,o,f)=>surf(p,o,f)-.04],[p=>-p[3],surf],[p=>0,(p,o,f)=>surf(p,o,f)+.01],[p=>p[3],surf],[p=>p[3]+.18,(p,o,f)=>surf(p,o,f)-.04]]),'#9fcfcc');
    add(ribbon(pts,[[p=>-p[3]*.45,(p,o,f)=>surf(p,o,f)+.03],[p=>p[3]*.45,(p,o,f)=>surf(p,o,f)+.03]]),'#d9eeea');
-   for(let i=0;i<14;i++)falling.push({m:box(0,0,0,.18+random()*.3,.05,.5,'#f2fbf7'),u:random(),lane:(random()-.5)*.9,speed:.35+random()*.25,pts});
+   for(let i=0;i<14;i++)falling.push({m:box(0,0,0,.18+random()*.3,.05,.5,'#f2fbf7').removeFromParent(),u:random(),lane:(random()-.5)*.9,speed:.35+random()*.25,pts});
    // Spring cleft at the lip: two dark rocks frame the source.
    const lip=pts[0],f=frame(pts,0);
-   for(const s of [-1,1]){const r=new THREE.Mesh(rockGeo,mat('#7f8b72'));r.position.set(lip[0]+f.nx*s*1.05-f.tx*.3,lip[2]+.15,lip[1]+f.nz*s*1.05-f.tz*.3);r.scale.set(.75,.6,.7);r.rotation.y=s;r.castShadow=true;root.add(tagObject(r,'built:river'));}
+   for(const s of [-1,1]){const r=new THREE.Mesh(rockGeo,mat('#7f8b72'));r.position.set(lip[0]+f.nx*s*1.05-f.tx*.3,lip[2]+.15,lip[1]+f.nz*s*1.05-f.tz*.3);r.scale.set(.75,.6,.7);r.rotation.y=s;r.castShadow=true;statics.add(tagObject(r,'built:river'));}
    continue;
   }
   const g=p=>groundAt(town,p);
@@ -60,7 +63,7 @@ export function buildWater(scene,town){
   add(ribbon(pts,[[p=>-p[3]*.72,p=>p[2]],[p=>p[3]*.72,p=>p[2]]]),'#70afb3');
   for(let i=0;i<pts.length;i+=3){const p=pts[i];if(p.reach==='town'||g(p)<-.2)continue; // world.js keeps the original trunk shimmer.
    const f=frame(pts,i),o=(random()-.5)*p[3]*1.4,w=.35+random()*1.2;
-   const m=box(p[0]+f.nx*o,p[2]+.025,p[1]+f.nz*o,w,.015,.035,'#b7d7cf',Math.atan2(f.tx,f.tz)+Math.PI/2);m.castShadow=false;
+   const m=box(p[0]+f.nx*o,p[2]+.025,p[1]+f.nz*o,w,.015,.035,'#b7d7cf',Math.atan2(f.tx,f.tz)+Math.PI/2).removeFromParent();m.castShadow=false;
    streaks.push({m,x:m.position.x,z:m.position.z,tx:f.tx,tz:f.tz,phase:random()*6,width:w});}
   // Bank reeds are Nature cattails planned with the landscape (src/compiler/nature-edges.js).
  }
@@ -69,7 +72,7 @@ export function buildWater(scene,town){
   const pool=add(new THREE.CircleGeometry(q.r,28),'#77b6b5');pool.rotation.x=-Math.PI/2;pool.position.set(q.x,q.level-.004,q.z);
   for(let i=0;i<9;i++){const a=random()*6.28,r=random()*q.r*.55,foam=add(new THREE.CircleGeometry(.2+random()*.35,10),'#e4f3ee');foam.rotation.x=-Math.PI/2;foam.position.set(q.x+.5+Math.cos(a)*r,q.level+.004,q.z-.6+Math.sin(a)*r);foam.scale.y=.6;}
   const sand=add(new THREE.RingGeometry(q.r,q.r+.55,28),'#ced2a7');sand.rotation.x=-Math.PI/2;sand.position.set(q.x,-.084,q.z);
-  for(let i=0;i<7;i++){const a=i/7*Math.PI*2+.4,r=new THREE.Mesh(rockGeo,mat(i%2?'#9caa88':'#8e9a7c'));r.position.set(q.x+Math.cos(a)*(q.r+.5),.05,q.z+Math.sin(a)*(q.r+.5));r.scale.set(.45+random()*.4,.3+random()*.25,.45+random()*.35);r.rotation.y=random()*6;r.castShadow=true;root.add(tagObject(r,'built:river'));}
+  for(let i=0;i<7;i++){const a=i/7*Math.PI*2+.4,r=new THREE.Mesh(rockGeo,mat(i%2?'#9caa88':'#8e9a7c'));r.position.set(q.x+Math.cos(a)*(q.r+.5),.05,q.z+Math.sin(a)*(q.r+.5));r.scale.set(.45+random()*.4,.3+random()*.25,.45+random()*.35);r.rotation.y=random()*6;r.castShadow=true;statics.add(tagObject(r,'built:river'));}
  }
  // Deltas: sandbars split the widened mouths into braided channels.
  const out=plan.reaches.find(r=>r.id==='outflow').points,west=plan.reaches.find(r=>r.id==='west').points;
@@ -92,9 +95,13 @@ export function buildWater(scene,town){
   // Abutments tie the deck to dry land at both ends.
   for(const end of [-1,1])at(end*(b.length/2+.25),0,.12,b.width+.3,.24,.7,'#a99f83');
  }
+ batchStaticMeshes(statics,root);
+ const riverShimmer=animatedInstances(root,streaks.map(({m})=>m),{name:'River shimmer'});
+ const fallingFoam=animatedInstances(root,falling.map(({m})=>m),{name:'Falling foam'});
  return {root,update(t){
   for(const r of streaks){const d=Math.sin(t*.4+r.phase)*.4;r.m.position.set(r.x+r.tx*d,r.m.position.y,r.z+r.tz*d);r.m.scale.x=r.width*(.8+Math.sin(t+r.phase)*.25);}
   for(const f of falling){const u=(f.u+t*f.speed*.25)%1,i=Math.min(f.pts.length-2,Math.floor(u*(f.pts.length-1))),a=f.pts[i],b=f.pts[i+1],k=u*(f.pts.length-1)-i,fr=frame(f.pts,i);
    const x=a[0]+(b[0]-a[0])*k+fr.nx*f.lane*a[3],z=a[1]+(b[1]-a[1])*k+fr.nz*f.lane*a[3],y=(mountainSurface(x,z)??-.09)+.16;f.m.position.set(x,Math.max(y,a[2]+.03),z);f.m.rotation.y=Math.atan2(fr.tx,fr.tz);f.m.rotation.x=-.9;}
+  riverShimmer.update();fallingFoam.update();
  },audit(){return {reaches:plan.reaches.map(r=>r.id),bridges:plan.bridges.length,streaks:streaks.length,falls:falling.length};}};
 }

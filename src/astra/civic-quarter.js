@@ -1,3 +1,5 @@
+import {createRigidBatches} from './rigid-batches.js';
+import {batchStaticMeshes} from './static-batches.js';
 import {packVehicle} from './vehicle-models.js';
 import {vehicleModel} from './traffic-fleet.js';
 import * as THREE from 'three';
@@ -128,17 +130,19 @@ export async function buildCivicQuarter(scene,town) {
   for(let n=0;n<3;n++)box(-76.75+n*.62,.4,-81.5,.6,.6,.6,'#baa074');
   await Promise.all(jobs);
   // Batch architecture, furniture and owned trees; preserve moving people.
-  root.updateMatrixWorld(true);const batches=new Map();root.traverse(o=>{if(!o.isMesh)return;const key=o.geometry.uuid+':'+o.material.uuid;if(!batches.has(key))batches.set(key,{source:o,matrices:[]});batches.get(key).matrices.push(o.matrixWorld.clone());});
-  for(const {source,matrices}of batches.values()){const m=new THREE.InstancedMesh(source.geometry,source.material,matrices.length);matrices.forEach((v,i)=>m.setMatrixAt(i,v));m.castShadow=source.castShadow;m.receiveShadow=source.receiveShadow;scene.add(m);}
+   root.name='Civic Green scenery';
+  batchStaticMeshes(root,scene);
   // streetlights: the avenue posts had bulbs but no ground pool or halo.
   scene.add(buildLampGlow(lampPosts(town).filter(p=>p.source==='civic'),{name:'Civic Green lamps'}).group);
   const venueRecords=town.venues.filter(v=>v.district==='civic-green').map(v=>({type:'venue',data:v,bounds:new THREE.Box3(new THREE.Vector3(v.box.min[0],0,v.box.min[1]),new THREE.Vector3(v.box.max[0],v.height,v.box.max[1]))}));
   let state=civicLifeState(0,10), engine, delivery;
   const position=v=>v?[v.position[0],.215,v.position[1]]:[0,0,0];
   const move=(o,path,u,reverse=false)=>{const p=sampleRoute(path,u);o.position.set(p.x,.18,p.z);o.rotation.y=p.heading+(reverse?Math.PI:0);};
+  const rigid=createRigidBatches(moving);
   const parkLoop=[[-70,-54],[-70,-66],[-48,-66],[-48,-42],[-70,-42],[-70,-54]];
   return {venueRecords,stats:{facilities:4,park:1,localPeople:actors.length,vehicles:5},
     setVehicles(vehicles){[engine,delivery]=vehicles;},
+    appendPedestrians(list){for(const {o} of actors)if(o.visible)list.push({x:o.position.x,z:o.position.z});},
     audit:()=>({state:{...state},engine:position(engine),delivery:position(delivery),people:actors.map(a=>({name:a.name,position:a.o.position.toArray(),visible:a.o.visible})),ducks:ducks.map(a=>a.o.position.toArray())}),
     update(t,hour,night){
       const phase=!engine||engine.stoppedAt==='depot'?'ready':engine?.stoppedAt==='destination'?'assisting':engine?.lastStop==='destination'||engine?.returning?'returning':'responding';
@@ -167,6 +171,7 @@ export async function buildCivicQuarter(scene,town) {
       parcel.visible=state.deliveryActive&&deliveryCycle<18;
       ducks.forEach(({o,n})=>{const a=t*.12+n*2;o.position.set(-60+Math.sin(a)*2.7,.3,-59+Math.cos(a)*1.8);o.rotation.y=Math.atan2(Math.cos(a)*2.7,-Math.sin(a)*1.8);});
       lamps.forEach(m=>m.visible=night>.15);
+      rigid.update();
     }
   };
 }

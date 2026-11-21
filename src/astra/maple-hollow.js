@@ -139,6 +139,8 @@ export async function buildMapleHollow(scene, town, {traffic = null} = {}) {
   // Puffs from grills during a BBQ; sprinkler arcs sway (instanced, one draw each).
   const puffs = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(.18, 0), new THREE.MeshBasicMaterial({color: '#eceee2', transparent: true, opacity: .45, depthWrite: false}), 18);
   puffs.name = 'Maple Hollow • grill smoke'; puffs.frustumCulled = false; root.add(puffs);
+  puffs.userData.registryIds = Array(puffs.instanceMatrix.count).fill(district);
+  puffs.count = 0;
   for (const o of [ground]) o.userData.registryId = district;
   // Selectable homes: bounds plus a stand-in object whose hull geometry the skins can find.
   const selectables = [];
@@ -155,10 +157,6 @@ export async function buildMapleHollow(scene, town, {traffic = null} = {}) {
   const windowsOn = new Map(porches.map((l) => [l.key, 18.3 + hash('on:' + l.key) * 1.1]));
   let lastLit = '', lastSwing = 0;
   const stats = {bus: null, cars: 0, litHomes: 0, bbq: false, kidsPlaying: 0};
-  // Dynamic batches keep at least one (hidden) instance so registry coverage always matches count.
-  const hidden = matrix([0, -900], 0, .0001, -50);
-  const setCount = (mesh, n) => { if (!n) mesh.setMatrixAt(0, hidden); mesh.count = Math.max(1, n); mesh.userData.registryIds = Array(mesh.count).fill(district); };
-  setCount(puffs, 0);
   function update(t, hour, night, people = []) {
     suburbNight.value = night; suburbLamps.value = Math.max(0, Math.min(1, (night - .15) / .5));
     // Windows: each home switches on at dusk and off late (its own hour); porch lamps follow.
@@ -173,6 +171,7 @@ export async function buildMapleHollow(scene, town, {traffic = null} = {}) {
       }
     }
     const lampK = suburbLamps.value; pools.material.opacity = lampK * LAMP_LOOK.suburbPool;
+    pools.visible = pools.material.opacity > 0;
     for (let i = 0; i < porches.length; i++) pools.setMatrixAt(lamps.length + i, matrix(porches[i].door, 0, lit[i] ? [4.6, 1, 4.6] : [.001, 1, .001], .11));
     pools.instanceMatrix.needsUpdate = true;
     const vehicles = regional()?.vehicles.filter(v => v.mapleHollow) ?? [];
@@ -189,7 +188,7 @@ export async function buildMapleHollow(scene, town, {traffic = null} = {}) {
       for (let k = 0; k < 6 && n < 18; k++, n++) { const ph = (t * .35 + k / 6) % 1; puffs.setMatrixAt(n, matrix([g[0] + Math.sin(t + k) * .2 - ph * .5, g[1] + ph * .4], 0, .4 + ph * 1.4, 1.5 + ph * 2.4)); }
       stats.bbq = true;
     }
-    setCount(puffs, n); puffs.instanceMatrix.needsUpdate = true; if (!n) stats.bbq = false;
+    puffs.count = n; puffs.instanceMatrix.needsUpdate = true; if (!n) stats.bbq = false;
     // Sprinklers sway in the afternoon.
     const spray = batches.sprinkler_spray;
     if (spray && t - lastSwing > .05) {

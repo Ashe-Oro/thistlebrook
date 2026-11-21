@@ -57,6 +57,7 @@ export const FOLIAGE_RAMP = makeToonRamp(46, 132, 255);
 const RAMPS = { default: RAMP, foliage: FOLIAGE_RAMP };
 
 const _matCache = new Map();
+const toonRamps = new WeakMap();
 
 export function toonMaterial(color, { ramp = 'default' } = {}) {
   const key = ramp + ':' + String(color);
@@ -65,13 +66,19 @@ export function toonMaterial(color, { ramp = 'default' } = {}) {
     color: new THREE.Color(color),
     gradientMap: RAMPS[ramp] || RAMP,
   });
+  toonRamps.set(mat, ramp);
   _matCache.set(key, mat);
   return mat;
+}
+
+export function flatToonRamp(material) {
+  return !material.userData.scenery && toonRamps.get(material);
 }
 
 // Inverted-hull outline: a back-faced copy of the geometry pushed outward
 // along its normals, drawn in ink. Stable, clean, camera-independent.
 const _outlineCache = new Map();
+const outlines = new WeakSet();
 // Hull ink. The shader used to write the linear colour straight to the
 // screen, which only looked right by accident (near-black on screen, but the
 // true #20262b once rendered through the post chain's linear targets). Now it
@@ -89,15 +96,20 @@ export function outlineMaterial(thickness) {
   const mat = new THREE.ShaderMaterial({
     uniforms: { uThickness: { value: thickness }, uInk: { value: new THREE.Color(OUTLINE_INK) }, ...HULL_FADE },
     vertexShader: /* glsl */ `
+      #include <batching_pars_vertex>
       #include <skinning_pars_vertex>
       uniform float uThickness, uFadeDist, uFadeMin;
       void main() {
+        #include <batching_vertex>
         float k = 1.0;
         // projectionMatrix[2][3] is -1 for perspective, 0 for ortho.
         if (uFadeDist > 0.0 && projectionMatrix[2][3] != 0.0) {
           vec4 samplePos = vec4(position, 1.0);
           #ifdef USE_INSTANCING
             samplePos = instanceMatrix * samplePos;
+          #endif
+          #ifdef USE_BATCHING
+            samplePos = batchingMatrix * samplePos;
           #endif
           float depth = -(modelViewMatrix * samplePos).z;
           k = mix(1.0, uFadeMin, clamp((depth - uFadeDist) / uFadeDist, 0.0, 1.0));
@@ -108,6 +120,9 @@ export function outlineMaterial(thickness) {
         vec4 hullPos = vec4(transformed, 1.0);
         #ifdef USE_INSTANCING
           hullPos = instanceMatrix * hullPos;
+        #endif
+        #ifdef USE_BATCHING
+          hullPos = batchingMatrix * hullPos;
         #endif
         gl_Position = projectionMatrix * modelViewMatrix * hullPos;
       }
@@ -121,8 +136,13 @@ export function outlineMaterial(thickness) {
     `,
     side: THREE.BackSide,
   });
+  outlines.add(mat);
   _outlineCache.set(key, mat);
   return mat;
+}
+
+export function isOutlineMaterial(material) {
+  return outlines.has(material);
 }
 
 // Build a toon-shaded mesh (+ optional ink outline) as a small Group.

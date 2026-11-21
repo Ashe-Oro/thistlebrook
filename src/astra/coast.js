@@ -2,7 +2,8 @@ import {furnitureId} from './registry/district-furniture.js';
 import {tagNewFurniture} from './registry/furniture-tags.js';
 import * as THREE from 'three';
 import { districtKit } from './downtown-kit.js';
-import { toonMaterial } from '../toon.js';
+import { toonMaterial, toonVertexColorMaterial } from '../toon.js';
+import { createRigidBatches } from './rigid-batches.js';
 import { COAST_BLOCKS, COAST_REAR, COAST_COURTS, COAST_UMBRELLAS, shoreX } from './coast-plan.js';
 import { createCoastLife } from './coast-life.js';
 import { buildWatercraft } from './watercraft.js';
@@ -15,16 +16,29 @@ export async function buildCoast(scene,town) {
   const extra=(geometry,color,x,y,z,parent=kit.root)=>{const m=new THREE.Mesh(geometry,toonMaterial(color));m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;};
   const beam=(a,b,width,color,parent=kit.root)=>{const mid=new THREE.Vector3(...a).add(new THREE.Vector3(...b)).multiplyScalar(.5),d=new THREE.Vector3(...b).sub(new THREE.Vector3(...a));const m=box(mid.x,mid.y,mid.z,width,d.length(),width,color,parent);m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d.normalize());return m;};
   function label(text,x,y,z,w,h,color,rotation=Math.PI/2){const m=kit.sign(text,x,y,z,w,h,color);m.rotation.y=rotation;return m;}
-  const beachCanopies=[];
+  const beachCanopies=[], canopyRoot=new THREE.Group(), canopyGeometry=new Map();
+  root.add(canopyRoot);
+  function canopy(radius,color) {
+    const key=radius+':'+color;
+    if(canopyGeometry.has(key))return canopyGeometry.get(key);
+    const indexed=new THREE.ConeGeometry(radius,.62,12,1,true);
+    const geometry=indexed.toNonIndexed();
+    indexed.dispose();
+    geometry.clearGroups();
+    const white=new THREE.Color('#fff4d7'), tint=new THREE.Color(color);
+    const colors=new Float32Array(geometry.attributes.position.count*3);
+    for(let i=0;i<geometry.attributes.position.count;i++)(Math.floor(i/3)%2?tint:white).toArray(colors,i*3);
+    geometry.setAttribute('color',new THREE.BufferAttribute(colors,3));
+    canopyGeometry.set(key,geometry);
+    return geometry;
+  }
   function umbrella(x,z,r,color,y=0,beach=false){
     const start=kit.root.children.length;
     drum(x,y+1.6,z,.065,3.2,'#fff2d4');
     // Alternating fabric panels; a low octagonal canopy with a scalloped hem.
-    const geo=new THREE.ConeGeometry(r,.62,12,1,true);geo.clearGroups();
-    const white=toonMaterial('#fff4d7'),tint=toonMaterial(color);for(let i=0;i<12;i++)geo.addGroup(i*3,3,i%2);
-    const m=new THREE.Mesh(geo,[white,tint]);m.position.set(x,y+3.15,z);m.castShadow=true;
+    const m=new THREE.Mesh(canopy(r,color),toonVertexColorMaterial());m.position.set(x,y+3.15,z);m.castShadow=true;
     // Animated fabric keeps the umbrella's registry identity outside static baking.
-    (beach?root:kit.root).add(m);if(beach)beachCanopies.push(m);
+    (beach?canopyRoot:kit.root).add(m);if(beach)beachCanopies.push(m);
     const id=furnitureId('coral-coast','umbrella',x,y,z);
     m.userData.registryId=id;
     orb(x,y+3.5,z,.12,'#fff2d4');tagNewFurniture(kit.root,start,id);
@@ -145,11 +159,13 @@ export async function buildCoast(scene,town) {
   }
   for(const v of town.venues.filter(v=>v.district==='coral-coast'))selectables.push({type:'venue',data:v,bounds:new THREE.Box3(new THREE.Vector3(v.box.min[0],0,v.box.min[1]),new THREE.Vector3(v.box.max[0],v.height||5,v.box.max[1]))});
   const life=await createCoastLife(root,town);
+  const rigidCanopies=createRigidBatches(canopyRoot);
   // vehicle-variety: speedboat, kayaks and canoe outside the swim line.
   const watercraft=await buildWatercraft(root,'coast');
-  return {selectables,life,watercraft,audit:()=>({...life.audit(),watercraft:watercraft.audit(),beachUmbrellas:{total:beachCanopies.length,open:beachCanopies.filter(m=>m.scale.x===1).length}}),update(t,night,hour,weather){
-    kit.update(night);life.update(t,hour,weather);watercraft.update(t,hour);
+  return {selectables,life,watercraft,audit:()=>({...life.audit(),watercraft:watercraft.audit(),beachUmbrellas:{total:beachCanopies.length,open:beachCanopies.filter(m=>m.scale.x===1).length}}),update(t,night,hour,weather,drawCrowd=true){
+    kit.update(night);life.update(t,hour,weather,drawCrowd);watercraft.update(t,hour);
     for(const canopy of beachCanopies){const open=hour>=7&&hour<19;canopy.scale.set(open?1:.12,open?1:2.8,open?1:.12);canopy.position.y=open?3.15:2.5;}
+    rigidCanopies.update();
     for(const {mesh,band}of waves){const phase=(t*.15+band/4)%1,attr=mesh.geometry.attributes.position;for(let n=0;n<=120;n++){const z=-110+n,xx=shoreX(z)+9*(1-phase)+Math.sin(z*.28+t*.8)*.24;attr.setXYZ(n*2,xx,.1,z);attr.setXYZ(n*2+1,xx+.16+Math.sin(z*.19+band)**2*.16,.105,z);}attr.needsUpdate=true;mesh.material.opacity=Math.sin(phase*Math.PI)*(.7-night*.3);}
   }};
 }

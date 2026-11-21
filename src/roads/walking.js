@@ -47,7 +47,7 @@ export function residentPedestrian(actor, walkPace) {
   const [x, z] = actor.context.location.position;
   const walking = actor.action?.tool === 'walkTo';
   const target = actor.route[0]?.pos;
-  const gap = target ? dist([x, z], target) : 0;
+  const gap = target ? Math.hypot(target[0] - x, target[1] - z) : 0;
   const moving = walking && gap > .01 && !actor.waitingToCross && !actor.waitingForTrain && !actor.waitingForLocalTraffic;
   const pace = walkPace ?? actor.context.personality.pace;
   return {id: actor.context.id, x, z, walking, crossing: !!actor.crossing, waitingForLocalTraffic: !!actor.waitingForLocalTraffic,

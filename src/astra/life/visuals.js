@@ -1,3 +1,4 @@
+import {createRigidBatches} from '../rigid-batches.js';
 import {tagObject} from '../registry/render-tags.js';
 import * as THREE from 'three';
 import { toonMaterial } from '../../toon.js';
@@ -54,6 +55,7 @@ export function buildLifeVisuals(scene,life){
   }
  }
  for(const g of root.children)if(g.userData.lifePlaceId)tagObject(g,g.userData.lifePlaceId);
+ const rigid=createRigidBatches(root);
  const baseballs=new Map();
  for(const p of life.registry.places.filter(p=>p.interaction?.activity==='baseball')){const ball=mesh(sphere,'#fff3d6',[0,0,0],[.14,.14,.14]);ball.visible=false;tagObject(ball,p.id);baseballs.set(p.id,ball);}
  return {root,update(){
@@ -70,6 +72,7 @@ export function buildLifeVisuals(scene,life){
     piece.object.position.set(coords[0],.93,coords[1]);
    }
   }
+  rigid.update();
  }};
 }
 

@@ -1,3 +1,5 @@
+import {createRigidBatches} from './rigid-batches.js';
+import {batchStaticMeshes} from './static-batches.js';
 import {furnitureId} from './registry/district-furniture.js';
 import {tagNewFurniture} from './registry/furniture-tags.js';
 import {tagDistrictModels} from './registry/district-models.js';
@@ -194,16 +196,12 @@ export async function buildFairground(scene,town){
   }
   await Promise.all(jobs);tagDistrictModels(fixed,town,'fair',[0,0]);tagDistrictModels(moving,town,'fair');
   // Static props share instances; only the rides, water and people get updates.
-  fixed.updateMatrixWorld(true);const batches=new Map();fixed.traverse(o=>{
-    if(!o.isMesh)return;const key=o.geometry.uuid+o.material.uuid;
-    if(!batches.has(key))batches.set(key,{o,matrices:[],ids:[]});batches.get(key).matrices.push(o.matrixWorld.clone());batches.get(key).ids.push(o.userData.registryId);
-  });
-  for(const {o,matrices,ids}of batches.values()){
-    const instance=new THREE.InstancedMesh(o.geometry,o.material,matrices.length);matrices.forEach((m,i)=>instance.setMatrixAt(i,m));instance.userData.registryIds=ids;instance.castShadow=o.castShadow;instance.receiveShadow=o.receiveShadow;scene.add(instance);
-  }
+  fixed.name='Merrymead scenery';
+  batchStaticMeshes(fixed,scene);
   // streetlights: Merrymead Park's lamp posts had no night glow at all.
   scene.add(buildLampGlow(lampPosts(town).filter(p=>p.source==='park'),{name:'Merrymead Park lamps',offset:WORLD_OFFSETS.fair}).group);
   const [life, festival] = await Promise.all([createFairLife(scene,town), buildFestivalStage(scene,sign,town)]);
+  const rigid=createRigidBatches(moving);
   const lights=[[-64,-91],[-50,-68],[-49,-46]].map(([x,z])=>{const l=new THREE.PointLight('#ffd498',0,17,1.6);l.position.set(x,5,z);scene.add(l);return l;});
   let lastTime=null,rideTime=0,schedule=fairSchedule(4,10);
   return {life,wheel,carousel,stats:{fairVisitors:30,fairDucks:7,fairRiders:riders.length},update(t,hour,night,day=4,weather){
@@ -217,6 +215,7 @@ export async function buildFairground(scene,town){
     vendors.forEach((o,n)=>{o.visible=schedule.open;o.rotation.z=Math.sin(t*2+n)*.035;o.position.y=Math.abs(Math.sin(t*2+n))*.025;});
     festival.update(t,dt,hour,schedule.concert);
     bulbs.forEach(b=>{b.visible=night>.12&&schedule.open;});lights.forEach(l=>l.intensity=night*(schedule.open?24:2));
+    rigid.update();
     life.update(t,hour,day,weather);
   },audit(){return {schedule,rideAngle:wheel.rotation.z,carouselAngle:carousel.rotation.y,ducks:ducks.map(d=>d.position.toArray()),...life.audit(),festival:{...festival.audit(),audience:life.audience()}};}};
 }

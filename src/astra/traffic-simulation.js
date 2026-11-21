@@ -124,7 +124,12 @@ export function makeLane(points,offset=.7,segmentOffset=null,open=false) {
  return {points:samples,cumulative,length:cumulative.at(-1)};
 }
 export function sampleLane(path,distance) {
- const d=mod(distance,path.length);let i=0;while(i<path.points.length-1&&path.cumulative[i+1]<=d)i++;
+ const d=mod(distance,path.length);
+ let i=0,end=path.points.length-1;
+ while(i<end){
+  const mid=(i+end)>>>1;
+  if(path.cumulative[mid+1]<=d)i=mid+1;else end=mid;
+ }
  const a=path.points[i],b=path.points[(i+1)%path.points.length],span=path.cumulative[i+1]-path.cumulative[i];
  return {position:mix(a,b,span?(d-path.cumulative[i])/span:0),direction:unit(a,b)};
 }
@@ -195,17 +200,24 @@ export function createTrafficSimulation(town) {
   const [zone,...rest]=linked;
   for(const j of rest){zone.points.push(...j.points);zone.radius=Math.max(zone.radius,j.radius);junctions.splice(junctions.indexOf(j),1);}
  }
+ const radii=new Map(junctionPoints.map(point=>[point,junctionRadius(point)]));
+ const pedestrianLookahead=[0,.45],pedestrianSweep=[0,.3,.6];
  let time=0;
  function tick(dt,pedestrians,others,hour){
   const fleet=[...vehicles,...parked,...others];
   time+=dt;
   for(const j of junctions){
-   if(j.owner!==null){const v=j.owner;if(j.points.every(p=>!vehicleInZone(v,p,junctionRadius(p))&&!vehicleInZone({...v,...sampleLane(v.path,v.distance+2.5)},p,junctionRadius(p))))j.owner=null;}
+   if(j.owner!==null){
+    const v=j.owner,next={...v,...sampleLane(v.path,v.distance+2.5)};
+    if(j.points.every(p=>!vehicleInZone(v,p,radii.get(p))&&!vehicleInZone(next,p,radii.get(p))))j.owner=null;
+   }
    if(j.owner===null){
     let first=Infinity,nearest=Infinity;
     for(const v of vehicles)if(!(v.civic&&v.wait>0))for(const point of j.points){
-     const dx=point[0]-v.position[0],dz=point[1]-v.position[1],d=Math.hypot(dx,dz);
-     if(d>=Math.max(5.5,junctionRadius(point)+v.length/2+.25)||dx*v.direction[0]+dz*v.direction[1]<=-.5)continue;
+     const dx=point[0]-v.position[0],dz=point[1]-v.position[1],reach=Math.max(5.5,radii.get(point)+v.length/2+.25);
+     if(Math.abs(dx)>=reach||Math.abs(dz)>=reach||dx*v.direction[0]+dz*v.direction[1]<=-.5)continue;
+     const d=Math.hypot(dx,dz);
+     if(d>=reach)continue;
      // Give a held approach its turn before admitting another vehicle
      // from a continuously arriving platoon.
      const since=v.queuedJunction===j?v.junctionWaitSince:time;
@@ -217,28 +229,40 @@ export function createTrafficSimulation(town) {
    v.blockedBy=null;v.crossingYield=false;
    if(v.id==='civic-delivery'&&v.stoppedAt==='depot'&&(hour<8||hour>=16)){v.status='At depot';continue;}
    if(v.wait>0){v.wait=Math.max(0,v.wait-dt);v.speed=0;v.status=v.civic&&v.stoppedAt==='depot'?'At depot':v.id==='civic-engine'?'Assisting at fire scene':v.kind==='bus'?'At stop':'Unloading';if(!v.wait)v.stoppedAt=null;continue;}
-   let clearance=Infinity,reason='Cruising',waitingJunction=null;const ahead=(point)=>{const dx=point[0]-v.position[0],dz=point[1]-v.position[1];return {along:dx*v.direction[0]+dz*v.direction[1],across:Math.abs(dx*v.direction[1]-dz*v.direction[0])};};
+   let clearance=Infinity,reason='Cruising',waitingJunction=null;
+   const [x,z]=v.position,[forwardX,forwardZ]=v.direction;
    // Look down the lane, including predicted pedestrian positions. Residents
    // keep right of way even away from a painted crossing.
    for(const p of pedestrians){
-    if(Math.abs(p.x-v.position[0])>11||Math.abs(p.z-v.position[1])>11)continue;
+    if(Math.abs(p.x-x)>11||Math.abs(p.z-z)>11)continue;
     const width=p.crossing?2.8:v.width/2+.28,buffer=p.crossing?1.45:.4;
-    for(const horizon of [0,.45]){
-     const a=ahead([p.x+(p.vx||0)*horizon,p.z+(p.vz||0)*horizon]);
-     if(a.along>-.1&&a.along<8&&a.across<width){
-      const gap=a.along-v.length/2-buffer;
+    for(const horizon of pedestrianLookahead){
+     const dx=p.x+(p.vx||0)*horizon-x,dz=p.z+(p.vz||0)*horizon-z;
+     const along=dx*forwardX+dz*forwardZ;
+     if(along>-.1&&along<8&&Math.abs(dx*forwardZ-dz*forwardX)<width){
+      const gap=along-v.length/2-buffer;
       if(gap<clearance){clearance=gap;reason='Yielding to pedestrian';v.crossingYield=horizon===0&&Boolean(p.crossing);}
      }
     }
    }
    for(const other of fleet){if(other===v)continue;
     if(other.path===v.path){const gap=mod(other.distance-v.distance,v.path.length)-(v.length+other.length)/2-.6;if(gap<clearance){clearance=gap;reason='Following traffic';v.blockedBy=other;}}
-    const a=ahead(other.position),alignment=v.direction[0]*other.direction[0]+v.direction[1]*other.direction[1];
-    if(a.along>0&&a.across<(v.width+other.width)/2+.12&&alignment>.45){const gap=a.along-(v.length+other.length)/2-.5;if(gap<clearance){clearance=gap;reason='Following traffic';v.blockedBy=other;}}
+    const dx=other.position[0]-x,dz=other.position[1]-z;
+    const along=dx*forwardX+dz*forwardZ;
+    if(along>0&&Math.abs(dx*forwardZ-dz*forwardX)<(v.width+other.width)/2+.12&&forwardX*other.direction[0]+forwardZ*other.direction[1]>.45){
+     const gap=along-(v.length+other.length)/2-.5;
+     if(gap<clearance){clearance=gap;reason='Following traffic';v.blockedBy=other;}
+    }
    }
-   for(const j of junctions)for(const point of j.points){const radius=junctionRadius(point),a=ahead(point);if(a.along<0||a.along>Math.max(6,radius+v.length/2+1)||a.across>1.3)continue;
-    if(j.owner!==null&&j.owner!==v){const gap=a.along-v.length/2-radius; // room for a turning bus to sweep the corner
-   if(gap<clearance){clearance=gap;reason='Yielding at junction';v.blockedBy=j.owner;waitingJunction=j;}}
+   for(const j of junctions){
+    if(j.owner===null||j.owner===v)continue;
+    for(const point of j.points){
+     const radius=radii.get(point),dx=point[0]-x,dz=point[1]-z;
+     const along=dx*forwardX+dz*forwardZ;
+     if(along<0||along>Math.max(6,radius+v.length/2+1)||Math.abs(dx*forwardZ-dz*forwardX)>1.3)continue;
+     const gap=along-v.length/2-radius; // room for a turning bus to sweep the corner
+     if(gap<clearance){clearance=gap;reason='Yielding at junction';v.blockedBy=j.owner;waitingJunction=j;}
+    }
    }
    let stop=null,stopGap=Infinity;
    for(const s of v.stops){const d=mod(s.distance-v.distance,v.path.length);if(d<stopGap){stopGap=d;stop=s;}}
@@ -265,7 +289,7 @@ export function createTrafficSimulation(town) {
     // the straight-ahead lane check. Protect the next oriented footprint.
     const body=footprint({...v,...next}),reach=body.hl+body.hw+1.5;
     const pedestrian=pedestrians.find(p=>Math.abs(p.x-body.c[0])<reach&&Math.abs(p.z-body.c[1])<reach&&
-     [0,.3,.6].some(h=>pointInFootprint([p.x+(p.vx||0)*h,p.z+(p.vz||0)*h],body,.3)));
+     pedestrianSweep.some(h=>pointInFootprint([p.x+(p.vx||0)*h,p.z+(p.vz||0)*h],body,.3)));
     if(pedestrian){
      if(old!=='Yielding to pedestrian'&&reason!=='Yielding to pedestrian')events.pedestrianYields++;
      v.speed=0;v.status='Yielding to pedestrian';v.blockedBy=null;v.crossingYield=Boolean(pedestrian.crossing);

@@ -1,3 +1,4 @@
+import {createRigidBatches} from './rigid-batches.js';
 import {tagDistrictModels} from './registry/district-models.js';
 import * as THREE from 'three';
 import { place } from '../catalog/loader.js';
@@ -102,6 +103,7 @@ export async function buildStarbase(scene,town,{hy3d}={}){
  const vents=[];for(let i=0;i<12;i++){const m=orb(0,0,0,.3,'#eaf2e4',moving);m.castShadow=false;vents.push(m);}
  await Promise.all(jobs);tagDistrictModels(statics,town,'starbase',STARBASE_ORIGIN);people.sort((a,b)=>a.i-b.i);batchStatic(statics,root);
  // Night landmarks (TOWN-28): floods, beams, beacons and pad lights sit outside the static batches.
+ const rigid=createRigidBatches(moving);
  const lights=buildStarbaseLights(root,{follow:{ship:vehicles.ship.root,booster:vehicles.booster.root,f9:vehicles.f9.root,upper:vehicles.upper.root,side0:vehicles.sides[0].root,side1:vehicles.sides[1].root,strongback}});
  let state=flightState(0),roadVehicles=starbaseRoadVehicles(0),time=0;
  const api={selectables,lights,stats:{launchPads:2,landingPads:2,droneShips:1,workers:6,spectators:10},
@@ -117,6 +119,7 @@ export async function buildStarbase(scene,town,{hy3d}={}){
    vents.forEach((m,i)=>{const u=(t*.21+i/12)%1;m.position.set(28+(i%3)*5+u*2,5+u*3,-11+Math.floor(i/6)*7);m.scale.setScalar(.15+u*.7);m.visible=state.t<11||state.t>78&&state.t<90||state.t>133&&state.t<143;});
    people.forEach(p=>{p.o.visible=p.worker||hour>=6&&hour<22;const route=p.route;const v=routeAt(route,t+p.i*9,p.worker?1.1:.75,p.worker?4:14);p.o.position.set(v.x,.12+(v.walking?Math.sin(t*8+p.i)*.035:0),v.z);p.o.rotation.y=v.walking?v.heading:Math.atan2(20-v.x,-24-v.z);});
    waves.forEach(({m,x,n})=>{m.position.x=x+Math.sin(t*.4+n)*.5;m.scale.x=2+n%5+Math.sin(t*.6+n)*.4;});
+   rigid.update();
    lights.update(t,night);
   },get time(){return time;}};
  api.update(0);return api;

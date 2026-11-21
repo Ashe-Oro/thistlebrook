@@ -1,3 +1,4 @@
+import {createRigidBatches} from './rigid-batches.js';
 import {tagDistrictModels} from './registry/district-models.js';
 import * as THREE from 'three';
 import {place} from '../catalog/loader.js';
@@ -74,6 +75,7 @@ export async function buildThemePark(scene,town,{detail}={}){
  // Register every placed pack model (static and moving) before batching.
  tagDistrictModels(moving,town,'themepark',PARK_ORIGIN);
  await Promise.all(jobs);tagDistrictModels(kit.root,town,'themepark',PARK_ORIGIN);tagDistrictModels(landKit.root,town,'themepark');kit.bake();landKit.bake();
+ const rigid=createRigidBatches(moving,{includeInstances:true});
  let lastT=0;
- return{root,selectables,rides,sim,update(t,night,hour){lastT=t;parkNight.value=night;parkTime.value=t;rides.update(t);sim.step(t);crowd.update(t);midway.update(t);kit.update(night);shuttles.forEach((bus,i)=>{const v=shuttlePose(i,t);bus.position.set(v.position[0],.06,v.position[1]);bus.rotation.y=Math.atan2(...v.direction);});},audit(){return{time:lastT,rides:rides.audit(),guests:sim.audit(),positions:sim.guests.map(g=>({id:g.i,state:g.state,position:g.position})),shuttles:shuttles.map(s=>s.position.toArray()),rideCount:RIDES.length};}};
+ return{root,selectables,rides,sim,update(t,night,hour,drawCrowd=true){lastT=t;parkNight.value=night;parkTime.value=t;rides.update(t);sim.step(t);crowd.update(t,drawCrowd);midway.update(t);kit.update(night);landKit.update(night);shuttles.forEach((bus,i)=>{const v=shuttlePose(i,t);bus.position.set(v.position[0],.06,v.position[1]);bus.rotation.y=Math.atan2(...v.direction);});rigid.update();},audit(){return{time:lastT,rides:rides.audit(),guests:sim.audit(),positions:sim.guests.map(g=>({id:g.i,state:g.state,position:g.position})),shuttles:shuttles.map(s=>s.position.toArray()),rideCount:RIDES.length};}};
 }

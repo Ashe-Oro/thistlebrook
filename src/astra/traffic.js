@@ -1,3 +1,4 @@
+import {createRigidBatches} from './rigid-batches.js';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { toonMaterial } from '../toon.js';
@@ -14,6 +15,7 @@ import { distanceToSegment } from '../compiler/astra.js';
 import { residentPedestrian } from '../roads/walking.js';
 import { pedestrianGraph } from '../roads/pedestrian.js';
 import { midpoint, ZEBRA_HALF_WIDTH } from '../roads/crosswalks.js';
+import { sceneryVisibility } from './scenery-visibility.js';
 
 // Self-contained integration: the compiler and resident routines stay untouched.
 export async function createTraffic(scene,town,residents,world){
@@ -129,19 +131,39 @@ export async function createTraffic(scene,town,residents,world){
  // Kerbside furniture and bus shelters, instanced per model.
  const byModel=new Map();for(const it of streetPlan.items){if(!byModel.has(it.model))byModel.set(it.model,[]);byModel.get(it.model).push(it);}
  const furniture=new THREE.Group();furniture.name='Street furniture';root.add(furniture);
+ const furnitureVisibility=sceneryVisibility();
  await Promise.all([...byModel].map(async ([model,items])=>{const fm=FURNITURE_MODELS[model];
-  if(fm.catalog){const template=await instantiate(fm.catalog);furniture.add(batchInstances(template,items.map(it=>({pos:it.pos,rotY:it.yaw,scale:fm.scale}))));}
-  else furniture.add(await instancedModel(fm.path,items,{scale:fm.scale,y:0,name:model}));
+  const group=fm.catalog
+   ?batchInstances(await instantiate(fm.catalog),items.map(it=>({pos:it.pos,rotY:it.yaw,scale:fm.scale})))
+   :await instancedModel(fm.path,items,{scale:fm.scale,y:0,name:model});
+  group.traverse(mesh=>{if(mesh.isInstancedMesh)furnitureVisibility.add(mesh,items);});
+  furniture.add(group);
  }));
  // streetlights: every kerbside lamp gets a lit head, halo and ground pool.
  // These posts were never registered with the town.props-only night glow.
  const lampGlow=buildLampGlow(lampPosts(town,{streetPlan}).filter(p=>p.source==='street-plan'),{name:'street-plan lamps'});root.add(lampGlow.group);
- const sync=()=>{simulation.vehicles.forEach((v,i)=>{const g=objects[i];g.position.set(v.position[0],.215,v.position[1]);g.rotation.y=Math.atan2(...v.direction);g.userData.wheels?.forEach(w=>w.rotation.x=v.distance/.22);g.userData.legs?.forEach((leg,k)=>leg.rotation.x=Math.sin(v.distance*5+k*Math.PI)*.65);});};
- sync();
+ // Pad the camera for vehicle footprints and the longest sunset shadows.
+ const rigid=createRigidBatches(root);
+ const viewSphere=new THREE.Sphere(new THREE.Vector3(),27);
+ function syncView(view){
+  for(const [i,v] of simulation.vehicles.entries()){
+   const g=objects[i];
+   g.position.set(v.position[0],.215,v.position[1]);
+   g.rotation.y=Math.atan2(v.direction[0],v.direction[1]);
+   viewSphere.center.copy(g.position);
+   g.visible=!view||view.intersectsSphere(viewSphere);
+   if(!g.visible)continue;
+   g.userData.wheels?.forEach(w=>w.rotation.x=v.distance/.22);
+   g.userData.legs?.forEach((leg,k)=>leg.rotation.x=Math.sin(v.distance*5+k*Math.PI)*.65);
+  }
+  rigid.update();
+ }
+ syncView();
  const pickBounds=new THREE.Box3(),hitPoint=new THREE.Vector3();
- return {simulation,root,objects,parkedObjects,fleet,parked,streetPlan,lampGlow,pick(ray){
+ return {simulation,root,objects,parkedObjects,fleet,parked,streetPlan,lampGlow,syncView,cullFurniture:furnitureVisibility.update,pick(ray){
   let closest=null,best=Infinity;
   for(const [i,g] of objects.entries()){
+   if(!g.visible)continue;
    pickBounds.setFromObject(g);const hit=ray.intersectBox(pickBounds,hitPoint);if(!hit)continue;
    const distance=ray.origin.distanceTo(hit);if(distance>=best)continue;best=distance;
    const v=simulation.vehicles[i],f=fleet[i],role=f.role,modelName=FLEET_MODELS[f.model]?.name;
@@ -150,15 +172,15 @@ export async function createTraffic(scene,town,residents,world){
    const story=v.kind==='bus'?'The town bus connects the shops, campus, quay and market. It pauses at each gold stop and gives people crossing the street time to pass.':role?.story||'Following the streets, slowing for the neighbours and waiting a turn at the junctions.';
    closest={type:'traffic',name,distance,bounds:pickBounds.clone(),object:g,data:{name,detail,story:story+' '+v.status+'.'}};
   }return closest;
- },update(dt,hour){
-  const pedestrians=residents.people.filter(p=>!p.actor.riding).map(p=>residentPedestrian(p.actor,residents.life.walkPace(p.actor)));
+ },update(dt,hour,view){
+  const pedestrians=[];
+  for(const p of residents.people)if(!p.actor.riding)pedestrians.push(residentPedestrian(p.actor,p.walkPace));
   if(world?.railway)pedestrians.push(...world.railway.service.pedestrians);
-  const civic=world?.civicQuarter?.audit();if(civic){for(const p of civic.people)if(p.visible)pedestrians.push({x:p.position[0],z:p.position[2]});}
-  // Kids walking to and from the ballgame are pedestrians too (civic.js / ballgame.js).
-  for(const k of world?.districts?.civic?.audit?.().ballgame?.kids||[])pedestrians.push({x:k.position[0],z:k.position[2]});
+  world.civicQuarter.appendPedestrians(pedestrians);
+  world.districts.civic.appendPedestrians(pedestrians);
   pedestrians.push(...(world?.districts?.civic?.school?.pedestrians ?? []));
   const regional=world.landscape.traffic.vehicles;
   const lot=world.expansions.fairlot.sim.vehicles();
-  simulation.update(dt,pedestrians,[...regional,...lot],hour);sync();
+  simulation.update(dt,pedestrians,[...regional,...lot],hour);syncView(view);
  },audit:()=>({...simulation.audit(),fleet:fleet.map(f=>({id:f.id,model:f.model,colour:f.colour})),parked:parked.map(p=>({...p})),streets:{classes:streetPlan.classes,furniture:streetPlan.items.length,shelters:streetPlan.items.filter(i=>i.kind==='shelter').map(i=>i.stop),strips:streetPlan.strips.map(s=>s.id)}})};
 }

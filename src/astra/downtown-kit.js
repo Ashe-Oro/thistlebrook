@@ -1,4 +1,5 @@
-import {inheritMeshDetail} from './model-detail.js';
+import {batchStaticLines,batchStaticMeshes} from './static-batches.js';
+import {createRigidBatches} from './rigid-batches.js';
 import * as THREE from 'three';
 import { place } from '../catalog/loader.js';
 import { toonMaterial } from '../toon.js';
@@ -12,6 +13,7 @@ export function districtKit(scene) {
   const cylinder = new THREE.CylinderGeometry(1, 1, 1, 16);
   const emissive = new Map();
   const lights = [];
+  let rigid;
   function material(color, glow = false) {
     if (!glow) return toonMaterial(color);
     if (!emissive.has(color)) {
@@ -59,16 +61,17 @@ export function districtKit(scene) {
     m.rotation.x=-Math.PI/2;m.position.set(x,.29,z);m.userData.lampPool=lamp;scene.add(m);lights.push(m);return m;
   }
   function bake() {
-    root.updateMatrixWorld(true);const batches=new Map();
-    root.traverse(o=>{if(!o.isMesh)return;const key=o.geometry.uuid+o.material.uuid;
-      if(!batches.has(key))batches.set(key,{source:o,matrices:[],ids:[]});batches.get(key).matrices.push(o.matrixWorld.clone());batches.get(key).ids.push(o.userData.registryId);});
-    for(const {source,matrices,ids} of batches.values()) {
-      const m=new THREE.InstancedMesh(source.geometry,source.material,matrices.length);inheritMeshDetail(source,m);
-      matrices.forEach((matrix,i)=>m.setMatrixAt(i,matrix));m.userData.registryIds=ids;m.castShadow=source.castShadow;m.receiveShadow=source.receiveShadow;scene.add(m);
-    }
-    root.traverse(o=>{if(o.isLine){const l=o.clone();l.matrixAutoUpdate=false;l.matrix.copy(o.matrixWorld);scene.add(l);}});
+    rigid=createRigidBatches(batchStaticMeshes(root,scene),{includeInstances:true});
+    batchStaticLines(root,scene);
   }
-  return {root,box,orb,drum,ring,wire,sign,pool,bake,update(night){emissive.forEach(m=>m.emissiveIntensity=night*1.3);lights.forEach(m=>m.material.opacity=night*(m.userData.lampPool?LAMP_LOOK.kitLampPool:.48));}};
+  return {root,box,orb,drum,ring,wire,sign,pool,bake,update(night){
+    emissive.forEach(m=>m.emissiveIntensity=night*1.3);
+    for(const light of lights){
+      light.material.opacity=night*(light.userData.lampPool?LAMP_LOOK.kitLampPool:.48);
+      light.visible=light.material.opacity>0;
+    }
+    rigid?.update();
+  }};
 }
 
 // Reuse the owned character meshes AND their ink hulls in instanced draws.

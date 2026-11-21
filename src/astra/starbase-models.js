@@ -45,5 +45,4 @@ export function displayRocket(kind, hy3d) {
  return root;
 }
 
-// Static architecture uses shared geometry/material instances, including kit hulls.
-export function batchStatic(source,parent){source.updateMatrixWorld(true);const batches=new Map();source.traverse(o=>{if(!o.isMesh)return;const key=o.geometry.uuid+':'+o.material.uuid;if(!batches.has(key))batches.set(key,{o,matrices:[],ids:[]});batches.get(key).matrices.push(o.matrixWorld.clone());batches.get(key).ids.push(o.userData.registryId);});for(const {o,matrices,ids}of batches.values()){const m=new THREE.InstancedMesh(o.geometry,o.material,matrices.length);matrices.forEach((v,i)=>m.setMatrixAt(i,v));m.userData.registryIds=ids;if(o.userData.outline)m.userData.outline=true;m.castShadow=o.castShadow;m.receiveShadow=o.receiveShadow;parent.add(m);}}
+export {batchStaticMeshes as batchStatic} from './static-batches.js';

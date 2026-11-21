@@ -30,16 +30,44 @@ export const move=(p,o)=>[p[0]+o[0],p[1]+o[1]];
 export const moveBox=(b,o)=>({min:move(b.min,o),max:move(b.max,o)});
 export function moveRecord(p,o){const q={...p};for(const k of ['pos','center','entry','access','door','approach','join'])if(Array.isArray(p[k]))q[k]=move(p[k],o);if(p.box)q.box=moveBox(p.box,o);return q;}
 export function rebuildWorldGraph(town){
- const node=p=>{let i=town.nodes.findIndex(v=>Math.hypot(v[0]-p[0],v[1]-p[1])<.015);if(i<0){i=town.nodes.length;town.nodes.push(p.map(v=>+v.toFixed(5)));}return i;};
+ const step=.015, nodeCells=new Map();
+ const cell=value=>Math.floor(value/step);
+ const addNode=(p,i)=>{
+  const key=cell(p[0])+','+cell(p[1]);
+  let indices=nodeCells.get(key);
+  if(!indices)nodeCells.set(key,indices=[]);
+  indices.push(i);
+ };
+ town.nodes.forEach(addNode);
+ const node=p=>{
+  let first=Infinity;
+  for(let x=cell(p[0]-step);x<=cell(p[0]+step);x++)for(let z=cell(p[1]-step);z<=cell(p[1]+step);z++){
+   for(const i of nodeCells.get(x+','+z)||[]){
+    const v=town.nodes[i];
+    if(i<first&&Math.hypot(v[0]-p[0],v[1]-p[1])<step)first=i;
+   }
+  }
+  if(first!==Infinity)return first;
+  const i=town.nodes.length,point=p.map(v=>+v.toFixed(5));
+  town.nodes.push(point);addNode(point,i);
+  return i;
+ };
  const roads=town.roads.flatMap(r=>r.walkline?r.walkline.slice(1).map((b,i)=>({...r,a:r.walkline[i],b})):r);
  const split=roads.map(r=>[r.a,r.b]);
+ const roadBounds=roads.map(({a,b})=>[
+  Math.min(a[0],b[0])-.01,Math.max(a[0],b[0])+.01,
+  Math.min(a[1],b[1])-.01,Math.max(a[1],b[1])+.01,
+ ]);
+ const contains=([minX,maxX,minZ,maxZ],[x,z])=>x>=minX&&x<=maxX&&z>=minZ&&z<=maxZ;
  for(let i=0;i<roads.length;i++)for(let j=i+1;j<roads.length;j++){
+  const A=roadBounds[i],B=roadBounds[j];
+  if(A[0]>B[1]||B[0]>A[1]||A[2]>B[3]||B[2]>A[3])continue;
   const a=roads[i],b=roads[j],u=[a.b[0]-a.a[0],a.b[1]-a.a[1]],v=[b.b[0]-b.a[0],b.b[1]-b.a[1]],den=u[0]*v[1]-u[1]*v[0];
   if(Math.abs(den)>1e-8){const w=[b.a[0]-a.a[0],b.a[1]-a.a[1]],t=(w[0]*v[1]-w[1]*v[0])/den,s=(w[0]*u[1]-w[1]*u[0])/den;if(t>=0&&t<=1&&s>=0&&s<=1){const p=[a.a[0]+t*u[0],a.a[1]+t*u[1]];split[i].push(p);split[j].push(p);}}
   for(const p of [a.a,a.b])if(distanceToSegment(p,b.a,b.b)<.01)split[j].push(p);
   for(const p of [b.a,b.b])if(distanceToSegment(p,a.a,a.b)<.01)split[i].push(p);
  }
- for(let i=0;i<roads.length;i++)for(const p of town.nodes)if(distanceToSegment(p,roads[i].a,roads[i].b)<.01)split[i].push(p);
+ for(let i=0;i<roads.length;i++)for(const p of town.nodes)if(contains(roadBounds[i],p)&&distanceToSegment(p,roads[i].a,roads[i].b)<.01)split[i].push(p);
  const links=[];split.forEach((points,i)=>{points.sort((a,b)=>Math.hypot(a[0]-roads[i].a[0],a[1]-roads[i].a[1])-Math.hypot(b[0]-roads[i].a[0],b[1]-roads[i].a[1]));const ids=[...new Set(points.map(node))];for(let n=1;n<ids.length;n++)links.push([ids[n-1],ids[n]]);});
  town.edges=town.nodes.map(()=>[]);for(const [a,b]of links){if(!town.edges[a].includes(b))town.edges[a].push(b);if(!town.edges[b].includes(a))town.edges[b].push(a);}
  return node;

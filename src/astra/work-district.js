@@ -1,3 +1,5 @@
+import {createRigidBatches} from './rigid-batches.js';
+import {batchStaticMeshes} from './static-batches.js';
 import * as THREE from 'three';
 import { lampPosts, WORKS_LAMPS } from './lamp-posts.js';
 import { buildLampGlow } from './lamp-glow.js';
@@ -92,8 +94,8 @@ export async function buildWorkDistrict(scene,town){
  const passengers=[];
  if(!town.railway)for(let n=0;n<5;n++)loads.push(place(['townsfolk-merchant','townsfolk-watch','townsfolk-carpenter'][n%3],{x:-104+n*4,z:-92,scale:1.05}).then(o=>{o.position.y=.76;moving.add(o);passengers.push(o);}));
  await Promise.all(loads);
- root.updateMatrixWorld(true);const batches=new Map();root.traverse(o=>{if(!o.isMesh)return;const key=o.geometry.uuid+':'+o.material.uuid;if(!batches.has(key))batches.set(key,{source:o,matrices:[]});batches.get(key).matrices.push(o.matrixWorld.clone());});
- for(const {source,matrices} of batches.values()){const m=new THREE.InstancedMesh(source.geometry,source.material,matrices.length);matrices.forEach((v,i)=>m.setMatrixAt(i,v));m.castShadow=source.castShadow;m.receiveShadow=source.receiveShadow;scene.add(m);}
+ root.name='Works scenery';
+ batchStaticMeshes(root,scene);
  // streetlights: the yard lamps had bulbs but no ground pool or halo.
  scene.add(buildLampGlow(lampPosts(town).filter(p=>p.source==='works'),{name:'works lamps',offset:DISTRICT_OFFSETS.works}).group);
  const records=town.venues.filter(v=>v.district==='works').map(v=>({type:'venue',data:v,bounds:new THREE.Box3(new THREE.Vector3(v.box.min[0],0,v.box.min[1]),new THREE.Vector3(v.box.max[0],.4,v.box.max[1]))}));
@@ -103,6 +105,7 @@ export async function buildWorkDistrict(scene,town){
  buildingBounds.push({x:-54,z:-47,bounds:new THREE.Box3(new THREE.Vector3(-60,0,-54),new THREE.Vector3(-48,6.5,-40))});
  for(const {x,z,bounds}of buildingBounds){const data=town.venues.find(v=>v.district==='works'&&x>=v.box.min[0]&&x<=v.box.max[0]&&z>=v.box.min[1]&&z<=v.box.max[1]);if(data)records.push({type:'venue',data,bounds});}
  const economy={produce:0,timber:0,shipped:0,collections:0,workers:0,staffed:{}};
+ const rigid=createRigidBatches(moving);
  let lastTime=null,lastTrain=null,currentTrain=trainState(0,10),sawAngle=0;
  return {records,economy,update(t,hour,night,people=[]){
   // dt is derived from simulation time: paused scenes cannot generate goods.
@@ -120,5 +123,6 @@ export async function buildWorkDistrict(scene,town){
   passengers.forEach((p,n)=>{p.visible=currentTrain.open;p.rotation.y=currentTrain.atPlatform?Math.PI:Math.sin(t*.3+n)*.25;p.position.y=.76+(currentTrain.atPlatform?Math.abs(Math.sin(t*2+n))*.025:0);});
   smoke.forEach((m,n)=>{const phase=(t*.3+n/5)%1;m.visible=currentTrain.open&&!town.railway;m.position.set(currentTrain.x+9-phase*2,3.8+phase*3,rail.z);m.scale.setScalar(.4+phase);m.material.opacity=(1-phase)*.25;});
   lamps.forEach(m=>m.visible=night>.2);
+  rigid.update();
  },audit(){return {...economy,staffed:{...economy.staffed},train:{...currentTrain},sawAngle,crateY:crate.position.y};}};
 }

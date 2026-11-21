@@ -10,6 +10,7 @@ import {distanceToSegment,pointInTown} from './astra.js';
 import {insideLandscape,MAINLAND} from './landscape.js';
 import {waterClearance,riverSystem} from './water.js';
 import {inLake} from '../astra/outskirts-layout.js';
+import {indexSegments} from './box-index.js';
 
 export const GROUND_TOP=-.09; // mainland slab top (landscape.js)
 export const TRAIL={width:1.7,lift:.045};
@@ -154,20 +155,33 @@ export function planWoods(town){
  town.water.bridges.push(...bridges);
  // Everything the woods must keep clear of.
  const lines=[];for(const r of town.roads){const line=r.centerline||[r.a,r.b],half=(r.centerline?6:(r.width||2)/2+1.6);for(let i=1;i<line.length;i++)lines.push({a:line[i-1],b:line[i],half});}
- const near=lines.filter(l=>Math.min(l.a[0],l.b[0])<-60&&Math.max(l.a[1],l.b[1])>-50&&Math.min(l.a[1],l.b[1])<140);
+ const near=indexSegments(lines.filter(l=>Math.min(l.a[0],l.b[0])<-60&&Math.max(l.a[1],l.b[1])>-50&&Math.min(l.a[1],l.b[1])<140),l=>[l.a,l.b]);
+ const maxRoadHalf=Math.max(0,...lines.map(l=>l.half));
  const boxes=[...town.buildings.map(b=>b.box),...town.venues.filter(v=>v.box).map(v=>v.box),...(town.catalogScenes||[]).map(s=>s.box)].filter(Boolean);
  const points=[...town.props,...town.trees,...(town.supplemental||[]),...(town.modelPlacements||[]),...(town.outskirts?.trees||[]),...(town.outskirts?.props||[])].map(p=>p.pos).filter(Boolean);
  const shore=[...MAINLAND,MAINLAND[0]];
  const hills=town.landscape.hills;
- const allTrails=trails.map(t=>t.points);
+ const trailSegments=trails.flatMap(t=>{
+  const points=t.points.map(([x,,z])=>[x,z]);
+  return points.slice(1).map((b,i)=>[points[i],b]);
+ });
+ const nearbyTrails=indexSegments(trailSegments);
  const occludesTrail=(p,asset,scale)=>{const h=(asset==='cv-tree-pine'?5.2:4.6)*scale,crown=(asset==='cv-tree-pine'?1.2:1.9)*scale;
-  for(const k of [.35,.6,.85,1.1]){const q=[p[0]+CAMERA_BACK[0]*h*k,p[1]+CAMERA_BACK[1]*h*k];if(trailDistance(q)<crown+TRAIL.width/2)return true;
+  for(const k of [.35,.6,.85,1.1]){const q=[p[0]+CAMERA_BACK[0]*h*k,p[1]+CAMERA_BACK[1]*h*k];if(trailDistance(q,crown+TRAIL.width/2)<crown+TRAIL.width/2)return true;
    if(((q[0]-POND.center[0])/(POND.rx+crown+.8))**2+((q[1]-POND.center[1])/(POND.rz+crown+.8))**2<1)return true;}return false;};
- const trailDistance=p=>Math.min(...allTrails.map(pts=>distanceToPolyline(p,pts)));
+ // The placement rules only use distances within their clearance thresholds.
+ const trailDistance=(p,limit=4.6)=>{
+  let closest=Infinity;
+  nearbyTrails({min:p,max:p},limit,([a,b])=>{
+   closest=Math.min(closest,distanceToSegment(p,a,b));
+   return false;
+  });
+  return closest;
+ };
  const blocked=(p,pad,area=WOODS_AREA)=>{
   if(!polygonContains(area,p)||!insideLandscape(p)||pointInTown(p,town))return true;
   if(town.regions.some(({bounds:b})=>p[0]>b.minX-4&&p[0]<b.maxX+4&&p[1]>b.minZ-4&&p[1]<b.maxZ+4))return true;
-  if(near.some(l=>distanceToSegment(p,l.a,l.b)<l.half+pad))return true;
+  if(near({min:p,max:p},maxRoadHalf+pad,l=>distanceToSegment(p,l.a,l.b)<l.half+pad))return true;
   if(waterClearance(p)<2.5+pad||inLake(p,6))return true;
   if(Math.min(...shore.slice(1).map((b,i)=>distanceToSegment(p,shore[i],b)))<8)return true;
   if(hills.some(h=>Math.hypot(h.pos[0]-p[0],h.pos[1]-p[1])<h.radius+1))return true;

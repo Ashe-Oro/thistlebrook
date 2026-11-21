@@ -1,3 +1,4 @@
+import {createRigidBatches} from './rigid-batches.js';
 // OWNER: grok-woods lane. Contract: docs/specs/GROK-WOODS.md.
 // Renders Pinewood from town.woods: the ridge terrain, draped dirt trails,
 // the pond, the summit lookout, trailhead signs and the hikers. Trees, rocks,
@@ -92,6 +93,7 @@ export async function buildWoods(scene,town){
  const rigs=[],looks=new Map();
  for(let w=0;w<7;w++)for(const h of hikerRoster(woods,w))if(!looks.has(h.n)||w===5)looks.set(h.n,h.look);
  await Promise.all(Array.from({length:HIKERS_WEEKEND},async(_,n)=>{const o=await place('townsfolk-'+(looks.get(n)||'farmhand'),{x:0,z:0,scale:1});o.visible=false;root.add(tagObject(o,'woods:hikers'));rigs[n]=o;}));
+ const rigid=createRigidBatches(root);
  let roster=null,rosterDay=-1,last=[],forced=null;
  // forceWeekday: capture tools pin a weekday (0 = Monday) for repeatable stills.
  return {root,forceWeekday(w){forced=Number.isInteger(w)?w:null;},update(t,hour,weekday=4){
@@ -99,5 +101,6 @@ export async function buildWoods(scene,town){
   if(weekday!==rosterDay){roster=hikerRoster(woods,weekday);rosterDay=weekday;}
   last=[];
   rigs.forEach((o,n)=>{const h=roster[n],p=h?hikerPose(h,woods,hour,t):null;o.visible=!!p;if(!p)return;o.position.set(p.x,p.y,p.z);o.rotation.y=p.heading;last.push({id:h.id,position:[p.x,p.y,p.z],walking:p.walking,activity:p.activity});});
+  rigid.update();
  },audit:()=>({hikers:last,counts:woods.counts,trails:woods.trails.map(t=>({id:t.id,length:t.length}))})};
 }
