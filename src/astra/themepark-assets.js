@@ -1,3 +1,5 @@
+import {bindMeshDetail,lodUrl} from './model-detail.js';
+import {PARK_ORIGIN} from './themepark-plan.js';
 import * as THREE from 'three';
 import { createGLTFLoader } from '../gltf-loader.js';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -89,29 +91,46 @@ export function hullFor(geometry) {
  if (!h) { h = hull(geometry); hulls.set(geometry, h); }
  return h;
 }
+const upgrades = new WeakMap();
+
 export function fairgroundMesh(geometry, scale = 1) {
  const mesh = new THREE.Mesh(geometry, fairgroundMaterial());
  mesh.castShadow = true; mesh.receiveShadow = true;
  const edge = new THREE.Mesh(hullFor(geometry), outlineMaterial(OUTLINE / scale));
  edge.userData.outline = true; edge.castShadow = false; edge.receiveShadow = false;
  mesh.add(edge);
+ const upgrade = upgrades.get(geometry);
+ if (upgrade) {
+  const {detail,load} = upgrade;
+  bindMeshDetail(detail,[PARK_ORIGIN],mesh,load);
+  bindMeshDetail(detail,[PARK_ORIGIN],edge,async()=>{const high=await load();return high&&hullFor(high);});
+ }
  return mesh;
 }
 
 let loader = null;
 const cache = new Map();
 /** Merged source geometry of one pack model (all primitives, node transforms applied). */
-export function loadFairgroundGeometry(name, mirror = '') {
+export async function loadFairgroundDetail(name,detail,mirror='') {
+ const path=BASE+FAIRGROUND_DIR+name+'.glb';
+ const variant=detail&&lodUrl(path);
+ if(!variant)return loadFairgroundGeometry(name,mirror);
+ const geometry=await loadFairgroundGeometry(name,mirror,variant);
+ upgrades.set(geometry,{detail,load:()=>loadFairgroundGeometry(name,mirror)});
+ return geometry;
+}
+export function loadFairgroundGeometry(name, mirror = '', variant) {
+ const path=variant||BASE+FAIRGROUND_DIR+name+'.glb';
  // Mirrored variants are baked (flipped positions/normals, reversed winding):
  // negative instance scales would turn batched meshes and ink hulls inside out.
  if (mirror) {
-  const key = name + '|' + mirror;
-  if (!cache.has(key)) cache.set(key, loadFairgroundGeometry(name).then(source => mirrorGeometry(source, mirror)));
+  const key = path + '|' + mirror;
+  if (!cache.has(key)) cache.set(key, loadFairgroundGeometry(name,'',variant).then(source => mirrorGeometry(source, mirror)));
   return cache.get(key);
  }
- if (!cache.has(name)) {
+ if (!cache.has(path)) {
   loader ??= createGLTFLoader();
-  cache.set(name, loader.loadAsync(BASE + FAIRGROUND_DIR + name + '.glb').then(gltf => {
+  cache.set(path, loader.loadAsync(path).then(gltf => {
    gltf.scene.updateMatrixWorld(true);
    const parts = [];
    gltf.scene.traverse(o => {
@@ -127,7 +146,7 @@ export function loadFairgroundGeometry(name, mirror = '') {
    return addGlow(geometry);
   }));
  }
- return cache.get(name);
+ return cache.get(path);
 }
 /** Bake a mirrored copy (flipped positions/normals, reversed winding when an odd number of axes flip). */
 export function mirrorGeometry(source, mirror) {
@@ -207,6 +226,16 @@ export function splitFairground(geometry, classify, pivots = {}) {
   g.setIndex(idx); g.computeBoundingBox(); g.computeBoundingSphere();
   result[key] = g;
  }
+ const upgrade=upgrades.get(geometry);
+ if(upgrade){
+  let parts;
+  for(const [key,part] of Object.entries(result)){
+   upgrades.set(part,{detail:upgrade.detail,async load(){
+    parts??=upgrade.load().then(high=>splitFairground(high,classify,pivots));
+    return (await parts)[key];
+   }});
+  }
+ }
  return result;
 }
 
@@ -214,10 +243,10 @@ export function splitFairground(geometry, classify, pivots = {}) {
  * A registered pack model: an Object3D whose identity (`ownedAsset`) and
  * measured transform are captured by the district model registry.
  */
-export async function fairgroundModel(name, { x = 0, y = 0, z = 0, rot = 0, scale = 1, ordinal } = {}) {
+export async function fairgroundModel(name, { x = 0, y = 0, z = 0, rot = 0, scale = 1, ordinal, detail } = {}) {
  const scales = Array.isArray(scale) ? scale : [scale, scale, scale];
  const mirror = scales.map((v, k) => v < 0 ? 'xyz'[k] : '').join('');
- const geometry = await loadFairgroundGeometry(name, mirror);
+ const geometry = await loadFairgroundDetail(name,detail,mirror);
  scale = scales.map(Math.abs);
  const object = new THREE.Group();
  object.name = 'fairground/' + name;

@@ -10,7 +10,7 @@ export function mountWorldNavigation(ui,view){
  const menu=document.createElement('div');menu.className='world-menu glass';
  for(const [label,views]of VIEW_GROUPS){const section=document.createElement('section'),title=document.createElement('h2');title.textContent=label;section.append(title);for(const [id,name]of views){const b=document.createElement('button');b.dataset.view=id;b.textContent=name;b.onclick=()=>{view(id);details.open=false;summary.focus();};section.append(b);}menu.append(section);}
  details.append(menu);nav.append(details);
- ui.root.addEventListener('astra-view',e=>{const item=VIEW_GROUPS.flatMap(g=>g[1]).find(v=>v[0]===e.detail);summary.querySelector('.nav-current').textContent=item?.[1]||'Your own little corner';});
+ ui.root.addEventListener('astra-view',e=>{const item=VIEW_GROUPS.flatMap(g=>g[1]).find(v=>v[0]===e.detail);summary.querySelector('.nav-current').textContent=item?.[1]||(e.detail==='home'?'Town centre':'Your own little corner');});
  document.addEventListener('pointerdown',e=>{if(!nav.contains(e.target))details.open=false;});
  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&details.open){details.open=false;summary.focus();}});
  return {close(){details.open=false;}};

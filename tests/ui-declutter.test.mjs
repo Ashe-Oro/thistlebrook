@@ -117,5 +117,42 @@ test('clock settings work and mobile overlays fit in one touch-friendly row', { 
     await explore.click();
     assert.equal(await page.locator('.nav-current').textContent(), 'Willowbank');
     assert.equal(await explore.isVisible(), false);
+
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    const camera = await page.evaluate(async () => {
+      const { OrthographicCamera } = await import('three');
+      const { createMapCamera } = await import('/src/astra/camera.js');
+      const { townOpening } = await import('/src/astra/overview.js');
+      const { createUI } = await import('/src/astra/ui.js');
+      const town = { districts: [{ id: 'market', center: [1, 3] }] };
+      const home = townOpening(town, innerWidth, innerHeight);
+      const canvas = document.body.appendChild(document.createElement('canvas'));
+      const controls = createMapCamera(new OrthographicCamera(), canvas, {
+        bounds: { minX: -100, maxX: 100, minZ: -100, maxZ: 100 },
+        hashZoom: () => home.zoom,
+      });
+      const actions = [];
+      const { root } = createUI(town, { view(id) { actions.push(id); if (id === 'home') controls.view(home); } });
+      try {
+        history.replaceState(null, '', '#x=25&y=30&zoom=2&r=0');
+        const restored = controls.restore();
+        const linked = controls.state();
+        root.querySelector('#home').click();
+        const reset = controls.state();
+        const changed = new Promise(resolve => window.addEventListener('hashchange', resolve, { once: true }));
+        location.hash = '#x=88.74&y=18';
+        await changed;
+        return { home, restored, linked, reset, actions, coordinatesOnly: controls.state() };
+      } finally {
+        controls.dispose();
+        root.remove();
+        canvas.remove();
+      }
+    });
+    assert.deepEqual(camera.actions, ['home']);
+    assert.equal(camera.restored, true);
+    assert.deepEqual(camera.linked, { x: 25, z: 30, zoom: 2, rotation: 0 });
+    assert.deepEqual(camera.reset, { ...camera.home, rotation: 0 });
+    assert.deepEqual(camera.coordinatesOnly, { x: 88.74, z: 18, zoom: camera.home.zoom, rotation: 0 });
   } finally { await browser.close(); }
 });

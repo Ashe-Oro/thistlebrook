@@ -1,3 +1,4 @@
+import {configureGLTFTextures} from '../../gltf-loader.js';
 import * as THREE from 'three';
 import { inventory,sceneData,groupAssets } from './index.js';
 import { loadLibraryAsset } from './loader.js';
@@ -11,6 +12,7 @@ for(const [id,p,enabled] of [['prev',page-1,page>0],['next',page+1,(page+1)*size
 document.querySelector('#group').onchange=e=>location.href=`?group=${e.target.value}`;
 document.querySelector('#close').onclick=()=>document.querySelector('dialog').close();
 const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true,preserveDrawingBuffer:true});renderer.setPixelRatio(1);renderer.setSize(innerWidth,innerHeight);renderer.setScissorTest(true);renderer.domElement.className='atlas-canvas';document.body.append(renderer.domElement);
+configureGLTFTextures(renderer);
 const scenes=[];
 async function start(){
  for(const asset of visible){

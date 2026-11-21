@@ -1,3 +1,4 @@
+import {bindMeshDetail,lodUrl,modelDetail} from './model-detail.js';
 // OWNER: vehicle-variety lane. Renders owned pack vehicles, boats and street
 // furniture under the cel toon look: one merged vertex-coloured geometry per
 // GLB, an ink hull, per-variant body retint on a CLONED geometry (palettes.json
@@ -16,7 +17,7 @@ const cache = new Map(), variants = new Map(), hulls = new WeakMap();
 
 /** One merged, non-indexed-safe geometry per GLB (positions in model space). */
 export function loadPackGeometry(path) {
-  if (!cache.has(path)) cache.set(path, loader.loadAsync(BASE + path).then((gltf) => {
+  if (!cache.has(path)) cache.set(path, loader.loadAsync(path.startsWith('/') ? path : BASE+path).then((gltf) => {
     gltf.scene.updateMatrixWorld(true);
     const parts = [];
     gltf.scene.traverse((o) => { if (!o.isMesh) return; const g = o.geometry.clone().applyMatrix4(o.matrixWorld); for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'color'].includes(k)) g.deleteAttribute(k); if (!g.attributes.color) { const c = new Float32Array(g.attributes.position.count * 3); const rgb = o.material.color?.toArray() ?? [.8,.8,.8]; for (let i = 0; i < c.length; i += 3) c.set(rgb, i); g.setAttribute('color', new THREE.BufferAttribute(c, 3)); } if (g.attributes.color.itemSize === 4 || g.attributes.color.normalized || !(g.attributes.color.array instanceof Float32Array)) { const src = g.attributes.color, c = new Float32Array(src.count * 3); for (let i = 0; i < src.count; i++) { c[i * 3] = src.getX(i); c[i * 3 + 1] = src.getY(i); c[i * 3 + 2] = src.getZ(i); } g.setAttribute('color', new THREE.BufferAttribute(c, 3)); } parts.push(g.index ? g.toNonIndexed() : g); });
@@ -81,9 +82,21 @@ export async function instancedModel(path, items, {scale = 1, y = 0, name = path
 /** Render the same fitted model that supplies the simulation footprint. */
 export async function packVehicle({model, colour, fit}) {
   const {path, pack, retint} = FLEET_MODELS[model];
-  const base = await loadPackGeometry(path);
-  const geometry = retint && colour && colour !== LIVERY ? retintGeometry(base, retint, colour) : base;
+  const detail = modelDetail();
+  const variant = detail && lodUrl(path);
+  const getGeometry = async url => {
+    const base = await loadPackGeometry(url);
+    return retint && colour && colour !== LIVERY ? retintGeometry(base,retint,colour) : base;
+  };
+  const geometry = await getGeometry(variant || path);
   const object = toonModel(geometry, fit);
+  if (variant) {
+    const [mesh,ink] = object.children[0].children;
+    const position = new THREE.Vector3();
+    const centres = () => {object.getWorldPosition(position);return [[position.x,position.z]];};
+    bindMeshDetail(detail,centres,mesh,()=>getGeometry(path));
+    bindMeshDetail(detail,centres,ink,async()=>hullOf(await getGeometry(path)));
+  }
   object.userData.fleet = {model, colour, pack, size: fit.size};
   return object;
 }

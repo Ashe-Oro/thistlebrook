@@ -6,10 +6,11 @@ const clampZoom = zoom => THREE.MathUtils.clamp(zoom, ZOOM_LIMITS.min, ZOOM_LIMI
 const snap = value => ((Math.round(value) % 4) + 4) % 4;
 
 // URL y is the map's second horizontal coordinate (Three.js z), never altitude.
-export function readCameraHash(hash) {
+export function readCameraHash(hash, defaultZoom) {
   const params = new URLSearchParams(hash.replace(/^#/, ''));
-  if (!['x', 'y', 'zoom'].every(key => params.has(key) && params.get(key).trim() !== '')) return null;
-  const [x, z, zoom] = ['x', 'y', 'zoom'].map(key => Number(params.get(key)));
+  if (!['x', 'y'].every(key => params.get(key)?.trim())) return null;
+  const [x, z] = ['x', 'y'].map(key => Number(params.get(key)));
+  const zoom = params.has('zoom') ? Number(params.get('zoom')) : defaultZoom;
   if (![x, z, zoom].every(Number.isFinite) || zoom <= 0) return null;
   const rotation = Number(params.get('r') || 0);
   return { x, z, zoom: clampZoom(zoom), rotation: Number.isFinite(rotation) ? snap(rotation) : 0 };
@@ -39,7 +40,7 @@ export function cameraBounds(town) {
 }
 
 /** Fixed-elevation orthographic map controller. No orbit or walking mode. */
-export function createMapCamera(camera, element, { bounds, onInteract = () => {}, onTap = () => {}, onHover = () => {}, onChange = () => {}, onRotate = () => {} }) {
+export function createMapCamera(camera, element, { bounds, hashZoom = () => undefined, onInteract = () => {}, onTap = () => {}, onHover = () => {}, onChange = () => {}, onRotate = () => {} }) {
   const target = new THREE.Vector3();
   const raycaster = new THREE.Raycaster();
   const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -196,7 +197,7 @@ export function createMapCamera(camera, element, { bounds, onInteract = () => {}
     }
   });
   listen(window, 'hashchange', () => {
-    const saved = readCameraHash(location.hash);
+    const saved = readCameraHash(location.hash, hashZoom());
     if (saved) { interact(); view(saved, true); flushHash(); }
   });
   listen(window, 'blur', () => {
@@ -209,8 +210,8 @@ export function createMapCamera(camera, element, { bounds, onInteract = () => {}
   element.tabIndex = 0;
   element.setAttribute('aria-label', 'Thistlebrook town map. Drag or use arrow keys to pan, plus and minus to zoom, Q and E to rotate. Use Meet a neighbour to explore residents.');
   orient();
-  return { target, update, view, zoom, rotate, cancel, state, groundAt, flushHash,
-    restore() { const saved = readCameraHash(location.hash); if (saved) view(saved, true); return Boolean(saved); },
+  return { target, update, view, zoom, rotate, cancel, state, groundAt, flushHash, destination:()=>destination,
+    restore() { const saved = readCameraHash(location.hash, hashZoom()); if (saved) view(saved, true); return Boolean(saved); },
     dispose() { disposers.forEach(fn => fn()); clearTimeout(hashTimer); pointers.clear(); },
   };
 }

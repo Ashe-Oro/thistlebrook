@@ -134,6 +134,17 @@ export function createSkinRuntime({ renderer, scene, camera, world, lighting, qu
  setSkin(initial);
  return {
   render, update, setSkin, state,
+  refresh() {
+   if (!scanned) return;
+   applyPracticals(null);
+   pools?.removeFromParent();
+   pools?.dispose();
+   pools?.geometry.dispose();
+   pools?.material.dispose();
+   bulbs.length = lampPools.length = signs.length = hulls.length = 0;
+   scanned = false;
+   if (skin.practicals) setSkin(skin.id);
+  },
   get skin() { return skin; },
   list: () => SKINS.map(s => ({ id: s.id, label: s.label, swatch: s.swatch })),
   next(step = 1) { const i = SKINS.findIndex(s => s.id === skin.id); return setSkin(SKINS[(i + step + SKINS.length) % SKINS.length].id); },

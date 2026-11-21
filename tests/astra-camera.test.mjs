@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readCameraHash, writeCameraHash, cameraBounds } from '../src/astra/camera.js';
+import { isTownOpening, mapHalfHeight, townOpening } from '../src/astra/overview.js';
 
 test('camera links round-trip map coordinates, zoom and quarter-turns; retain unrelated hash state', () => {
   const state = { x: -57.1234, z: -6.125, zoom: 3.75, rotation: 3 };
@@ -19,4 +20,21 @@ test('bad or incomplete links do not put the camera in an invalid state', () => 
 test('new district parcels and navigation nodes extend camera bounds automatically', () => {
   const bounds = cameraBounds({ nodes: [[0, 0], [300, -200]], buildings: [{ box: { min: [-100, -20], max: [-90, -10] } }], venues: [{ box: { min: [0, 0], max: [20, 75] } }] });
   assert.deepEqual(bounds, { minX: -124, maxX: 324, minZ: -224, maxZ: 99 });
+});
+
+test('phone and desktop opening share the market centre and frame it at different scales', () => {
+  const town = { districts: [{ id: 'market', center: [1, 3] }] };
+  const phone = townOpening(town, 390, 844);
+  const desktop = townOpening(town, 1440, 900);
+  assert.deepEqual([phone.x, phone.z], [desktop.x, desktop.z]);
+  const groundWidth = (view, aspect) => 2 * mapHalfHeight(aspect) * aspect / view.zoom;
+  assert(groundWidth(phone, 390 / 844) < groundWidth(desktop, 1440 / 900));
+  for (const opening of [phone, desktop]) {
+    const saved = readCameraHash(writeCameraHash('', { ...opening, rotation: 0 }));
+    assert(isTownOpening(saved, opening), 'reloading the opening keeps its streaming budget');
+    assert.deepEqual(readCameraHash('#x=88.74&y=18', opening.zoom), {
+      x: 88.74, z: 18, zoom: opening.zoom, rotation: 0,
+    });
+    assert.equal(readCameraHash('#x=88.74&y=18&zoom=', opening.zoom), null);
+  }
 });

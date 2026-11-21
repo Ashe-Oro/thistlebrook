@@ -27,7 +27,7 @@ export const getEntry = (id) => {
 const gltfLoader = createGLTFLoader();
 const _gltf = new Map();
 function loadGLTF(path, category) {
-  if (!_gltf.has(path)) _gltf.set(path, gltfLoader.loadAsync(BASE + path).then((g) => toonify(g.scene, category)));
+  if (!_gltf.has(path)) _gltf.set(path, gltfLoader.loadAsync(path.startsWith('/') ? path : BASE + path).then((g) => toonify(g.scene, category)));
   return _gltf.get(path);
 }
 
@@ -132,7 +132,7 @@ function toonify(root, category) {
  * `params` overrides a builder entry's params (e.g. a path's length); `scale`
  * applies an extra uniform multiplier on top of the entry's world scale.
  */
-export async function instantiate(id, { params, scale = 1, animated = false } = {}) {
+export async function instantiate(id, { params, scale = 1, animated = false, modelPath } = {}) {
   const e = getEntry(id);
   const pivot = new THREE.Group();
   pivot.name = id;
@@ -144,7 +144,7 @@ export async function instantiate(id, { params, scale = 1, animated = false } = 
       const rigged = await loadGLTF(riggedPath, e.tags.category).catch(() => null);
       if (rigged) content = cloneSkeleton(rigged);
     }
-    content ??= (await loadGLTF(e.path, e.tags.category)).clone(true);
+    content ??= (await loadGLTF(modelPath || e.path, e.tags.category)).clone(true);
     content.scale.setScalar(e.scale);
     content.position.y = (e.yOffset || 0) * e.scale;
     if (e.yawOffset) content.rotation.y = e.yawOffset; // align door to +Z (dormant: all 0)
@@ -176,8 +176,8 @@ export async function instantiate(id, { params, scale = 1, animated = false } = 
 }
 
 /** Instantiate and place at {x, z, rotY}, with optional params/scale override. */
-export async function place(id, { x = 0, z = 0, rotY = 0, params, scale = 1, animated = false } = {}) {
-  const obj = await instantiate(id, { params, scale, animated });
+export async function place(id, { x = 0, z = 0, rotY = 0, params, scale = 1, animated = false, modelPath } = {}) {
+  const obj = await instantiate(id, { params, scale, animated, modelPath });
   obj.position.set(x, 0, z);
   obj.rotation.y = rotY;
   return obj;

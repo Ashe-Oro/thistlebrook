@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {COPPERHEAD,RIDES,TRAM_LINE} from './themepark-plan.js';
 import {KIT_SCALE,coasterPath,coasterTimetable,coasterSupports} from './themepark-coaster.js';
-import {fairgroundModel,fairgroundMesh,loadFairgroundGeometry,splitFairground,fairgroundAsset} from './themepark-assets.js';
+import {fairgroundModel,fairgroundMesh,loadFairgroundDetail,splitFairground,fairgroundAsset} from './themepark-assets.js';
 
 // Shared run profile for flat rides: load (stopped), ramp up, run, ramp down.
 // Returns the accumulated angle, continuous across cycles.
@@ -22,7 +22,7 @@ export function dropHeight(t,cycle=30){
 }
 
 /** Build every Pinecrest ride. Static kit pieces go to `staticRoot` (batched), moving parts to `moving`. */
-export async function buildParkRides(staticRoot,moving){
+export async function buildParkRides(staticRoot,moving,{detail}={}){
  const rides={},anchors={},meshes=[];
  const ride=id=>RIDES.find(r=>r.id===id);
  const frame=spec=>{const g=new THREE.Group();g.position.set(spec.x,0,spec.z);g.rotation.y=spec.rot||0;g.scale.setScalar(spec.scale||1);g.userData.ownedAsset=fairgroundAsset(spec.asset);g.userData.ownedPath='fairground/'+spec.asset+'.glb';moving.add(g);return g;};
@@ -34,12 +34,12 @@ export async function buildParkRides(staticRoot,moving){
   const spec=ride('copperhead'),path=coasterPath(COPPERHEAD.centre),timetable=coasterTimetable(path,{dwell:9});
   const jobs=[];
   for(const p of COPPERHEAD.pieces){
-   jobs.push(fairgroundModel(p.asset,{x:p.position[0],y:p.base,z:p.position[1],rot:p.yaw,scale:p.scale}).then(o=>staticRoot.add(o)));
+   jobs.push(fairgroundModel(p.asset,{x:p.position[0],y:p.base,z:p.position[1],rot:p.yaw,scale:p.scale,detail}).then(o=>staticRoot.add(o)));
   }
   // A stacked support tower carries every raised piece down to the lawn.
-  for(const t of coasterSupports(COPPERHEAD.pieces))jobs.push(fairgroundModel('coaster_support',{x:t.x,z:t.z,rot:t.yaw,scale:[KIT_SCALE,t.height,KIT_SCALE]}).then(o=>staticRoot.add(o)));
+  for(const t of coasterSupports(COPPERHEAD.pieces))jobs.push(fairgroundModel('coaster_support',{x:t.x,z:t.z,rot:t.yaw,scale:[KIT_SCALE,t.height,KIT_SCALE],detail}).then(o=>staticRoot.add(o)));
   await Promise.all(jobs);
-  const carGeometry=await loadFairgroundGeometry('roller_coaster_car'),trains=[];
+  const carGeometry=await loadFairgroundDetail('roller_coaster_car',detail),trains=[];
   for(let j=0;j<2;j++){
    const cars=[];
    for(let c=0;c<3;c++){
@@ -59,7 +59,7 @@ export async function buildParkRides(staticRoot,moving){
 
  // ---- Skyline Wheel: rotating wheel and sixteen level gondolas.
  {
-  const spec=ride('skyline-wheel'),g=frame(spec),geometry=await loadFairgroundGeometry('ferris_wheel');
+  const spec=ride('skyline-wheel'),g=frame(spec),geometry=await loadFairgroundDetail('ferris_wheel',detail);
   const hub=[0,6.55,0],R=4.72,N=16,angles=Array.from({length:N},(_,k)=>-Math.PI/2+k*Math.PI*2/N);
   const pivots={wheel:hub};angles.forEach((a,k)=>pivots['g'+k]=[hub[0]+R*Math.cos(a),hub[1]+R*Math.sin(a),0]);
   const parts=splitFairground(geometry,c=>{
@@ -76,7 +76,7 @@ export async function buildParkRides(staticRoot,moving){
 
  // ---- Woodland Carousel: rotating deck, bobbing horses on brass poles.
  {
-  const spec=ride('carousel'),g=frame(spec),geometry=await loadFairgroundGeometry('gallopers_carousel');
+  const spec=ride('carousel'),g=frame(spec),geometry=await loadFairgroundDetail('gallopers_carousel',detail);
   const poles=[];for(let k=0;k<8;k++){const a=k*Math.PI/4;poles.push([2.28*Math.cos(a),2.28*Math.sin(a)],[1.52*Math.cos(a+Math.PI/8),1.52*Math.sin(a+Math.PI/8)]);}
   const parts=splitFairground(geometry,c=>{
    if(c.max[1]<.2)return null;
@@ -91,7 +91,7 @@ export async function buildParkRides(staticRoot,moving){
 
  // ---- Teacup Twirl: turning saucer with six spinning cups.
  {
-  const spec=ride('teacup-twirl'),g=frame(spec),geometry=await loadFairgroundGeometry('teacups');
+  const spec=ride('teacup-twirl'),g=frame(spec),geometry=await loadFairgroundDetail('teacups',detail);
   const cups=[[1.3,.75],[0,1.5],[-1.3,.75],[-1.3,-.75],[0,-1.5],[1.3,-.75]],pivots={};cups.forEach((c,k)=>pivots['c'+k]=[c[0],0,c[1]]);
   const parts=splitFairground(geometry,c=>{
    if(c.max[1]<=.225)return null;
@@ -106,7 +106,7 @@ export async function buildParkRides(staticRoot,moving){
 
  // ---- Swingin' Pines: chair-o-plane canopy and twelve flying chairs.
  {
-  const spec=ride('swinging-pines'),g=frame(spec),geometry=await loadFairgroundGeometry('chair_o_plane');
+  const spec=ride('swinging-pines'),g=frame(spec),geometry=await loadFairgroundDetail('chair_o_plane',detail);
   const parts=splitFairground(geometry,c=>c.max[1]<.3||Math.hypot(c.center[0],c.center[2])<.7&&c.max[1]<3.35?null:'top');
   part(parts.static,g,spec.scale);
   const top=part(parts.top,g,spec.scale);
@@ -117,7 +117,7 @@ export async function buildParkRides(staticRoot,moving){
 
  // ---- Pinefall drop tower.
  {
-  const spec=ride('pinefall'),g=frame(spec),geometry=await loadFairgroundGeometry('drop_tower');
+  const spec=ride('pinefall'),g=frame(spec),geometry=await loadFairgroundDetail('drop_tower',detail);
   const parts=splitFairground(geometry,c=>c.min[1]>.28&&c.max[1]<1.5&&(Math.max(c.size[0],c.size[2])>1||Math.hypot(c.center[0],c.center[2])>.45)?'carriage':null);
   part(parts.static,g,spec.scale);
   const carriage=part(parts.carriage,g,spec.scale);
@@ -127,7 +127,7 @@ export async function buildParkRides(staticRoot,moving){
 
  // ---- Pine Bumpers: pavilion cars plus two loose bumper cars.
  {
-  const spec=ride('pine-bumpers'),g=frame(spec),geometry=await loadFairgroundGeometry('bumper_car_pavilion');
+  const spec=ride('pine-bumpers'),g=frame(spec),geometry=await loadFairgroundDetail('bumper_car_pavilion',detail);
   const centres=[[.11,.28],[1.39,1.23],[-1.28,1.11],[-.48,-1.22],[1.22,-1.04]],pivots={};centres.forEach((c,k)=>pivots['car'+k]=[c[0],0,c[1]]);
   const parts=splitFairground(geometry,c=>{if(c.min[1]<.18||c.max[1]>1.3||Math.max(c.size[0],c.size[2])>1.8)return null;for(let k=0;k<5;k++)if(Math.hypot(c.center[0]-centres[k][0],c.center[2]-centres[k][1])<1.05)return 'car'+k;return null;},pivots);
   part(parts.static,g,spec.scale);
@@ -153,7 +153,7 @@ export async function buildParkRides(staticRoot,moving){
 
  // ---- Pinecrest Express tram: shuttles along the north walk.
  {
-  const spec=ride('pinecrest-express'),tram=await fairgroundModel('park_tram',{scale:spec.scale});moving.add(tram);
+  const spec=ride('pinecrest-express'),tram=await fairgroundModel('park_tram',{scale:spec.scale,detail});moving.add(tram);
   for(const z of [.05,-.5,-1.05,-1.55])for(const x of [-.24,.24])(anchors['pinecrest-express']??=[]).push(anchor(tram.children[0],[x,.62,z]));
   const travel=(TRAM_LINE.to-TRAM_LINE.from-6),speed=3.2,dwell=(spec.cycle-2*travel/speed)/2;
   const state=t=>{const p=((t%spec.cycle)+spec.cycle)%spec.cycle,run=travel/speed;

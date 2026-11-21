@@ -1,40 +1,58 @@
-// One GLTFLoader setup for every model in the town. Deploy builds compress
-// pack GLBs (tools/compress-dist-glbs.mjs) with Draco or EXT_meshopt_compression,
-// picked per asset, so every loader must be able to decode both. A single
-// DRACOLoader also keeps the decoder worker pool shared instead of one pool
-// per district.
-import { LoadingManager } from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
-import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+// Decoders and URL mapping are shared by all town model loaders.
+import {BufferAttribute, LoadingManager} from 'three';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {KTX2Loader} from 'three/addons/loaders/KTX2Loader.js';
+import {DRACOLoader} from 'three/addons/loaders/DRACOLoader.js';
+import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
 
-let draco = null;
-function sharedDraco() {
-  draco ??= new DRACOLoader().setDecoderPath(`${import.meta.env.BASE_URL}draco/`);
-  return draco;
+let draco, manager, basis;
+const textureLoaders = new Set();
+const BASE = import.meta.env?.BASE_URL ?? '/';
+
+export function configureGLTFTextures(renderer) {
+  if (typeof window === 'undefined' || !window.__basisTextures) return;
+  basis ??= new KTX2Loader(sharedManager()).setTranscoderPath(BASE+'basis/').detectSupport(renderer);
+  for (const loader of textureLoaders) loader.setKTX2Loader(basis);
+  textureLoaders.clear();
 }
 
-// Deploy builds inline window.__assetAliases (tools/prepare-deploy-dist.mjs):
-// byte-identical models published under two URLs resolve to one, so the
-// browser fetches and decodes each once. Dev servers have no map.
-let manager = null;
 function sharedManager() {
   if (manager) return manager;
   manager = new LoadingManager();
-  const aliases = (typeof window !== 'undefined' && window.__assetAliases) || null;
-  if (aliases && Object.keys(aliases).length) {
-    manager.setURLModifier((url) => {
-      try {
-        const u = new URL(url, location.href);
-        const target = aliases[u.pathname];
-        return target ? new URL(target, u).href : url;
-      } catch { return url; }
-    });
-  }
+  const aliases = typeof window !== 'undefined' && window.__assetAliases;
+  if (aliases) manager.setURLModifier(url => {
+    const source = new URL(url,location.href);
+    const target = source.origin === location.origin && aliases[source.pathname];
+    return target ? new URL(target,source).href : url;
+  });
   return manager;
 }
 
-/** A GLTFLoader that understands KHR_draco_mesh_compression and EXT_meshopt_compression. */
+/** CPU geometry consumers can read or transform these attributes as floats.
+ * Keep the glTF node transform, including the quantized position scale. */
+function unpackAttributes(scene) {
+  scene.traverse(object => {
+    if (!object.isMesh) return;
+    for (const name of ['position','normal','uv','uv1','uv2','uv3']) {
+      const attribute = object.geometry.getAttribute(name);
+      if (!attribute || (attribute.isInterleavedBufferAttribute ? attribute.data.array : attribute.array) instanceof Float32Array) continue;
+      const values = new Float32Array(attribute.count*attribute.itemSize);
+      for (let i=0;i<attribute.count;i++) {
+        for (let k=0;k<attribute.itemSize;k++) values[i*attribute.itemSize+k] = attribute.getComponent(i,k);
+      }
+      object.geometry.setAttribute(name,new BufferAttribute(values,attribute.itemSize));
+    }
+  });
+}
+
 export function createGLTFLoader() {
-  return new GLTFLoader(sharedManager()).setDRACOLoader(sharedDraco()).setMeshoptDecoder(MeshoptDecoder);
+  draco ??= new DRACOLoader().setDecoderPath(BASE+'draco/').setWorkerLimit(2);
+  const loader = new GLTFLoader(sharedManager()).setDRACOLoader(draco).setMeshoptDecoder(MeshoptDecoder);
+  loader.register(() => ({name:'town_float_attributes',afterRoot(result){result.scenes.forEach(unpackAttributes);}}));
+  if (typeof window !== 'undefined' && window.__basisTextures) {
+    loader.setResourcePath(location.origin+'/');
+    if (basis) loader.setKTX2Loader(basis);
+    else textureLoaders.add(loader);
+  }
+  return loader;
 }

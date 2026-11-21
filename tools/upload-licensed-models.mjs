@@ -3,7 +3,7 @@
 // deploy:dist` (dist/licensed + dist/owned-assets) into one tarball and upload
 // it to the PRIVATE Vercel Blob store `cel-village-models`. CI downloads it with
 // tools/fetch-licensed-models.mjs. The models are licensed-derived: they live
-// only in dist/, .licensed-cache/ and private Blob, never in git.
+// only in dist/, public/licensed, .licensed-cache/ and private Blob, never in git.
 //
 // Usage (needs BLOB_READ_WRITE_TOKEN in the environment, never on argv):
 //   npm run deploy:dist && npm run models:upload [-- --prune] [-- --dry-run]
@@ -17,6 +17,9 @@ import {fileURLToPath} from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const distDir = join(root, 'dist');
 const stage = join(root, '.licensed-cache', 'models-pack');
+const publish = join(root,'public/licensed/fast-load/publish');
+const preparedDist = existsSync(join(distDir,'models')) && existsSync(join(publish,'routes.json'));
+const source = preparedDist ? publish : distDir;
 const tarball = join(root, '.licensed-cache', 'models-pack.tar.gz');
 const args = new Set(process.argv.slice(2));
 const dryRun = args.has('--dry-run');
@@ -34,12 +37,12 @@ function walk(dir, acc = []) {
 }
 
 for (const sub of ['licensed', 'owned-assets']) {
-  if (!existsSync(join(distDir, sub))) throw new Error(`dist/${sub} missing: run \`npm run deploy:dist\` first`);
+  if (!existsSync(join(source, sub))) throw new Error(`dist/${sub} missing: run \`npm run deploy:dist\` first`);
 }
 rmSync(stage, {recursive: true, force: true});
 mkdirSync(stage, {recursive: true});
-cpSync(join(distDir, 'licensed'), join(stage, 'licensed'), {recursive: true, dereference: true});
-cpSync(join(distDir, 'owned-assets'), join(stage, 'owned-assets'), {recursive: true, dereference: true});
+cpSync(join(source, 'licensed'), join(stage, 'licensed'), {recursive: true, dereference: true});
+cpSync(join(source, 'owned-assets'), join(stage, 'owned-assets'), {recursive: true, dereference: true});
 // prepare-deploy-dist resolves /owned-assets/fairground/* through the
 // fairground root (public/licensed/fairground), so mirror those files there.
 const ownedFair = join(stage, 'owned-assets', 'fairground');
@@ -47,6 +50,12 @@ let mirrored = 0;
 for (const file of walk(ownedFair)) {
   const dest = join(stage, 'licensed', 'fairground', relative(ownedFair, file));
   if (!existsSync(dest)) { mkdirSync(dirname(dest), {recursive: true}); cpSync(file, dest); mirrored++; }
+}
+if (source === publish) {
+  const prepared = join(stage,'licensed/fast-load/prepared');
+  mkdirSync(prepared,{recursive:true});
+  cpSync(join(publish,'models'),join(prepared,'models'),{recursive:true});
+  cpSync(join(publish,'routes.json'),join(prepared,'routes.json'));
 }
 const files = walk(stage);
 const rawBytes = files.reduce((s, f) => s + statSync(f).size, 0);

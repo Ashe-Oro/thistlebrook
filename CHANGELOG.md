@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Village opening view.** Thistlebrook opens at Market Square, with a close portrait view and room for the adjoining streets on desktop. Home returns to the square. The whole island is available in Explore and with the zoom controls. Shared camera links still open at their saved coordinates.
+
+- **Fast Load.** Thistlebrook draws the opening view first, then streams distant districts. Explore jumps move their destination to the front of the queue. A district keeps its silhouette while loading and if its models fail to arrive. Distant vegetation, buildings, rides and vehicles use lighter meshes and load their full geometry when the camera moves in. The deployment shares identical model and texture payloads and caches hashed files for a year. [Fast Load decisions and measurements](docs/specs/FAST-LOAD-LOG.md).
+
 - **Nature outdoors.** I reviewed all 83 GLBs in the owned Nature pack: 42 use, 12 keep, 29 skip. Each verdict has a size, a triangle count, a Draco size and a cel-fit note ([review](docs/specs/NATURE-PACK-REVIEW.md)). Thistlebrook's natural edges now use 24 of the Nature models.
   - **Pinewood.** Old-growth pines ring the lookout, birches stand by the pond and oaks edge the meadows. Silver snags stand on the upper ridge. Nature granite lines the trails. Fern Hollow has ferns and a chopping stump. The pond has lily pads, a mallard and a heron, plus toadstool logs and mossy stones on its banks. Deer and a fox wait at Foxglove meadow and rabbits at Bluebell. Every trail junction and trail end has a waymark post, and the Pinewood Trailhead has a trail-map board.
   - **Willow River and Stillwater Outflow.** Willows stand back from the banks, with cattails at the water's edge, stone bars on inner bends, rock shelves on outer bends, and herons and mallards.

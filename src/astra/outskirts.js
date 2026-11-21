@@ -1,3 +1,4 @@
+import {bindMeshDetail,inheritMeshDetail,lodUrl} from './model-detail.js';
 import {outskirtsLogPlacements} from './registry/seed-models.js';
 import {tagDistrictModels} from './registry/district-models.js';
 import * as THREE from 'three';
@@ -14,16 +15,24 @@ import BOUNDS from './outskirts-bounds.json';
 // Uncatalogued Nature models are loaded privately and shared by every instance.
 // No GLB bytes or copied materials live in the repository or production bundle.
 const loader=createGLTFLoader(),models=new Map();
-async function nature(name,x,z,scale=1,rotation=0){
- if(!models.has(name))models.set(name,loader.loadAsync(import.meta.env.BASE_URL+`licensed/astra-outskirts/${name}.glb`).then(g=>{
+function natureModel(path){
+ if(!models.has(path))models.set(path,loader.loadAsync(path).then(g=>{
   const meshes=[];g.scene.traverse(m=>{if(m.isMesh)meshes.push(m);});
   for(const m of meshes){m.material=m.geometry.attributes.color?toonVertexColorMaterial():toonMaterial(m.material.color);m.castShadow=m.receiveShadow=true;
    const hull=new THREE.BufferGeometry();hull.setAttribute('position',m.geometry.attributes.position.clone());if(m.geometry.index)hull.setIndex(m.geometry.index.clone());const smooth=mergeVertices(hull,.001);smooth.computeVertexNormals();const ink=new THREE.Mesh(smooth,outlineMaterial(.018));m.add(ink);
   }return g.scene;
  }));
- const object=new THREE.Group();object.userData.ownedAsset='nature/'+name;object.userData.ownedPath='nature/'+name+'.glb';const content=(await models.get(name)).clone(true);content.position.y=-BOUNDS[name].min[1];object.add(content);object.scale.setScalar(scale);object.position.set(x,.12,z);object.rotation.y=rotation;return object;
+ return models.get(path);
 }
-export async function buildOutskirts(scene,town){
+const meshes=object=>{const list=[];object.traverse(o=>{if(o.isMesh)list.push(o);});return list;};
+async function nature(name,x,z,scale=1,rotation=0,detail){
+ const path=import.meta.env.BASE_URL+`licensed/astra-outskirts/${name}.glb`,variant=detail&&lodUrl(path);
+ const content=(await natureModel(variant||path)).clone(true);
+ if(variant)meshes(content).forEach((mesh,i)=>bindMeshDetail(detail,[[x,z]],mesh,async()=>meshes(await natureModel(path))[i]?.geometry));
+ const object=new THREE.Group();object.userData.ownedAsset='nature/'+name;object.userData.ownedPath='nature/'+name+'.glb';
+ content.position.y=-BOUNDS[name].min[1];object.add(content);object.scale.setScalar(scale);object.position.set(x,.12,z);object.rotation.y=rotation;return object;
+}
+export async function buildOutskirts(scene,town,{detail}={}){
  const data=town.outskirts,root=new THREE.Group(),dynamic=new THREE.Group();dynamic.name='Stillwater life';scene.add(dynamic);
  const rng=makeRng(town.seed+921),random=()=>rng.float(),loads=[],water=[],lanterns=[],boats=[],fireflies=[];
  const boxGeo=new THREE.BoxGeometry(1,1,1),rockGeo=new THREE.IcosahedronGeometry(1,1),circleGeo=new THREE.CircleGeometry(1,64);
@@ -32,7 +41,7 @@ export async function buildOutskirts(scene,town){
  const rock=(x,y,z,sx,sy,sz,c)=>{const m=mesh(rockGeo,c,x,y,z);m.scale.set(sx,sy,sz);return m;};
  const disk=(x,z,rx,rz,color,y=.025)=>{const m=mesh(circleGeo,color,x,y,z);m.rotation.x=-Math.PI/2;m.scale.set(rx,rz,1);m.castShadow=false;return m;};
  const kit=(id,x,z,scale=1,rot=0)=>loads.push(place(id,{x,z,scale,rotY:rot}).then(o=>root.add(o)));
- const prop=(name,x,z,scale=1,rot=0)=>loads.push(nature(name,x,z,scale,rot).then(o=>root.add(o)));
+ const prop=(name,x,z,scale=1,rot=0)=>loads.push(nature(name,x,z,scale,rot,detail).then(o=>root.add(o)));
  function sign(title,subtitle,x,z,width=7){
   const canvas=document.createElement('canvas');canvas.width=768;canvas.height=192;const c=canvas.getContext('2d');c.fillStyle='#344f47';c.fillRect(0,0,768,192);c.strokeStyle='#b8c6a2';c.lineWidth=3;c.strokeRect(12,12,744,168);c.textAlign='center';c.fillStyle='#fff0c9';c.font='600 43px Georgia';c.fillText(title,384,86);c.fillStyle='#c4d3b2';c.font='22px sans-serif';c.fillText(subtitle,384,135);
   const plane=new THREE.Mesh(new THREE.PlaneGeometry(width,width/4),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(canvas),side:THREE.DoubleSide}));plane.position.set(x,2.3,z);root.add(plane);for(const dx of [-width*.41,width*.41])box(x+dx,1.15,z,.13,2.3,.13,'#7e7154');
@@ -43,10 +52,7 @@ export async function buildOutskirts(scene,town){
  disk(-13,102,18,9,'#bcc18d',.04);
  // A gently irregular shoreline uses the same conservative ellipse that
  // reserves the navigation graph and foliage, so the bank never blocks paths.
- const lakeShape=(pad,color,y)=>{const shape=new THREE.Shape();for(let i=0;i<=96;i++){const a=i/96*Math.PI*2,k=1+.022*Math.sin(a*5)+.015*Math.cos(a*7),x=LAKE.x+(LAKE.rx+pad)*Math.cos(a)*k,z=LAKE.z+(LAKE.rz+pad)*Math.sin(a)*k;if(i===0)shape.moveTo(x,z);else shape.lineTo(x,z);}shape.closePath();const m=mesh(new THREE.ShapeGeometry(shape),color,0,y,0);m.rotation.x=Math.PI/2;m.material=m.material.clone();m.material.side=THREE.DoubleSide;m.castShadow=false;return m;};
- // Surfaces sit at town.water.lake.level (0.04), a few mm above the inflow
- // and outflow ribbons that end two metres inside the shore.
- lakeShape(2.1,'#c8c49b',.005);lakeShape(.55,'#a3c8b5',.028);lakeShape(0,'#74b3b1',.043);lakeShape(-2.2,'#69a6ac',.047);
+ if(!detail)buildStillwaterSurface(root);
  for(let i=0;i<62;i++){const x=LAKE.x+(random()-.5)*44,z=LAKE.z+(random()-.5)*34;if(!inLake([x,z],-2))continue;const m=box(x,.07,z,.4+random()*1.8,.012,.035,i%3?'#b0d4c9':'#88bdba',dynamic);m.castShadow=false;water.push({m,x,width:m.scale.x,phase:random()*6});}
  // The shore's cattails, stones, rock shelves, lily pads, mallards and heron
  // are Nature models planned with the landscape (src/compiler/nature-edges.js).
@@ -69,7 +75,7 @@ export async function buildOutskirts(scene,town){
  prop('dock_jetty',-10,51,1.65);box(-10,.29,52.4,2,.3,6.6,'#8e8268');
  for(let i=0;i<19;i++)box(-10,.46,49.2+i*.35,2.05,.075,.29,'#c0a77b');
  prop('canoe_paddle_rack',-6.8,49,1.25);
- loads.push(nature('canoe',-7.3,55.4,1.2,.2).then(o=>{dynamic.add(o);boats.push(o);}));
+ loads.push(nature('canoe',-7.3,55.4,1.2,.2,detail).then(o=>{dynamic.add(o);boats.push(o);}));
  kit('nat-willow',-2,48,.7);kit('nat-granite-rock-cluster',10,88,.7);
  for(const [i,r]of data.roads.entries())if(i%3===0&&r.a[1]>42)prop('trail_marker_post',r.a[0]+1.4,r.a[1],1,Math.atan2(r.b[0]-r.a[0],r.b[1]-r.a[1]));
  // Field rows, turning headlands and open gateways make the farming legible.
@@ -100,7 +106,7 @@ export async function buildOutskirts(scene,town){
  await Promise.all(loads);tagDistrictModels(root,town,'outskirts',[0,0]);tagDistrictModels(dynamic,town,'outskirts');
  // All repeated geometry, including private kit hulls, uses shared instances.
  root.updateMatrixWorld(true);const batches=new Map();root.traverse(o=>{if(!o.isMesh)return;const key=o.geometry.uuid+o.material.uuid;if(!batches.has(key))batches.set(key,{o,matrices:[],ids:[]});batches.get(key).matrices.push(o.matrixWorld.clone());batches.get(key).ids.push(o.userData.registryId);});
- const statics=new THREE.Group();statics.name='Stillwater static instances';scene.add(statics);for(const {o,matrices,ids}of batches.values()){const batch=new THREE.InstancedMesh(o.geometry,o.material,matrices.length);matrices.forEach((m,i)=>batch.setMatrixAt(i,m));batch.userData.registryIds=ids;batch.castShadow=o.castShadow;batch.receiveShadow=o.receiveShadow;statics.add(batch);}
+ const statics=new THREE.Group();statics.name='Stillwater static instances';scene.add(statics);for(const {o,matrices,ids}of batches.values()){const batch=new THREE.InstancedMesh(o.geometry,o.material,matrices.length);inheritMeshDetail(o,batch);matrices.forEach((m,i)=>batch.setMatrixAt(i,m));batch.userData.registryIds=ids;batch.castShadow=o.castShadow;batch.receiveShadow=o.receiveShadow;statics.add(batch);}
  const life=await createOutskirtsLife(scene,town);
  const selectables=data.destinations.map(d=>({type:'outskirts',data:d,bounds:new THREE.Box3(new THREE.Vector3(d.pos[0]-2,0,d.pos[1]-2),new THREE.Vector3(d.pos[0]+2,d.height,d.pos[1]+2))}));
  // Buildings can be clicked on the roof as well as at their path endpoint.
@@ -110,4 +116,19 @@ export async function buildOutskirts(scene,town){
   const lit=night>.18;flame.visible=lit;flame.scale.y=.8+Math.sin(t*8)*.12;fireLight.intensity=night*(8+Math.sin(t*7)*.6);halo.material.opacity=night*.2;lanterns.forEach(l=>l.visible=lit);fireflies.forEach(f=>{f.m.visible=lit;f.m.position.set(f.x+Math.sin(t*.4+f.phase),.8+Math.sin(t*.8+f.phase)*.4,f.z+Math.cos(t*.3+f.phase));});
   wildlife.forEach(a=>{a.o.position.set(a.x+Math.sin(t*.05+a.phase)*.8,.03,a.z+Math.cos(t*.07+a.phase)*.4);a.o.rotation.y=1.8+Math.sin(t*.2+a.phase)*.2;a.o.rotation.x=Math.sin(t*.5+a.phase)*.07;});
  },audit(){return {stats:this.stats,people:life.audit(),arrivals:[...life.arrivals],canoes:boats.map(b=>b.position.toArray()),wildlife:wildlife.map(a=>a.o.position.toArray())};}};
+}
+
+export function buildStillwaterSurface(root) {
+ const mesh=(geometry,color,x,y,z)=>{
+  const object=new THREE.Mesh(geometry,toonMaterial(color));
+  object.position.set(x,y,z);
+  object.receiveShadow=true;
+  root.add(object);
+  return object;
+ };
+ const lakeShape=(pad,color,y)=>{const shape=new THREE.Shape();for(let i=0;i<=96;i++){const a=i/96*Math.PI*2,k=1+.022*Math.sin(a*5)+.015*Math.cos(a*7),x=LAKE.x+(LAKE.rx+pad)*Math.cos(a)*k,z=LAKE.z+(LAKE.rz+pad)*Math.sin(a)*k;if(i===0)shape.moveTo(x,z);else shape.lineTo(x,z);}shape.closePath();const m=mesh(new THREE.ShapeGeometry(shape),color,0,y,0);m.rotation.x=Math.PI/2;m.material=m.material.clone();m.material.side=THREE.DoubleSide;m.castShadow=false;return m;};
+ // Surfaces sit at town.water.lake.level (0.04), a few mm above the inflow
+ // and outflow ribbons that end two metres inside the shore.
+ lakeShape(2.1,'#c8c49b',.005);lakeShape(.55,'#a3c8b5',.028);lakeShape(0,'#74b3b1',.043);lakeShape(-2.2,'#69a6ac',.047);
+ return root;
 }
