@@ -12,7 +12,7 @@ export const WORLD_UNITS_PER_METRE = 2.05 / 4.5;
 export const VEHICLE_LENGTH_METRES = Object.freeze({
  sedan:4.5, taxi:4.8, police:4.8, convertible:4.4, pickup:5.3, minivan:5,
  'delivery-van':5, 'box-van':6, ambulance:6, 'garbage-truck':8, 'fire-tender':8,
- 'city-bus':11.5, 'school-bus':11, bicycle:1.65, 'pushback-tug':5, 'baggage-train':10,
+ 'city-bus':11.5, 'school-bus':11, bicycle:1.65, 'pushback-tug':5, 'baggage-train':10, 'fuel-truck':8, 'follow-me':4.5,
  'heavy-tractor':7.5, 'rocket-trailer':13,
 });
 
@@ -36,6 +36,8 @@ export const FLEET_MODELS = Object.freeze({
  'af-fire-tender':{name:'Fire tender',class:'fire-tender',pack:'airfield',path:'licensed/airfield/fuel_truck.glb',kind:'van',min:[-0.715,-0.695,-1.61799],max:[0.71505,0.69495,1.61799],pivot:'centre'},
  'rc-ambulance':{name:'Ambulance',class:'ambulance',pack:'realistic-city',path:'licensed/realistic-city/realistic_ambulance_01.glb',kind:'van',min:[-1.31109,-1.44601,-3.46421],max:[1.311,1.44596,3.46421],pivot:'centre'},
  'af-tug':{name:'Pushback tug',class:'pushback-tug',pack:'airfield',path:'licensed/airfield/pushback_tug.glb',kind:'tug',min:[-0.645,-0.725,-1.33223],max:[0.64503,0.72506,1.33223],pivot:'centre'},
+ 'af-fuel-truck':{name:'Fuel bowser',class:'fuel-truck',pack:'airfield',path:'licensed/airfield/fuel_truck.glb',kind:'van',role:'service',min:[-0.715,-0.695,-1.61799],max:[0.71505,0.69495,1.61799],pivot:'centre'},
+ 'af-follow-me':{name:'Follow-me car',class:'follow-me',pack:'airfield',path:'licensed/airfield/follow_me_car.glb',kind:'car',role:'service',min:[-0.66377,0,-1.388],max:[0.66381,1.50503,1.394],pivot:'bottom-centre'},
  'af-baggage':{name:'Baggage carts',class:'baggage-train',pack:'airfield',path:'licensed/airfield/baggage_cart_train.glb',kind:'cart',min:[-0.515,-0.545,-1.96],max:[0.51507,0.54489,1.96],pivot:'centre'},
  'farm-tractor':{name:'Heavy tractor',pack:'farm',class:'heavy-tractor',path:'licensed/farm/red_tractor.glb',kind:'tractor',min:[-.85311,-.82906,-1.425],max:[.85310,.82913,1.425],pivot:'centre'},
  'farm-rocket-trailer':{name:'Rocket trailer',pack:'farm',class:'rocket-trailer',path:'licensed/farm/tractor_trailer.glb',kind:'trailer',min:[-.92062,-.63943,-1.53277],max:[.92061,.63933,1.53277],pivot:'centre'},

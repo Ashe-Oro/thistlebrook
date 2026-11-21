@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- **Airfield kit at Thistlebrook Municipal Airport.** The box-built terminal, tower, radar and club hangar are gone. In their place are owned Airfield pack buildings:
+  - a terminal FBO (at 1.3 scale) clustered with the Clover Flying Club office and a boarding canopy on the public side
+  - the control tower with a GSE shed
+  - the club hangar and a T-hangar block
+  - a fuel farm on a new GA service pad
+  - a fire station on the south taxi link, with its fire tender
+
+  Airside there is a rotating beacon, a PAPI, three apron floodlights, the pack windsock, an airstair and a ground power unit at stand A1, 30 runway edge lights and 15 blue taxiway lights. The club fleet and two tied-down planes on the GA row are pack Cessnas with spinning propellers. The airliner, the helicopter and the runway-reserving timetable are unchanged.
+
+  The apron now runs four pack vehicles:
+  - the tug and baggage train, whose loop moved 3 units south to clear the airliner's nose
+  - a fuel bowser that fills at the farm and refuels a parked Cessna
+  - a follow-me car patrolling between stands B1 and B2
+
+  The car park uses pack cars. After dark, the edge, threshold, taxiway and PAPI lights, the tower cab, the swept green and white beacon, the flood pools and the windows light through the landmark-glow registry, with no new scene lights. `tests/airfield-kit.test.mjs` checks the structures, parcel and movement-area clearances, and 24 h of apron traffic against aircraft, buildings and runway slots. It also checks that the lights are on from 19:00 to 06:00 and off at noon. In the airport view, draw calls drop from 1463 to 1389. The added download is 1.2 MB. [Spec](docs/specs/OPUS-AIRFIELD.md) · [Log](docs/specs/overnight/AIRFIELD-KIT-LOG.md).
+
+  At publish time the Blob model pack needs these 19 additions under `public/licensed/airfield/` (Draco, about 1.2 MB in all): `terminal_fbo`, `flight_club_office`, `apron_canopy`, `control_tower`, `gse_shed`, `hangar`, `t_hangar_block`, `fuel_farm`, `fire_rescue_station`, `rotating_beacon`, `windsock`, `papi_array`, `apron_floodlight`, `runway_edge_light`, `taxiway_blue_light`, `light_aircraft_cessna`, `follow_me_car`, `passenger_airstair`, and `ground_power_unit`. The existing `fuel_truck` now doubles as the bowser. `tests/traffic-fix.test.mjs` reads `follow_me_car.glb`.
 - **Mobile map controls.** The wordmark, Explore menu and clock share a 48 px cream bar that respects phone safe areas. The map tools sit in a slimmer pill with 40 px touch targets. Extra ocean coverage on narrow screens keeps the pale sky backdrop out of the map corners. [Spec](docs/specs/MOBILE-OVERLAYS.md).
 
 - **Generated Tesla and SpaceX models.** The five-car lineup at the Roadster proving ground and the two static Starships at Starbase use generated cel models with ink outlines. A Supercharger bay adds a Model S, a Model X, four charging stalls, a Megapack, a Powerwall and two Optimus pit crew. The arena keeps its stunt timing and clearances, and the night beams follow the lamps on the fitted bodies. The performing Roadster uses the new white model and falls back to the authored white car if its file is missing. Road traffic continues to use the owned vehicle pack. [Spec and outcome](docs/specs/HY3D-VEHICLES.md). This change awaits Ashe's sign-off on the stills.
