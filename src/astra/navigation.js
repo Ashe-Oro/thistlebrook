@@ -6,7 +6,7 @@ export const VIEW_GROUPS=[
 ];
 export function mountWorldNavigation(ui,view){
  const nav=ui.root.querySelector('.view-tabs');nav.classList.add('world-navigation');nav.setAttribute('aria-label','Explore the world');nav.replaceChildren();
- const details=document.createElement('details');details.className='world-nav';const summary=document.createElement('summary');summary.innerHTML='<span class="nav-kicker">EXPLORE</span><span class="nav-current">The whole world</span><span aria-hidden="true">⌄</span>';details.append(summary);
+ const details=document.createElement('details');details.className='world-nav';const summary=document.createElement('summary');summary.innerHTML='<span class="nav-kicker">Explore</span><span class="nav-current">The whole world</span><span aria-hidden="true">⌄</span>';details.append(summary);
  const menu=document.createElement('div');menu.className='world-menu glass';
  for(const [label,views]of VIEW_GROUPS){const section=document.createElement('section'),title=document.createElement('h2');title.textContent=label;section.append(title);for(const [id,name]of views){const b=document.createElement('button');b.dataset.view=id;b.textContent=name;b.onclick=()=>{view(id);details.open=false;summary.focus();};section.append(b);}menu.append(section);}
  details.append(menu);nav.append(details);

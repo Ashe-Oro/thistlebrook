@@ -11,6 +11,7 @@ export function createLightControls(root, setHour, actions = {}) {
  toggle.setAttribute('aria-label', 'Time, weather and look');
  toggle.setAttribute('aria-expanded', 'false');
  toggle.setAttribute('aria-controls', 'astra-light-picker');
+ toggle.setAttribute('aria-describedby', 'astra-clock astra-clock-date');
  toggle.title = 'Time, weather and look';
  toggle.innerHTML = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m5 8 5 5 5-5"/></svg>';
  root.querySelector('.clock').append(toggle);

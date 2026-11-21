@@ -35,7 +35,7 @@ test('?weather= and ?skin= URL params are still read', () => {
 });
 
 const types = { '.js': 'text/javascript', '.mjs': 'text/javascript' };
-test('the clock dropdown sets time, pace, weather and skin; removed pieces are absent in the DOM', { skip: !existsSync(chrome) && 'no Chrome' }, async () => {
+test('clock settings work and mobile overlays fit in one touch-friendly row', { skip: !existsSync(chrome) && 'no Chrome' }, async () => {
   const { chromium } = await import('playwright-core');
   const browser = await chromium.launch({ executablePath: chrome, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
   try {
@@ -53,10 +53,12 @@ test('the clock dropdown sets time, pace, weather and skin; removed pieces are a
     const result = await page.evaluate(async () => {
       const { createUI } = await import('/src/astra/ui.js');
       const { createLightControls } = await import('/src/astra/light-controls.js');
+      const { mountWorldNavigation } = await import('/src/astra/navigation.js');
       const { mountWeatherControl } = await import('/src/astra/weather.js');
       const { mountSkinPicker } = await import('/src/astra/skin/picker.js');
       const log = { hour: [], pause: 0, speed: 0, weather: [], skin: [] };
       const ui = createUI({ districts: [], seed: 1 }, { zoom() {}, rotate() {}, view() {}, hour: h => log.hour.push(h), unfollow() {} });
+      mountWorldNavigation(ui, id => ui.view(id));
       const lc = createLightControls(ui.root, h => log.hour.push(h), { pause: () => log.pause++, speed: () => log.speed++ });
       const show = mountWeatherControl(lc.section('weather'), 'clear', t => { log.weather.push(t); show(t); });
       const listeners = [];
@@ -90,5 +92,30 @@ test('the clock dropdown sets time, pace, weather and skin; removed pieces are a
     assert(result.weatherOptions.includes('snow') && result.weatherOptions.includes('rain'));
     assert.deepEqual(result.log.weather, ['snow']);
     assert.deepEqual(result.log.skin, ['winter']);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    for (const file of ['navigation.css', 'style.css', 'light-controls.css']) {
+      await page.addStyleTag({ content: read('src/astra/' + file).replace(/^@import.*\n/, '') });
+    }
+    const bar = await page.locator('.top-bar').boundingBox();
+    assert(bar && bar.y + bar.height <= 56, 'the top bar fits within the first 56 px');
+    for (const selector of ['.masthead', '.clock', '.world-nav summary']) {
+      const box = await page.locator(selector).boundingBox();
+      assert(box && box.y >= bar.y && box.y + box.height <= bar.y + bar.height, `${selector} stays in the top row`);
+      assert(box.x >= bar.x && box.x + box.width <= bar.x + bar.width, `${selector} fits inside the bar`);
+    }
+    for (const selector of ['.light-toggle', '.world-nav summary', '.tools button']) {
+      for (const control of await page.locator(selector).all()) {
+        const box = await control.boundingBox();
+        assert(box && box.width >= 40 && box.height >= 40, `${selector} has a 40 px touch target`);
+      }
+    }
+    const pill = await page.locator('.tools').boundingBox();
+    assert(pill && pill.height > pill.width, 'the map tools form a vertical pill');
+    await page.locator('.world-nav summary').click();
+    const explore = page.getByRole('button', { name: 'Willowbank', exact: true });
+    await explore.click();
+    assert.equal(await page.locator('.nav-current').textContent(), 'Willowbank');
+    assert.equal(await explore.isVisible(), false);
   } finally { await browser.close(); }
 });
