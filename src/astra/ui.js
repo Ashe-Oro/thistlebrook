@@ -5,9 +5,11 @@ export const icon=name=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
 export function createUI(town,actions){
  document.title='Thistlebrook — a little place to linger';
  const root=document.createElement('div');root.className='astra-ui';root.innerHTML=`
+ <div class="top-bar">
  <header class="masthead"><div class="emblem">${icon('leaf')}</div><div><div class="wordmark">thistlebrook</div><div class="eyebrow">A little place to linger</div></div></header>
  <nav class="view-tabs glass" aria-label="Village views"><button class="active" data-view="village">The town</button><button data-view="neighbourhood">Willowbank</button><button data-view="sunbeam">Sunbeam Terrace</button><button data-view="downtown">Downtown</button><button data-view="market">Market Square</button><button data-view="orchard">Clover Fields</button><button data-view="campus">Thistlebrook High</button><button data-view="civic">Civic Green</button><button data-view="quay">Lantern Quay</button><button data-view="themepark">Pinecrest Park</button><button data-view="mountainpass">Mountain Pass</button><button data-view="countryside">The landscape</button></nav>
- <div class="top-right"><div class="clock glass">${icon('sun')}<div><span id="astra-clock">10:24 am</span><small>FRIDAY · EARLY SUMMER</small></div></div></div>
+ <div class="top-right"><div class="clock glass">${icon('sun')}<div><span id="astra-clock">10:24 am</span><small id="astra-clock-date">FRIDAY · EARLY SUMMER</small></div></div></div>
+ </div>
  <section class="intro"><h1>Nothing to do.<br>So much to see.</h1><p>School mornings. Main Street errands.<br>Friday nights under the lights.</p><div class="live"><span class="dot"></span><span>${town.districts.length} districts. One town coming to life.</span></div></section>
  <div class="seed-label">EST. IN A DAYDREAM &nbsp; / &nbsp; Nº ${town.seed}</div>
  <aside class="card glass" aria-label="Village details"><button class="close" aria-label="Close details">×</button><div class="portrait">✿</div><div class="badge"></div><h2></h2><p></p><button class="follow">Follow their day ↗</button></aside>

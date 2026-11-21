@@ -35,9 +35,10 @@ export async function buildLandscape(scene,town) {
  coast.push(...shape.getPoints(6).map(p=>[p.x,p.y]));
  const land=new THREE.Mesh(new THREE.ExtrudeGeometry(shape,{depth:3,bevelEnabled:false}),[toonMaterial('#a5b67d'),toonMaterial('#a09275')]);
  land.rotation.x=Math.PI/2;land.position.y=-.09;land.receiveShadow=true;scene.add(tagObject(land,plan.registryId));
- // One animated ocean material, below every beach and pier, extends beyond the
- // camera's world framing. There are no district-sized water rectangles.
- const sea=new THREE.Mesh(new THREE.PlaneGeometry(1800,1800,1,1),toonMaterial('#72b2b9').clone());sea.rotation.x=-Math.PI/2;sea.position.set(60,-.45,80);sea.receiveShadow=true;
+ // Below the beaches and piers, the ocean shares one material across viewports.
+ const desktopOcean=new THREE.PlaneGeometry(1800,1800);
+ let mobileOcean;
+ const sea=new THREE.Mesh(desktopOcean,toonMaterial('#72b2b9').clone());sea.rotation.x=-Math.PI/2;sea.position.set(60,-.45,80);sea.receiveShadow=true;
  const clock={value:0};sea.material.onBeforeCompile=shader=>{shader.uniforms.uGulfTime=clock;shader.vertexShader='varying vec3 vGulfPosition;\n'+shader.vertexShader;shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvGulfPosition=position;');shader.fragmentShader='uniform float uGulfTime; varying vec3 vGulfPosition;\n'+shader.fragmentShader;shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\nfloat wave=sin(vGulfPosition.x*1.7+sin(vGulfPosition.y*.7+uGulfTime*.4)+uGulfTime*.8);float crest=smoothstep(.97,1.,wave)*smoothstep(.6,1.,sin(vGulfPosition.y*2.9+sin(vGulfPosition.x*.43)));diffuseColor.rgb+=crest*.065;');};scene.add(tagObject(sea,'landscape:ocean'));
  // Sand traces the entire irregular perimeter. Inland edges become rocky ridges;
  // the sheltered inlet and the eastern Gulf edge have broad, pale beaches.
@@ -132,7 +133,11 @@ export async function buildLandscape(scene,town) {
  kit.bake();
  let lastT=0;
  let others=()=>[];
- return {vehicles,routes,sea,traffic,setOtherVehicles(fn){others=fn;},update(t,hour,people,railTravellers=[]){
+ // Tall, zoomed-out views can see past the desktop plane into the sky backdrop.
+ function resizeOcean(narrow){
+  sea.geometry=narrow?(mobileOcean??=new THREE.PlaneGeometry(7200,7200)):desktopOcean;
+ }
+ return {vehicles,routes,sea,traffic,resizeOcean,setOtherVehicles(fn){others=fn;},update(t,hour,people,railTravellers=[]){
   clock.value=t;const dt=Math.max(0,Math.min(.8,t-lastT));lastT=t;
   const walkers=(people||[]).filter(p=>p.object.visible!==false).map(p=>residentPedestrian(p.actor,p.walkPace));
   traffic.update(dt,hour,[...walkers,...railTravellers],others());
