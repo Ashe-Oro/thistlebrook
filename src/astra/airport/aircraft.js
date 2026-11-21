@@ -37,3 +37,55 @@ export function makeHelicopter(){
  const tailRotor=new THREE.Group();tailRotor.position.set(.25,2.3,-5.5);body.add(tailRotor);box(tailRotor,'#34494f',0,0,0,.1,1.7,.14);box(tailRotor,'#34494f',0,0,0,.1,.14,1.7);
  return {root,body,rotor,tailRotor};
 }
+
+// Airfield-pack Cessna (light_aircraft_cessna.glb) for the club fleet and the
+// GA row. The baked propeller and spinner (every triangle in front of the
+// cowling, z > 1.42 in model space) are split off so they can spin about the
+// nose axis; the body keeps the authored vertex colours under the toon ramp.
+const PROP_Z = 1.42;
+let cessnaParts = null;
+async function cessnaGeometry() {
+ const {loadPackGeometry} = await import('../vehicle-models.js');
+ const {airfieldPath} = await import('./airfield-plan.js');
+ cessnaParts ??= loadPackGeometry(airfieldPath('light_aircraft_cessna')).then(geometry => {
+  const pos = geometry.attributes.position, keep = {body: [], prop: []};
+  for (let t = 0; t < pos.count; t += 3) {
+   const front = pos.getZ(t) > PROP_Z && pos.getZ(t + 1) > PROP_Z && pos.getZ(t + 2) > PROP_Z;
+   keep[front ? 'prop' : 'body'].push(t);
+  }
+  const pick = (starts) => {
+   const g = new THREE.BufferGeometry();
+   for (const [name, attr] of Object.entries(geometry.attributes)) {
+    const out = new Float32Array(starts.length * 3 * attr.itemSize);
+    starts.forEach((t, n) => { for (let k = 0; k < 3; k++) for (let c = 0; c < attr.itemSize; c++) out[(n * 3 + k) * attr.itemSize + c] = attr.getComponent(t + k, c); });
+    g.setAttribute(name, new THREE.BufferAttribute(out, attr.itemSize));
+   }
+   g.computeBoundingBox();
+   return g;
+  };
+  const body = pick(keep.body), prop = pick(keep.prop);
+  const hub = prop.boundingBox.getCenter(new THREE.Vector3());
+  prop.translate(-hub.x, -hub.y, -hub.z);
+  // Wing tips (nav lights): the outermost body vertices.
+  const tipY = (() => { let y = 0, n = 0; for (let i = 0; i < body.attributes.position.count; i++) if (Math.abs(body.attributes.position.getX(i)) > 1.9) { y += body.attributes.position.getY(i); n++; } return n ? y / n : 1.2; })();
+  return {body, prop, hub, tipX: body.boundingBox.max.x, tipY};
+ });
+ return cessnaParts;
+}
+export const CESSNA = Object.freeze({scale: 1.5});
+/** Same interface as makeAircraft (root/body/gear/props/lights/wheels). */
+export async function makeCessna(spec, {scale = CESSNA.scale, navLights = true} = {}) {
+ const {toonModel} = await import('../vehicle-models.js');
+ const parts = await cessnaGeometry();
+ const root = new THREE.Group(), body = new THREE.Group(), gear = new THREE.Group();
+ root.add(body); body.add(gear); root.name = spec?.id ?? 'cessna';
+ body.add(toonModel(parts.body, {scale}));
+ const spinner = new THREE.Group(); spinner.position.copy(parts.hub).multiplyScalar(scale); body.add(spinner);
+ spinner.add(toonModel(parts.prop, {scale}));
+ const lights = [];
+ if (navLights) for (const [s, color] of [[-1, '#e87562'], [1, '#83ca9c']]) {
+  const m = new THREE.Mesh(sphere, new THREE.MeshBasicMaterial({color})); m.scale.setScalar(.09);
+  m.position.set(s * parts.tipX * scale * .99, parts.tipY * scale, 0); body.add(m); lights.push(m);
+ }
+ return {root, body, gear, props: [spinner], lights, wheels: []};
+}
