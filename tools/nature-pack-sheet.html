@@ -1,0 +1,78 @@
+<!doctype html>
+<!-- Contact sheet for the owned Nature pack (tools/shots-nature-pack.mjs).
+     Each tile shows one GLB in the town's cel look (toon ramp + ink hull) at
+     scale 1 (1 unit = 1 m), beside a Thistlebrook villager at the 1.12 scale
+     residents use, under the town's isometric camera angle. GLBs are served
+     by the capture script from the pack folder; nothing is copied into public/. -->
+<html><head><meta charset="utf-8"><title>Nature pack sheet</title>
+<style>body{margin:0;background:#20262b}canvas{display:block}</style></head>
+<body><script type="module">
+import * as THREE from 'three';
+import {mergeVertices} from 'three/addons/utils/BufferGeometryUtils.js';
+import {createGLTFLoader} from '/src/gltf-loader.js';
+import {toonVertexColorMaterial, toonMaterial, outlineMaterial} from '/src/toon.js';
+import {place} from '/src/catalog/loader.js';
+
+const TILE = 300, LABEL = 46;
+const renderer = new THREE.WebGLRenderer({antialias: true, preserveDrawingBuffer: true});
+renderer.setSize(TILE, TILE); renderer.setPixelRatio(1);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+const scene = new THREE.Scene(); scene.background = new THREE.Color('#dfe8d6');
+scene.add(new THREE.HemisphereLight('#f4f1e2', '#8a9a72', 1.6));
+const sun = new THREE.DirectionalLight('#fff3d6', 2.4); sun.position.set(-6, 12, 8); scene.add(sun);
+const ground = new THREE.Mesh(new THREE.CircleGeometry(1, 48), toonMaterial('#a5b67d'));
+ground.rotation.x = -Math.PI / 2; ground.position.y = -.005; scene.add(ground);
+const loader = createGLTFLoader();
+const villager = await place('townsfolk-baker', {scale: 1.12});
+villager.updateMatrixWorld(true);
+const vBox = new THREE.Box3().setFromObject(villager);
+
+function toonify(root) {
+  const meshes = []; root.traverse((m) => { if (m.isMesh) meshes.push(m); });
+  for (const m of meshes) {
+    m.material = m.geometry.attributes.color ? toonVertexColorMaterial() : toonMaterial(m.material.color ?? 0xffffff);
+    const hull = new THREE.BufferGeometry(); hull.setAttribute('position', m.geometry.attributes.position.clone());
+    if (m.geometry.index) hull.setIndex(m.geometry.index.clone());
+    const smooth = mergeVertices(hull, .001); smooth.computeVertexNormals();
+    const ink = new THREE.Mesh(smooth, outlineMaterial(.018)); m.add(ink);
+  }
+  return root;
+}
+
+// Town camera: yaw 45 deg, looking down ~35 deg, orthographic.
+function frame(box) {
+  const c = box.getCenter(new THREE.Vector3()), s = box.getSize(new THREE.Vector3());
+  const r = Math.max(s.x, s.y * 1.1, s.z) * .78 + .4;
+  const cam = new THREE.OrthographicCamera(-r, r, r, -r, .1, 2000);
+  const dir = new THREE.Vector3(1, .82, 1).normalize();
+  cam.position.copy(c).addScaledVector(dir, 600); cam.lookAt(c); cam.updateProjectionMatrix();
+  ground.scale.setScalar(r * 2.2); ground.position.x = c.x; ground.position.z = c.z;
+  return cam;
+}
+
+window.renderSheet = async (items, cols) => {
+  const rows = Math.ceil(items.length / cols);
+  const sheet = document.createElement('canvas'); sheet.width = cols * TILE; sheet.height = rows * (TILE + LABEL);
+  const g = sheet.getContext('2d'); g.fillStyle = '#20262b'; g.fillRect(0, 0, sheet.width, sheet.height);
+  const failed = [];
+  for (const [i, it] of items.entries()) {
+    let obj;
+    try { obj = toonify((await loader.loadAsync(it.url)).scene); } catch (e) { failed.push(it.id + ': ' + e.message); continue; }
+    scene.add(obj); obj.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(obj);
+    // Villager stands just off the model's +x side, front facing the camera.
+    villager.position.set(box.max.x + .45 - vBox.min.x, 0, (box.min.z + box.max.z) / 2); villager.rotation.y = Math.PI / 4;
+    scene.add(villager); villager.updateMatrixWorld(true);
+    const cam = frame(box.clone().union(new THREE.Box3().setFromObject(villager)));
+    renderer.render(scene, cam);
+    const x = (i % cols) * TILE, y = Math.floor(i / cols) * (TILE + LABEL);
+    g.drawImage(renderer.domElement, x, y);
+    g.fillStyle = '#f6e8c6'; g.font = '600 15px sans-serif'; g.fillText(it.id, x + 8, y + TILE + 18);
+    g.fillStyle = '#b8c6a2'; g.font = '12px monospace'; g.fillText(it.note, x + 8, y + TILE + 36);
+    scene.remove(obj); scene.remove(villager);
+    obj.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
+  }
+  return {url: sheet.toDataURL('image/png'), failed};
+};
+window.__sheetReady = true;
+</script></body></html>

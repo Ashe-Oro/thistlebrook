@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **Nature outdoors.** I reviewed all 83 GLBs in the owned Nature pack: 42 use, 12 keep, 29 skip. Each verdict has a size, a triangle count, a Draco size and a cel-fit note ([review](docs/specs/NATURE-PACK-REVIEW.md)). Thistlebrook's natural edges now use 24 of the Nature models.
+  - **Pinewood.** Old-growth pines ring the lookout, birches stand by the pond and oaks edge the meadows. Silver snags stand on the upper ridge. Nature granite lines the trails. Fern Hollow has ferns and a chopping stump. The pond has lily pads, a mallard and a heron, plus toadstool logs and mossy stones on its banks. Deer and a fox wait at Foxglove meadow and rabbits at Bluebell. Every trail junction and trail end has a waymark post, and the Pinewood Trailhead has a trail-map board.
+  - **Willow River and Stillwater Outflow.** Willows stand back from the banks, with cattails at the water's edge, stone bars on inner bends, rock shelves on outer bends, and herons and mallards.
+  - **Stillwater.** Cattails, river stones and rock shelves replace the lake's box reeds and blob rocks. Lily pads, mallards and a heron are on the water, a fox, rabbits and ferns are in Birch Hollow, and Nature pines stand west of the cabins.
+  - **Merrymead and the meadow.** Merrymead Park's west edge gets oak and birch clumps with granite and wildflowers. The open meadow's kit boulders become weathered granite.
+
+  For seed 831 that is 146 new placements and 111 kit models replaced in place, including 8 Stillwater pines. The river's own box reeds are gone too. Cattails, ferns and tall grass get a finer ink line, so they read green instead of black. New rule **TOWN-30**: Nature dressing keeps roads, paths, trails and bridges clear and sits on its own surface (ground, ridge, bank, shore or water). The road audit reports it, and `tests/nature-outdoors.test.mjs` checks it.
+
+  Cost: 18 more GLBs load, 1.15 MB after Draco (16.1 MB raw). Draw calls fall by 97 in the whole-town view, because the box reeds were separate meshes, and rise by 8 to 38 in close views. Triangles rise by 4.7 M in the whole-town view (28.8 M to 33.6 M, +16%), mostly from the pack's detailed trees and rocks. Before and after stills, by day and at dusk, are in `/workspace/scratch/opus-nature/`. This change awaits Ashe's sign-off. [Spec and outcome](docs/specs/OPUS-NATURE.md#outcome).
+
+  At publish time, re-run `deploy:dist` and re-upload the Blob model pack so it picks up these nine new files under `public/licensed/nature/`. They are already in the shared licensed folder: `silver_snag.glb`, `axe_chopping_stump.glb`, `fern.glb`, `lily_pad_patch.glb`, `shore_rock_shelf.glb`, `grey_heron.glb`, `mallard_duck.glb`, `trail_marker_post.glb` and `park_info_board.glb`.
 - **Airfield kit at Thistlebrook Municipal Airport.** The box-built terminal, tower, radar and club hangar are gone. In their place are owned Airfield pack buildings:
   - a terminal FBO (at 1.3 scale) clustered with the Clover Flying Club office and a boarding canopy on the public side
   - the control tower with a GSE shed

@@ -8,6 +8,7 @@
 import {readFileSync, writeFileSync, mkdirSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {ROAD_RULE} from '../src/compiler/town-rules.js';
+import {isTree} from '../src/compiler/nature-edges.js';
 import {auditPedestrianRules, auditTownLayout, auditFairLot, auditRailway} from './audit-town-rules.mjs';
 import {existsSync} from 'node:fs';
 import {auditRailwayLayout} from './audit-railway-layout.mjs';
@@ -213,7 +214,7 @@ if (sim.PARKING_BAYS) {
   }
 }
 for (const s of [...sim.TRAFFIC_STOPS, ...sim.WEST_STOPS]) { const hw = Math.max(1.5, ...surfaces.filter((r) => segDistance(s.point, r.a, r.b) < .05).map((r) => r.hw)), post = sim.PARKING_BAYS ? [s.point[0] + s.side[0] * (hw + .22), s.point[1] + s.side[1] * (hw + .22)] : [s.point[0] + s.side[0] * 1.32, s.point[1] + s.side[1] * 1.32]; if (index.depth(post) > 0) add('prop-on-lane', post, `Bus stop post ${s.name} stands on the carriageway`); }
-const props = [...town.props.map((p) => ({pos: p.pos, r: .3, name: p.id || p.asset || 'prop'})), ...town.trees.map((p) => ({pos: p.pos, r: .4, name: 'tree'})), ...[...(town.modelPlacements || []), ...(town.districtFurniture || [])].map((p) => ({pos: p.pos, r: Math.min(p.size?.[0] || .6, p.size?.[2] || .6) / 2, name: p.id})), ...(town.landscape?.models || []).filter((m) => m.asset.includes('tree') || m.asset.includes('rock')).map((m) => ({pos: m.pos, r: .5 * m.scale, name: m.asset}))];
+const props = [...town.props.map((p) => ({pos: p.pos, r: .3, name: p.id || p.asset || 'prop'})), ...town.trees.map((p) => ({pos: p.pos, r: .4, name: 'tree'})), ...[...(town.modelPlacements || []), ...(town.districtFurniture || [])].map((p) => ({pos: p.pos, r: Math.min(p.size?.[0] || .6, p.size?.[2] || .6) / 2, name: p.id})), ...(town.landscape?.models || []).filter((m) => m.asset.includes('tree') || m.asset.includes('rock') || isTree(m.asset) || m.asset.includes('boulder')).map((m) => ({pos: m.pos, r: .5 * m.scale, name: m.asset}))];
 for (const p of props) if (p.pos && index.depth(p.pos) > -p.r + .05) add('prop-on-lane', p.pos, `${p.name} on or overhanging the carriageway`);
 // 8) Street furniture and the cycle strip (TOWN-01/04), and boats (TOWN-11).
 if (existsSync(root + 'src/astra/street-plan.js')) {

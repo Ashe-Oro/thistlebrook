@@ -49,6 +49,11 @@ export const ADDITIONS = [
   ...'birch pine willow'.split(' ').map(f => mesh('nature', f, 'tree', ['feature-tree'])),
   ...'split_firewood_pile meadow_fireflies'.split(' ').map(f => mesh('nature', f, 'prop', ['dressing'])),
   ...'oak pine_sapling_staked'.split(' ').map(f => mesh('nature', f, 'tree', ['sparse'])),
+  // OPUS-NATURE (docs/specs/NATURE-PACK-REVIEW.md): outdoor-edge dressing. The
+  // 'nature-edge' style keeps them out of every existing scatter pool.
+  ...'silver_snag axe_chopping_stump fern lily_pad_patch shore_rock_shelf'.split(' ').map(f => mesh('nature', f, 'prop', ['nature-edge', f.includes('rock') ? 'rock' : 'dressing'])),
+  ...'grey_heron mallard_duck'.split(' ').map(f => mesh('nature', f, 'prop', ['nature-edge', 'wildlife'])),
+  ...'trail_marker_post park_info_board'.split(' ').map(f => mesh('nature', f, 'prop', ['nature-edge', 'trail'])),
   ...'wildflower tall_grass cattails granite_rock_cluster lichen_granite_boulder moss_cushion_rock fallen_log_mossy log_bench lantern mushroom_cluster river_stones creek_stepping_stones'.split(' ').map(f => mesh('nature', f, 'prop', ['sparse', f.includes('rock') || f.includes('stone') || f.includes('boulder') ? 'rock' : 'dressing'])),
 ];
 
@@ -59,6 +64,7 @@ const yardDressing = new Set(['cv-firewood-stack', 'cv-plant-potted', 'cv-flower
 for (const entry of ADDITIONS) {
   if (['cv-window-box', 'cv-laundry-line', 'cv-shop-hanging-sign', 'cv-bicycle', 'cv-birdhouse', 'cv-campfire', 'cv-hay-bale', 'cv-water-pump', 'cv-water-trough', 'nat-split-firewood-pile', 'cv-bench', 'cv-crate', 'cv-hand-cart', 'cv-horse-cart', 'cv-wheelbarrow', ...yardDressing].includes(entry.id)) entry.tags.style.push('street-dressing');
   if (['cv-laundry-line', 'cv-bicycle', 'cv-birdhouse', 'cv-campfire', 'cv-hay-bale', 'cv-water-pump', 'cv-water-trough', 'nat-split-firewood-pile', ...yardDressing].includes(entry.id)) entry.tags.style.push('yard-dressing');
+  if (['nat-cattails', 'nat-fern', 'nat-tall-grass'].includes(entry.id)) entry.outline = 0.012;
   if (entry.id === 'cv-window-box') entry.yOffset = 0.8;
   if (entry.id === 'cv-door-wreath') entry.yOffset = 1;
   if (entry.id === 'cv-shop-hanging-sign') entry.yOffset = 1.2;

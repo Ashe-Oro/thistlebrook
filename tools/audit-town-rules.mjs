@@ -1,4 +1,5 @@
 import {SWITCHYARD_REST} from '../src/astra/skatepark-layout.js';
+import {natureEdgeFindings} from '../src/compiler/nature-edges.js';
 import {segDistance} from '../src/roads/pedestrian.js';
 import {addScaled, minus, midpoint, crossingRoad, inJunction, spansCurbs} from '../src/roads/crosswalks.js';
 
@@ -60,6 +61,8 @@ export function auditTownLayout(town, catalog, connected, add) {
       add('off-surface', p.pos, `${asset} is offset from its ground surface`);
     }
   }
+  // TOWN-30: Nature dressing keeps paths clear and sits on its own surface.
+  if (town.landscape && town.water) for (const f of natureEdgeFindings(town)) add(f.category, f.at, f.detail);
   for (const scene of town.catalogScenes ?? []) {
     const deck = scene.id === 'stop-skatepark' ? SWITCHYARD_REST.elevation : 0;
     if (Math.abs((scene.elevation ?? 0) - deck) > .02) add('off-surface', scene.center, `${scene.id} misses its supporting deck`);

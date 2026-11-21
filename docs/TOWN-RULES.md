@@ -242,6 +242,14 @@ Starbase Texas and the Roadster proving ground are night-time showpieces: tower 
 
 Generated bodies retain the authored vehicle's published dimensions, collision footprint and show clearances. Night fixtures follow the lamps on the fitted body. Each GLB meets its triangle budget and the full set stays under 1.5 MB. An unavailable vehicle model uses its procedural body. Road traffic continues to use owned pack models under TOWN-27.
 
+## TOWN-30 · Natural dressing keeps paths clear and sits on its surface
+
+2026-11-20
+
+> no props on roads or paths, keep walkable routes clear, no floating or buried models
+
+From the OPUS-NATURE brief. Pinewood, the Willow River and Stillwater Outflow banks, Stillwater Lake's shore, Merrymead Park's west edge and the open meadow are dressed with owned Nature pack models (`src/compiler/nature-edges.js`). Each Nature placement records the surface it stands on. Its whole footprint, including a tree's crown, stays clear of every carriageway, path, woods trail tread and bridge. Land props sit on the ground or the Pinewood ridge and stay out of the water. Reeds and stones sit on the river's sand skirt or the lake's mud and sand rings. Waterfowl, herons and lily pads sit on open water at its level. `natureEdgeFindings` reports `nature-on-path` and `nature-off-surface`, and the road audit includes both. `tests/nature-outdoors.test.mjs` checks three seeds and injects a fern on a trail, a cattail in the lake, a floating boulder, a duck on dry land and an oak whose crown overhangs a road. Each fault must be caught.
+
 ## Rules in progress on other lanes
 
 These are already Ashe's rules. Their checks land with the lanes building those features.
