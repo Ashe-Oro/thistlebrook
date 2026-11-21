@@ -149,7 +149,9 @@ export async function instantiate(id, { params, scale = 1, animated = false } = 
     content.position.y = (e.yOffset || 0) * e.scale;
     if (e.yawOffset) content.rotation.y = e.yawOffset; // align door to +Z (dormant: all 0)
     // Outline thickness is applied in object space, so undo the kit scale.
-    const mat = outlineMaterial((e.tags.style.includes('villager') ? 0.008 : OUTLINE_WORLD) / e.scale);
+    // Thin-bladed Nature foliage (reeds, ferns, grass) sets a finer `outline`
+    // so its blades read green rather than solid ink.
+    const mat = outlineMaterial((e.outline ?? (e.tags.style.includes('villager') ? 0.008 : OUTLINE_WORLD)) / e.scale);
     content.traverse((o) => {
       if (!o.userData.outline) return;
       o.material = mat;

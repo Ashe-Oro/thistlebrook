@@ -48,7 +48,9 @@ export async function buildOutskirts(scene,town){
  // and outflow ribbons that end two metres inside the shore.
  lakeShape(2.1,'#c8c49b',.005);lakeShape(.55,'#a3c8b5',.028);lakeShape(0,'#74b3b1',.043);lakeShape(-2.2,'#69a6ac',.047);
  for(let i=0;i<62;i++){const x=LAKE.x+(random()-.5)*44,z=LAKE.z+(random()-.5)*34;if(!inLake([x,z],-2))continue;const m=box(x,.07,z,.4+random()*1.8,.012,.035,i%3?'#b0d4c9':'#88bdba',dynamic);m.castShadow=false;water.push({m,x,width:m.scale.x,phase:random()*6});}
- for(let i=0;i<45;i++){const a=i/45*Math.PI*2,x=LAKE.x+(LAKE.rx+1.4)*Math.cos(a),z=LAKE.z+(LAKE.rz+1.4)*Math.sin(a);if(Math.abs(x+10)<3&&z<59)continue;if(i%3===0){rock(x,.25,z,.55+random()*.8,.3,.45,'#a2aa8f');}else for(let j=0;j<3;j++){const stem=box(x+j*.14,.5,z,.055,.9,.055,'#6b8a5f');stem.rotation.z=(random()-.5)*.3;box(x+j*.14,.95,z,.12,.27,.12,'#8f7956');}}
+ // The shore's cattails, stones, rock shelves, lily pads, mallards and heron
+ // are Nature models planned with the landscape (src/compiler/nature-edges.js).
+ // They replace the box reeds and blob rocks that used to ring the lake here.
  // Three cabinside clearings and a practical campsite, built from owned kits.
  prop('log_cabin',-43,60,1.5);prop('log_cabin',-43,78,1.5);
  prop('ranger_hut',20,45,1.25);prop('trailhead_sign',-26.5,43,1.2);

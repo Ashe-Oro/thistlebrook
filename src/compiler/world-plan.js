@@ -19,6 +19,7 @@ import {REGIONAL} from '../roads/regional.js';
 import {unifyStraightRuns} from '../roads/town-roads.js';
 import {planWater} from './water.js';
 import {planWoods,registerWoods} from './woods.js';
+import {planNatureEdges} from './nature-edges.js';
 import {addRailway,railwayAccessReservations} from './railway.js';
 import {addFairground,FAIR_VIEW} from './astra-fair.js';
 import {addHarbor,HARBOR_VIEWS} from '../astra/harbor-layout.js';
@@ -105,7 +106,7 @@ export function compileWorld(catalog,seed=831,{capture=false}={}){
  // Maple is deterministic and needs to be present for the platform reservations.
  addMapleHollow(town);
  if(!capture)stops.push(...compileAssetVignettes(town,catalog,pointInWorld,railwayAccessReservations()));
- rebuildWorldGraph(town);planRegionalRoads(town);flagMapleHollowRoads(town,planRegionalLines);planLandscape(town);town.water=planWater(town);planWoods(town);addRailway(town,catalog);
+ rebuildWorldGraph(town);planRegionalRoads(town);flagMapleHollowRoads(town,planRegionalLines);planLandscape(town);town.water=planWater(town);planWoods(town);planNatureEdges(town);addRailway(town,catalog);
  const market=town.venues.find(v=>v.id==='work-station');
  Object.assign(market,{name:'West Works Market Hall',type:'market',story:'The old station hall now serves the West Works market and its workshops.'});
  const stopNode=rebuildWorldGraph(town);finishMapleHollow(town,stopNode);

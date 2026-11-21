@@ -59,8 +59,10 @@ export async function buildLandscape(scene,town) {
  }
  // Owned vegetation is instanced by source mesh. Every instance carries its own
  // compiler placement ID, including meadow grass and wildflowers.
- for(const asset of new Set(plan.models.map(p=>p.asset))) {
-  const template=await place(asset),members=plan.models.filter(p=>p.asset===asset);template.updateMatrixWorld(true);
+ // Water's-edge Nature dressing (town.water.dressing) rides the same batches.
+ const placed=[...plan.models,...(town.water?.dressing||[])];
+ for(const asset of new Set(placed.map(p=>p.asset))) {
+  const template=await place(asset),members=placed.filter(p=>p.asset===asset);template.updateMatrixWorld(true);
   const transform=new THREE.Object3D(),matrix=new THREE.Matrix4();
   template.traverse(part=>{if(!part.isMesh)return;const batch=new THREE.InstancedMesh(part.geometry,part.material,members.length);
    members.forEach((p,i)=>{transform.position.set(p.pos[0],p.y||0,p.pos[1]);transform.rotation.y=p.rot;transform.scale.setScalar(p.scale);transform.updateMatrix();batch.setMatrixAt(i,matrix.multiplyMatrices(transform.matrix,part.matrixWorld));});

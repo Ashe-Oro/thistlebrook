@@ -58,6 +58,12 @@ export function extendOutskirts(town,catalog){
   if(o.trees.some(t=>Math.hypot(t.pos[0]-x,t.pos[1]-z)<t.radius+radius-.4))continue;
   o.trees.push({id,pos:[x,z],scale,rot:random()*Math.PI*2,radius});
  }
+ // OPUS-NATURE: a stand of Nature pines west of Birch Hollow and the cabins
+ // replaces kit pines in place (height matched, narrower crown, so every
+ // clearance above still holds). Selection uses its own stream, never `rng`.
+ {const near=o.trees.filter(t=>t.id==='cv-tree-pine'&&t.pos[0]< -50&&t.pos[1]>48&&t.pos[1]<100).sort((a,b)=>a.pos[1]-b.pos[1]||a.pos[0]-b.pos[0]);
+  const pine=catalog.get('nat-pine'),r=Math.max(pine.bounds.max[0]-pine.bounds.min[0],pine.bounds.max[2]-pine.bounds.min[2])*.5;
+  for(const t of near.filter((_,i)=>i%2===0).slice(0,8)){t.id='nat-pine';t.scale=+(t.scale*catalog.get('cv-tree-pine').bounds.max[1]/pine.bounds.max[1]).toFixed(4);t.radius=r*t.scale;}}
  o.gatewayNodes=[[22,30],[-22,20.5]].map(node);town.outskirts=o;
  town.report=checkAstra(town);if(!town.report.ok)throw Error(town.report.errors.join('; '));
  o.report={destinations:o.destinations.length,trees:o.trees.length,connectedNodes:town.nodes.length};

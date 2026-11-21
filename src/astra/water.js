@@ -62,10 +62,7 @@ export function buildWater(scene,town){
    const f=frame(pts,i),o=(random()-.5)*p[3]*1.4,w=.35+random()*1.2;
    const m=box(p[0]+f.nx*o,p[2]+.025,p[1]+f.nz*o,w,.015,.035,'#b7d7cf',Math.atan2(f.tx,f.tz)+Math.PI/2);m.castShadow=false;
    streaks.push({m,x:m.position.x,z:m.position.z,tx:f.tx,tz:f.tz,phase:random()*6,width:w});}
-  // Reeds on the new banks, clear of bridges and the Gulf beach.
-  for(let i=2;i<pts.length-2;i+=2){const p=pts[i];if(p.reach==='town'||random()<.45||g(p)<-.2)continue;const f=frame(pts,i),side=random()<.5?-1:1,o=side*(p[3]+.25+random()*.35);
-   if(plan.bridges.some(b=>Math.hypot(b.pos[0]-p[0],b.pos[1]-p[1])<b.length/2+1)||p[4]>1)continue;
-   const y=g([p[0]+f.nx*o,p[1]+f.nz*o]);for(let j=0;j<3;j++){const m=box(p[0]+f.nx*o+f.tx*j*.16,y+.25+random()*.12,p[1]+f.nz*o+f.tz*j*.16,.055,.5+random()*.25,.055,'#789763');m.rotation.z=(random()-.5)*.4;}}
+  // Bank reeds are Nature cattails planned with the landscape (src/compiler/nature-edges.js).
  }
  // Plunge pool under the falls, with a foam ring.
  for(const q of plan.pools){

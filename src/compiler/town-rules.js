@@ -30,6 +30,7 @@ export const TOWN_RULE = Object.freeze({
   packVehicles: 'TOWN-27',
   nightLandmarks: 'TOWN-28',
   generatedFootprint: 'TOWN-29',
+  natureEdges: 'TOWN-30',
 });
 
 export const ROAD_RULE = Object.freeze({
@@ -81,4 +82,6 @@ export const ROAD_RULE = Object.freeze({
   'festival-facing': TOWN_RULE.festival,
   'festival-road': TOWN_RULE.festival,
   'festival-clearance': TOWN_RULE.festival,
+  'nature-on-path': TOWN_RULE.natureEdges,
+  'nature-off-surface': TOWN_RULE.natureEdges,
 });
