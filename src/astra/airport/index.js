@@ -1,3 +1,5 @@
+import {createRigidBatches} from '../rigid-batches.js';
+import {batchStaticMeshes} from '../static-batches.js';
 import {packVehicle, loadPackGeometry, toonModel, instancedModel} from '../vehicle-models.js';
 import {vehicleModel} from '../traffic-fleet.js';
 import {apronVehicles} from './ground-traffic.js';
@@ -86,7 +88,9 @@ export async function buildAirport(scene,town) {
  const glow=buildLandmarkGlow(airfieldFixtures(),{name:'Airfield',follow:{beaconHead}});root.add(glow.group);
  const [aircraft,groundVehicles]=await Promise.all([aircraftJob,groundVehiclesJob,Promise.all(jobs)]);tagDistrictModels(staticRoot,town,'airport',[0,0]);
  // Repeated markings, buildings and private props use shared instanced draws.
- staticRoot.updateMatrixWorld(true);const batches=new Map();staticRoot.traverse(o=>{if(!o.isMesh)return;const key=o.geometry.uuid+o.material.uuid;if(!batches.has(key))batches.set(key,{o,matrices:[],ids:[]});batches.get(key).matrices.push(o.matrixWorld.clone());batches.get(key).ids.push(o.userData.registryId);});for(const {o,matrices,ids}of batches.values()){const m=new THREE.InstancedMesh(o.geometry,o.material,matrices.length);matrices.forEach((v,i)=>m.setMatrixAt(i,v));m.userData.registryIds=ids;m.castShadow=o.castShadow;m.receiveShadow=o.receiveShadow;root.add(m);}
+ staticRoot.name='Airfield scenery';
+ batchStaticMeshes(staticRoot,root);
+ const rigid=createRigidBatches(dynamic);
  let states=[];
  const update=(t,night=0)=>{
   states=aircraft.map(a=>{const state=sampleFlight(a.spec,t);a.root.position.copy(state.position);a.root.rotation.y=state.heading;a.body.rotation.set(state.pitch,0,state.bank);a.gear.visible=a.spec.kind==='light'||state.gear;a.props.forEach(p=>p.rotation.z=t*(state.phase==='At stand'?1:35));a.lights.forEach(m=>m.visible=Math.sin(t*4)>-.3);return state;});
@@ -95,6 +99,7 @@ export async function buildAirport(scene,town) {
   beaconHead.rotation.y=t*1.4;beaconHead.updateMatrix();setLandmarkNight(night,t);glow.update();
   const atStand=states[0].phase==='At stand';passengers.forEach(({o,n})=>{const u=((t*.12+n*.17)%2),walk=u<1?u:2-u;o.visible=atStand;o.position.set(83.6+walk*5.6,.2,-61.6-walk*.4+(n%3)*.45);o.rotation.y=u<1?Math.PI/2:-Math.PI/2;o.rotation.z=Math.sin(t*8+n)*.035;});
   apronVehicles(t).forEach((v,i)=>{const object=groundVehicles[i];object.position.set(v.position[0],.18,v.position[1]);object.rotation.y=Math.atan2(...v.direction);object.visible=!v.stand||atStand;});
+  rigid.update();
  };
  update(0);
  return {root,aircraft,helicopter:heli,glow,view:AIRPORT.view,update,audit:()=>states.map(s=>({...s,position:s.position.toArray()})),

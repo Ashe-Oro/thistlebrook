@@ -85,28 +85,35 @@ export function createGuestSim({count=180,rides,seed=5207,start=-160}){
 /** Instanced townsfolk for the sim: standing and seated meshes per role. */
 export async function buildGuestCrowd(parent,sim,rides,{place,residentPoses}){
  const roles=['child','shopkeeper','herbalist','merchant'],batches=[];
+ const root=new THREE.Group();root.name='Pinecrest crowd';parent.add(root);
  for(const [r,role]of roles.entries()){
   const members=sim.guests.filter(g=>g.i%roles.length===r);
   for(const seated of [false,true]){
    const template=await place('townsfolk-'+role);
    if(seated)residentPoses(template).setSeat(true);
    template.updateMatrixWorld(true);
-   template.traverse(part=>{if(!part.isMesh)return;const mesh=new THREE.InstancedMesh(part.geometry,part.material,members.length);mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);mesh.frustumCulled=false;mesh.castShadow=part.castShadow&&!part.userData.outline;parent.add(mesh);batches.push({mesh,members,seated,local:part.matrixWorld.clone()});});
+   template.traverse(part=>{if(!part.isMesh)return;const mesh=new THREE.InstancedMesh(part.geometry,part.material,members.length);mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);mesh.frustumCulled=false;mesh.castShadow=part.castShadow&&!part.userData.outline;root.add(mesh);batches.push({mesh,members,seated,local:part.matrixWorld.clone()});});
   }
  }
- const transform=new THREE.Object3D(),zero=new THREE.Matrix4().makeScale(0,0,0),seat=new THREE.Matrix4(),scale=new THREE.Matrix4(),out=new THREE.Matrix4();
- const matrices=new Map();
- return {update(t){
+ const transform=new THREE.Object3D(),seat=new THREE.Matrix4(),scale=new THREE.Matrix4(),out=new THREE.Matrix4();
+ const matrices=sim.guests.map(()=>new THREE.Matrix4());
+ return {update(t,draw=true){
+  root.visible=draw;
+  if(!draw)return;
   for(const g of sim.guests){
-   let m=matrices.get(g.i);if(!m){m=new THREE.Matrix4();matrices.set(g.i,m);}
+   if(g.hidden)continue;
+   const m=matrices[g.i];
    const s=.8+(g.i%3)*.06;
-   if(g.hidden){m.copy(zero);continue;}
    if(g.mode==='ride'&&rides.seatMatrix(g.ride,g.seat,seat)){scale.makeScale(s,s,s);m.multiplyMatrices(seat,scale);continue;}
-   const walking=g.mode==='walk'||g.mode==='queue'&&g.queueMoving;
    const y=g.seated?(g.activity?.seatHeight||.46)*1.12:.16;
    transform.position.set(g.position[0],y+(g.mode==='walk'?Math.abs(Math.sin(t*7+g.i))*.05:0),g.position[1]);
    transform.rotation.set(0,g.yaw,g.mode==='walk'?Math.sin(t*7+g.i)*.035:0);transform.scale.setScalar(s);transform.updateMatrix();m.copy(transform.matrix);
   }
-  for(const {mesh,members,seated,local}of batches){members.forEach((g,k)=>{const sitting=g.seated&&!g.hidden;mesh.setMatrixAt(k,sitting===seated?out.multiplyMatrices(matrices.get(g.i),local):zero);});mesh.instanceMatrix.needsUpdate=true;}
+  for(const {mesh,members,seated,local}of batches){
+   let count=0;
+   for(const g of members)if(!g.hidden&&g.seated===seated)mesh.setMatrixAt(count++,out.multiplyMatrices(matrices[g.i],local));
+   mesh.count=count;
+   mesh.instanceMatrix.needsUpdate=true;
+  }
  }};
 }

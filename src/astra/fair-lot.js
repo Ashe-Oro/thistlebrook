@@ -15,7 +15,7 @@ import {buildLampGlow} from './lamp-glow.js';
 import {createFairLotSim, STYLES, fairLotModel} from './fair-lot-sim.js';
 
 const C = {asphalt: '#7c8980', apron: '#7c8980', paint: '#ece6cf', kerb: '#c9c2ad', paving: '#d8c9a8', grass: '#8fae6a', pole: '#4c5a57', glow: '#ffe3a6', trunk: '#8a6a48', leaf: '#6f9f55', leaf2: '#86b263', red: '#b8433c', cream: '#f4dfad', teal: '#466b70'};
-const Y = {ground: .046, paint: .062}, ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
+const Y = {ground: .046, paint: .062};
 
 function hull(points) {
   const pts = [...points].sort((a, b) => a[0] - b[0] || a[1] - b[1]), cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
@@ -97,6 +97,7 @@ export async function buildFairLot(scene, town, {hour = 10, seed = town?.seed ??
 
   // ---- cars
   const CAP = P.BAYS.length + 8, batches = new Map();
+  const moving = new THREE.Group(); moving.name = 'Funfair Parking traffic and visitors'; root.add(moving);
   await Promise.all(STYLES.flatMap(({id,colors})=>colors.map(async colour=>{
     const template=await packVehicle(fairLotModel(id,colour));
     template.updateMatrixWorld(true);
@@ -105,9 +106,9 @@ export async function buildFairLot(scene, town, {hour = 10, seed = town?.seed ??
       if(!part.isMesh)return;
       const geometry=part.geometry.clone().applyMatrix4(part.matrixWorld);
       const mesh=new THREE.InstancedMesh(geometry,part.material,CAP);
-      mesh.name=`Funfair Parking ${id} ${colour}`;mesh.count=1;mesh.setMatrixAt(0,ZERO);mesh.frustumCulled=false;
+      mesh.name=`Funfair Parking ${id} ${colour}`;mesh.frustumCulled=false;
       mesh.castShadow=!part.userData.outline;mesh.receiveShadow=!part.userData.outline;mesh.userData={...part.userData,fleet:template.userData.fleet};
-      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);root.add(mesh);parts.push(mesh);
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);moving.add(mesh);parts.push(mesh);
     });
     batches.set(id+colour,parts);
   })));
@@ -115,16 +116,23 @@ export async function buildFairLot(scene, town, {hour = 10, seed = town?.seed ??
   const roles = ['merchant', 'child'], VCAP = 40, crowd = [];
   for (const role of roles) {
     const template = await place('townsfolk-' + role); template.updateMatrixWorld(true);
-    template.traverse((part) => { if (!part.isMesh) return; const mesh = new THREE.InstancedMesh(part.geometry, part.material, VCAP); mesh.count = 1; mesh.setMatrixAt(0, ZERO); mesh.frustumCulled = false; mesh.castShadow = !part.userData.outline; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); mesh.name = 'Funfair Parking visitors'; root.add(mesh); crowd.push({role, mesh, local: part.matrixWorld.clone()}); });
+    template.traverse((part) => { if (!part.isMesh) return; const mesh = new THREE.InstancedMesh(part.geometry, part.material, VCAP); mesh.frustumCulled = false; mesh.castShadow = !part.userData.outline; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); mesh.name = 'Funfair Parking visitors'; moving.add(mesh); crowd.push({role, mesh, local: part.matrixWorld.clone()}); });
   }
   const owner = town?.districts?.find((d) => d.id === 'themepark')?.registryId;
   if (owner) tagAssembly(root, owner);
-  const dynamic = [...[...batches.values()].flat(), ...crowd.map((c) => c.mesh)];
-  const retag = (mesh) => { if (owner) mesh.userData.registryIds = Array.from({length: mesh.count}, () => owner); };
+  const dynamicCount = moving.children.length;
 
   const sim = createFairLotSim({hour, seed});
   const tf = new THREE.Object3D(), m4 = new THREE.Matrix4();
   let lastT = null, otherVehicles = () => [];
+  function finishInstances(mesh, count) {
+    mesh.count = count;
+    mesh.visible = count > 0;
+    if (!count) return;
+    mesh.instanceMatrix.clearUpdateRanges();
+    mesh.instanceMatrix.addUpdateRange(0, count * 16);
+    mesh.instanceMatrix.needsUpdate = true;
+  }
   function render(t) {
     const counts = new Map([...batches.keys()].map(key=>[key,0]));
     for (const v of sim.vehicles()) {
@@ -133,9 +141,7 @@ export async function buildFairLot(scene, town, {hour = 10, seed = town?.seed ??
       tf.position.set(v.position[0], .02, v.position[1]); tf.rotation.set(0, Math.atan2(v.direction[0], v.direction[1]), 0); tf.scale.setScalar(1); tf.updateMatrix();
       for (const mesh of parts) mesh.setMatrixAt(i,tf.matrix);
     }
-    // Never an empty batch: the registry needs one id per instance, so an
-    // unused style keeps a single zero-scale instance.
-    for (const [id, parts] of batches) for (const mesh of parts) { const n = counts.get(id); if (!n) mesh.setMatrixAt(0, ZERO); mesh.visible = n > 0; mesh.count = Math.max(1, n); mesh.instanceMatrix.needsUpdate = true; }
+    for (const [id, parts] of batches) for (const mesh of parts) finishInstances(mesh, counts.get(id));
     const people = sim.people(), per = new Map(roles.map((r) => [r, 0]));
     for (const p of people) {
       const n = Number(p.id.split('-').at(-1)), role = roles[n % roles.length], i = per.get(role); if (i >= VCAP) continue; per.set(role, i + 1);
@@ -143,15 +149,19 @@ export async function buildFairLot(scene, town, {hour = 10, seed = town?.seed ??
       tf.position.set(p.x, .16 + bob, p.z); tf.rotation.set(0, p.heading, p.waiting ? 0 : Math.sin(t * 7 + n) * .035); tf.scale.setScalar(s); tf.updateMatrix();
       for (const c of crowd) if (c.role === role) c.mesh.setMatrixAt(i, m4.multiplyMatrices(tf.matrix, c.local));
     }
-    for (const c of crowd) { const n = per.get(c.role); if (!n) c.mesh.setMatrixAt(0, ZERO); c.mesh.visible = n > 0; c.mesh.count = Math.max(1, n); c.mesh.instanceMatrix.needsUpdate = true; }
-    dynamic.forEach(retag);
+    for (const c of crowd) finishInstances(c.mesh, per.get(c.role));
   }
   render(0);
   const bounds = new THREE.Box3(new THREE.Vector3(P.LOT.minX, 0, P.LOT.minZ), new THREE.Vector3(P.LOT.maxX, 4, P.LOT.maxZ));
+  // Include the mountain road spawn segment, the gate walk and long shadows.
+  const spawn = P.lanePoint(P.SPAWN_S, true).p;
+  const movingBounds = new THREE.Box3(
+    new THREE.Vector3(spawn[0] - 24, -2, P.GATE[1] - 24),
+    new THREE.Vector3(P.LOT.maxX + 24, 6, P.LOT.maxZ + 24));
   return {
     root, sim, setOtherVehicles(fn) { otherVehicles=fn; },
     selectables: [{type: 'venue', data: {id: 'funfair-parking', name: 'Funfair Parking', district: 'themepark', story: `${P.BAYS.length} marked bays beside Pinecrest's Funfair gate. Cars come off the mountain road, follow the arrows round the one-way aisles and park nose-in; visitors walk the centre promenade and cross at the zebras to the gate. Busy from late morning until the lights go out.`}, bounds}],
-    update(t, hour, night, people = []) {
+    update(t, hour, night, people = [], view) {
       kit.update(night);
       const dt = lastT === null ? 0 : Math.max(0, Math.min(.5, t - lastT)); lastT = t;
       const near = [];
@@ -160,8 +170,9 @@ export async function buildFairLot(scene, town, {hour = 10, seed = town?.seed ??
         if (o.x > 180 && o.x < 276 && o.z > -12 && o.z < 42) near.push(p.actor ? residentPedestrian(p.actor) : o);
       }
       sim.update(dt || 1e-6, hour, near, t, otherVehicles());
-      render(t);
+      moving.visible = !view || view.intersectsBox(movingBounds);
+      if (moving.visible) render(t);
     },
-    audit() { return {...sim.audit(), drawCalls: 1 + dynamic.length}; },
+    audit() { return {...sim.audit(), drawCalls: 1 + dynamicCount}; },
   };
 }

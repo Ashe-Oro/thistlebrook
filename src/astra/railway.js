@@ -1,3 +1,4 @@
+import {createRigidBatches} from './rigid-batches.js';
 // OWNER: railway-loop lane. Renders the Thistlebrook Loop Line from the pure
 // plan (src/compiler/railway.js) and timetable (src/astra/railway-plan.js):
 // merged ballast and rails, instanced sleepers, platforms and their dressing,
@@ -292,6 +293,7 @@ export async function buildRailway(scene, town, {landscape = null} = {}) {
   for (const tr of service.travellers) { const model = TOWNSFOLK[tr.model % TOWNSFOLK.length], o = await place(model.id, {scale: 1.12}); o.visible = false; o.name = 'Rail traveller · ' + tr.id; root.add(o); people.push({tr, o}); }
   // Regional cars stop at closed barriers. The Pinecrest shuttle passes beneath the viaduct.
   landscape?.traffic?.setStopLines?.(() => rail.crossings.map((c, i) => ({point: c.pos, stop: RAIL.half + 2.2, closed: service.crossings[i].closed})));
+  const rigid=createRigidBatches(root);
   function update(t, hour, night = 0) {
     if (service.hour !== hour) service.update(hour);
     railNight.value = night; glows.visible = night > .2;
@@ -300,6 +302,7 @@ export async function buildRailway(scene, town, {landscape = null} = {}) {
     smoke.forEach((m, n) => { const phase = (t * .45 + n / smoke.length) % 1, chimney = loco.y + RAIL_TOP + 1.95 * RAIL.stock; m.visible = !loco.hidden; m.position.set(loco.pos[0] + loco.dir[0] * (3.2 - phase * 2.5 * Math.min(1, service.train.speed / 4 + .2)), chimney + phase * 2.4, loco.pos[1] + loco.dir[1] * (3.2 - phase * 2.5 * Math.min(1, service.train.speed / 4 + .2))); m.scale.setScalar(.5 + phase * 1.3); m.material.opacity = (1 - phase) * .45; });
     crossings.forEach(({arms}, i) => { const s = service.crossings[i], blink = s.closed && Math.floor(t * 2.4) % 2; for (const a of arms) { a.boom.rotation.z = (1 - s.lower) * Math.PI * .47; a.lamps[0].material.color.set(s.closed && blink ? '#ff4a35' : night > .25 && !s.closed ? '#ffbd68' : '#4a1b16'); a.lamps[1].material.color.set(s.closed && !blink ? '#ff4a35' : night > .25 && !s.closed ? '#ffbd68' : '#4a1b16'); } });
     for (const p of people) { const pose = service.travellerPose(p.tr); p.o.visible = !!pose; if (!pose) continue; p.o.position.set(pose.pos[0], travellerHeight(town, ramps, pose.pos) + (pose.moving ? Math.abs(Math.sin(t * 8 + p.tr.model)) * .05 : 0), pose.pos[1]); if (pose.moving) p.o.rotation.y = pose.facing; else if (pose.phase === 'waiting') { const st = rail.stations.find((s) => s.id === p.tr.from); p.o.rotation.y = Math.atan2(-st.out[0], -st.out[1]); } }
+    rigid.update();
   }
   service.update(10);
   update(0, 10, 0);

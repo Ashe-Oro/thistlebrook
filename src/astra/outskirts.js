@@ -1,4 +1,6 @@
-import {bindMeshDetail,inheritMeshDetail,lodUrl} from './model-detail.js';
+import {createRigidBatches} from './rigid-batches.js';
+import {batchStaticMeshes} from './static-batches.js';
+import {bindMeshDetail,lodUrl} from './model-detail.js';
 import {outskirtsLogPlacements} from './registry/seed-models.js';
 import {tagDistrictModels} from './registry/district-models.js';
 import * as THREE from 'three';
@@ -105,16 +107,18 @@ export async function buildOutskirts(scene,town,{detail}={}){
  for(let i=0;i<18;i++){const m=new THREE.Mesh(rockGeo,new THREE.MeshBasicMaterial({color:'#e4e6a3'}));m.scale.setScalar(.055);dynamic.add(m);fireflies.push({m,x:-32+random()*43,z:91+random()*20,phase:random()*6});}
  await Promise.all(loads);tagDistrictModels(root,town,'outskirts',[0,0]);tagDistrictModels(dynamic,town,'outskirts');
  // All repeated geometry, including private kit hulls, uses shared instances.
- root.updateMatrixWorld(true);const batches=new Map();root.traverse(o=>{if(!o.isMesh)return;const key=o.geometry.uuid+o.material.uuid;if(!batches.has(key))batches.set(key,{o,matrices:[],ids:[]});batches.get(key).matrices.push(o.matrixWorld.clone());batches.get(key).ids.push(o.userData.registryId);});
- const statics=new THREE.Group();statics.name='Stillwater static instances';scene.add(statics);for(const {o,matrices,ids}of batches.values()){const batch=new THREE.InstancedMesh(o.geometry,o.material,matrices.length);inheritMeshDetail(o,batch);matrices.forEach((m,i)=>batch.setMatrixAt(i,m));batch.userData.registryIds=ids;batch.castShadow=o.castShadow;batch.receiveShadow=o.receiveShadow;statics.add(batch);}
+ root.name='Stillwater scenery';
+ const statics=batchStaticMeshes(root,scene,{cellSize:54});
  const life=await createOutskirtsLife(scene,town);
+ const rigid=createRigidBatches(dynamic);
  const selectables=data.destinations.map(d=>({type:'outskirts',data:d,bounds:new THREE.Box3(new THREE.Vector3(d.pos[0]-2,0,d.pos[1]-2),new THREE.Vector3(d.pos[0]+2,d.height,d.pos[1]+2))}));
  // Buildings can be clicked on the roof as well as at their path endpoint.
  for(const [id,x,z,rx,rz,h]of [['cabin-1',-43,60,3.3,2.9,5.4],['cabin-2',-43,78,3.3,2.9,5.4],['farm',52,83,4.5,4.5,5.4],['ranger',20,45,2,2,4]]){const d=data.destinations.find(d=>d.id==='outskirts-'+id);selectables.push({type:'outskirts',data:d,bounds:new THREE.Box3(new THREE.Vector3(x-rx,0,z-rz),new THREE.Vector3(x+rx,h,z+rz))});}
- return {life,selectables,stats:{trees:data.trees.length,visitors:life.people.length,destinations:data.destinations.length,staticBatches:batches.size},update(t,night,hour){
+ return {life,selectables,stats:{trees:data.trees.length,visitors:life.people.length,destinations:data.destinations.length,staticBatches:statics.children.length},update(t,night,hour){
   life.update(t,hour);for(const w of water){w.m.position.x=w.x+Math.sin(t*.35+w.phase)*.3;w.m.scale.x=w.width*(.85+Math.sin(t*.7+w.phase)*.15);}boats.forEach((b,i)=>{b.position.y=.05+Math.sin(t*.8+i)*.025;b.rotation.z=Math.sin(t*.55)*.025;});
   const lit=night>.18;flame.visible=lit;flame.scale.y=.8+Math.sin(t*8)*.12;fireLight.intensity=night*(8+Math.sin(t*7)*.6);halo.material.opacity=night*.2;lanterns.forEach(l=>l.visible=lit);fireflies.forEach(f=>{f.m.visible=lit;f.m.position.set(f.x+Math.sin(t*.4+f.phase),.8+Math.sin(t*.8+f.phase)*.4,f.z+Math.cos(t*.3+f.phase));});
   wildlife.forEach(a=>{a.o.position.set(a.x+Math.sin(t*.05+a.phase)*.8,.03,a.z+Math.cos(t*.07+a.phase)*.4);a.o.rotation.y=1.8+Math.sin(t*.2+a.phase)*.2;a.o.rotation.x=Math.sin(t*.5+a.phase)*.07;});
+  rigid.update();
  },audit(){return {stats:this.stats,people:life.audit(),arrivals:[...life.arrivals],canoes:boats.map(b=>b.position.toArray()),wildlife:wildlife.map(a=>a.o.position.toArray())};}};
 }
 

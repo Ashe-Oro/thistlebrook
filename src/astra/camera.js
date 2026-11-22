@@ -44,10 +44,14 @@ export function createMapCamera(camera, element, { bounds, hashZoom = () => unde
   const target = new THREE.Vector3();
   const raycaster = new THREE.Raycaster();
   const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const screen = new THREE.Vector2(), groundBefore = new THREE.Vector3(), groundAfter = new THREE.Vector3();
+  const orientedTarget = new THREE.Vector3();
+  const inertia = new THREE.Vector3(), touchVelocity = new THREE.Vector3();
   const pointers = new Map();
   const disposers = [];
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   let rotation = 0, desiredZoom = camera.zoom, destination = null, anchor = null;
+  let orientedRotation;
   let gesture = null, hashTimer = null, lastState = '';
   const listen = (node, type, fn, options) => {
     node.addEventListener(type, fn, options);
@@ -57,9 +61,12 @@ export function createMapCamera(camera, element, { bounds, hashZoom = () => unde
     target.y = 0;
     target.x = THREE.MathUtils.clamp(target.x, bounds.minX, bounds.maxX);
     target.z = THREE.MathUtils.clamp(target.z, bounds.minZ, bounds.maxZ);
+    if (orientedRotation === rotation && orientedTarget.equals(target)) return;
+    orientedRotation = rotation;
+    orientedTarget.copy(target);
     const heading = Math.PI / 4 + rotation * quarter;
     // Equal foreshortening of all three world axes: true isometric elevation.
-    camera.position.copy(target).add(new THREE.Vector3(Math.sin(heading) * 800, 800 / Math.sqrt(2), Math.cos(heading) * 800));
+    camera.position.set(target.x + Math.sin(heading) * 800, 800 / Math.sqrt(2), target.z + Math.cos(heading) * 800);
     camera.lookAt(target);
     camera.updateMatrixWorld();
   }
@@ -71,23 +78,35 @@ export function createMapCamera(camera, element, { bounds, hashZoom = () => unde
     return location.href;
   }
   function changed() {
-    const key = writeCameraHash('', state());
+    const key = `${target.x.toFixed(3)},${target.z.toFixed(3)},${camera.zoom.toFixed(4)},${rotation}`;
     if (key === lastState) return;
     lastState = key;
     onChange(state());
     if (!hashTimer) hashTimer = setTimeout(flushHash, 160);
   }
-  function groundAt(x, y) {
-    const rect = element.getBoundingClientRect();
-    raycaster.setFromCamera(new THREE.Vector2((x - rect.left) / rect.width * 2 - 1, 1 - (y - rect.top) / rect.height * 2), camera);
-    return raycaster.ray.intersectPlane(ground, new THREE.Vector3());
+  function groundAt(x, y, hit = new THREE.Vector3(), rect = element.getBoundingClientRect()) {
+    if (!rect.width || !rect.height) return null;
+    screen.set((x - rect.left) / rect.width * 2 - 1, 1 - (y - rect.top) / rect.height * 2);
+    raycaster.setFromCamera(screen, camera);
+    return raycaster.ray.intersectPlane(ground, hit);
   }
-  function cancel() { destination = null; anchor = null; desiredZoom = camera.zoom; }
-  function interact(kind) { destination = null; onInteract(kind); }
+  function cancel() { destination = null; anchor = null; desiredZoom = camera.zoom; inertia.set(0, 0, 0); }
+  function interact(kind) { destination = null; inertia.set(0, 0, 0); onInteract(kind); }
   function pan(from, to) {
-    const a = groundAt(from.x, from.y), b = groundAt(to.x, to.y);
+    const rect = element.getBoundingClientRect();
+    const a = groundAt(from.x, from.y, groundBefore, rect), b = groundAt(to.x, to.y, groundAfter, rect);
     if (a && b) target.add(a.sub(b));
-    orient(); changed();
+    // Move the rendered camera on the pointer event. Publish UI, LOD and hash
+    // changes once per frame, so coalesced events do only camera work.
+    orient();
+  }
+  function applyZoom(amount, point) {
+    const rect = point && element.getBoundingClientRect();
+    const before = point && groundAt(point.x, point.y, groundBefore, rect);
+    camera.zoom = amount;
+    camera.updateProjectionMatrix();
+    const after = point && groundAt(point.x, point.y, groundAfter, rect);
+    if (before && after) target.add(before.sub(after));
   }
   function zoom(factor, point = null) {
     if (!Number.isFinite(factor) || factor <= 0) return;
@@ -127,13 +146,18 @@ export function createMapCamera(camera, element, { bounds, hashZoom = () => unde
       }
       camera.updateProjectionMatrix();
     } else if (camera.zoom !== desiredZoom) {
-      const before = anchor && groundAt(anchor.x, anchor.y);
-      camera.zoom = THREE.MathUtils.lerp(camera.zoom, desiredZoom, a);
-      if (Math.abs(camera.zoom - desiredZoom) < .0001) camera.zoom = desiredZoom;
-      camera.updateProjectionMatrix();
-      const after = anchor && groundAt(anchor.x, anchor.y);
-      if (before && after) target.add(before.sub(after));
+      const amount = THREE.MathUtils.lerp(camera.zoom, desiredZoom, a);
+      applyZoom(Math.abs(amount - desiredZoom) < .0001 ? desiredZoom : amount, anchor);
       if (camera.zoom === desiredZoom) anchor = null;
+    }
+    if (inertia.lengthSq()) {
+      if (reducedMotion.matches) inertia.set(0, 0, 0);
+      else {
+        const decay = Math.exp(-Math.max(0, dt) * 10);
+        target.addScaledVector(inertia, (1 - decay) / 10);
+        inertia.multiplyScalar(decay);
+        if (inertia.lengthSq() < .04) inertia.set(0, 0, 0);
+      }
     }
     orient(); changed();
   }
@@ -144,23 +168,41 @@ export function createMapCamera(camera, element, { bounds, hashZoom = () => unde
     interact(); cancel();
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     element.setPointerCapture(e.pointerId);
-    if (pointers.size === 1) gesture = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, multiple: false, button: e.button };
+    if (pointers.size === 1) {
+      touchVelocity.set(0, 0, 0);
+      gesture = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, multiple: false,
+        button: e.button, touch: e.pointerType === 'touch', time: e.timeStamp };
+    }
     else if (gesture) gesture.multiple = true;
     onHover(null); element.style.cursor = 'grabbing';
   });
   listen(element, 'pointermove', e => {
     if (!pointers.has(e.pointerId)) { if (e.pointerType !== 'touch') onHover({ x: e.clientX, y: e.clientY }); return; }
-    const previous = [...pointers.values()], old = pointers.get(e.pointerId);
+    const previous = pointers.size === 2 ? [...pointers.values()] : null, old = pointers.get(e.pointerId);
     const point = { x: e.clientX, y: e.clientY };
     pointers.set(e.pointerId, point);
+    const wasMoved = gesture?.moved;
     if (gesture && Math.hypot(e.clientX - gesture.x, e.clientY - gesture.y) > 5) gesture.moved = true;
     if (pointers.size === 1) {
-      if (gesture?.moved || gesture?.multiple) pan(old, point);
-    } else if (pointers.size === 2) {
+      if (!gesture || (!gesture.moved && !gesture.multiple)) return;
+      const { x, z } = target;
+      pan(wasMoved || gesture.multiple ? old : gesture, point);
+      if (gesture.touch && !gesture.multiple && !reducedMotion.matches) {
+        const seconds = THREE.MathUtils.clamp((e.timeStamp - gesture.time) / 1000, 1 / 120, .075);
+        const maxSpeed = 2.5 * (camera.top - camera.bottom) / camera.zoom;
+        touchVelocity.set((target.x - x) / seconds, 0, (target.z - z) / seconds).clampLength(0, maxSpeed);
+        gesture.time = e.timeStamp;
+      }
+    } else if (previous) {
       const next = [...pointers.values()];
-      pan(midpoint(previous), midpoint(next));
+      const center = midpoint(next);
+      pan(midpoint(previous), center);
       const d = distance(previous);
-      if (d > 0) zoom(distance(next) / d, midpoint(next));
+      if (d > 0) {
+        desiredZoom = clampZoom(camera.zoom * distance(next) / d);
+        applyZoom(desiredZoom, center);
+        orient();
+      }
     }
   });
   function release(e, cancelled = false) {
@@ -169,6 +211,9 @@ export function createMapCamera(camera, element, { bounds, hashZoom = () => unde
     if (element.hasPointerCapture(e.pointerId)) element.releasePointerCapture(e.pointerId);
     if (!pointers.size) {
       const tap = !cancelled && gesture && gesture.id === e.pointerId && !gesture.moved && !gesture.multiple && gesture.button === 0;
+      if (!cancelled && gesture?.touch && gesture.moved && !gesture.multiple && !reducedMotion.matches && e.timeStamp - gesture.time <= 80) {
+        inertia.copy(touchVelocity);
+      }
       gesture = null; element.style.cursor = 'grab';
       if (tap) onTap(e.clientX, e.clientY);
     }
@@ -193,6 +238,7 @@ export function createMapCamera(camera, element, { bounds, hashZoom = () => unde
         interact(); cancel();
         const rect = element.getBoundingClientRect(), x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
         pan({ x, y }, { x: x + (e.key === 'ArrowLeft' ? 56 : e.key === 'ArrowRight' ? -56 : 0), y: y + (e.key === 'ArrowUp' ? 56 : e.key === 'ArrowDown' ? -56 : 0) });
+        changed();
       }
     }
   });
@@ -201,7 +247,7 @@ export function createMapCamera(camera, element, { bounds, hashZoom = () => unde
     if (saved) { interact(); view(saved, true); flushHash(); }
   });
   listen(window, 'blur', () => {
-    gesture = null;
+    gesture = null; inertia.set(0, 0, 0);
     for (const id of pointers.keys()) if (element.hasPointerCapture(id)) element.releasePointerCapture(id);
     pointers.clear(); onHover(null); element.style.cursor = 'grab';
   });
@@ -211,6 +257,7 @@ export function createMapCamera(camera, element, { bounds, hashZoom = () => unde
   element.setAttribute('aria-label', 'Thistlebrook town map. Drag or use arrow keys to pan, plus and minus to zoom, Q and E to rotate. Use Meet a neighbour to explore residents.');
   orient();
   return { target, update, view, zoom, rotate, cancel, state, groundAt, flushHash, destination:()=>destination,
+    panning: () => Boolean(gesture?.touch && (gesture.moved || gesture.multiple)),
     restore() { const saved = readCameraHash(location.hash, hashZoom()); if (saved) view(saved, true); return Boolean(saved); },
     dispose() { disposers.forEach(fn => fn()); clearTimeout(hashTimer); pointers.clear(); },
   };

@@ -16,6 +16,7 @@ import {hull} from './watercraft.js';
 import {landscapeHills} from '../compiler/terrain.js';
 import {excavateHill, tunnelCuts} from './railway-tunnels.js';
 import {inkMesh} from './ink-mesh.js';
+import {sceneryVisibility} from './scenery-visibility.js';
 
 function strip(points,width,color,y,parent,id) {
  const vertices=[],indices=[];
@@ -61,6 +62,7 @@ export async function buildLandscape(scene,town,{detail,stream,sceneryInFrame}={
  // Owned vegetation is instanced by source mesh. Every instance carries its own
  // compiler placement ID, including meadow grass and wildflowers.
  // Water's-edge Nature dressing (town.water.dressing) rides the same batches.
+ const scenery=sceneryVisibility();
  const placed=[...plan.models,...(town.water?.dressing||[])];
  await Promise.all([...new Set(placed.map(p=>p.asset))].map(async asset=>{
   const members=placed.filter(p=>p.asset===asset);
@@ -81,6 +83,7 @@ export async function buildLandscape(scene,town,{detail,stream,sceneryInFrame}={
   return parts.map((part,index)=>{const batch=new THREE.InstancedMesh(part.geometry,part.material,members.length);
    members.forEach((p,i)=>{transform.position.set(p.pos[0],p.y||0,p.pos[1]);transform.rotation.y=p.rot;transform.scale.setScalar(p.scale);transform.updateMatrix();batch.setMatrixAt(i,matrix.multiplyMatrices(transform.matrix,part.matrixWorld));});
    tagBatch(batch, members.map(p => p.registryId));
+   scenery.add(batch,members);
    if (part.userData.outline) {
      batch.userData.outline = true;
      batch.receiveShadow = false;
@@ -157,7 +160,7 @@ export async function buildLandscape(scene,town,{detail,stream,sceneryInFrame}={
  function resizeOcean(narrow){
   sea.geometry=narrow?(mobileOcean??=new THREE.PlaneGeometry(7200,7200)):desktopOcean;
  }
- return {vehicles,routes,sea,traffic,resizeOcean,setOtherVehicles(fn){others=fn;},update(t,hour,people,railTravellers=[]){
+ return {vehicles,routes,sea,traffic,resizeOcean,cullScenery:scenery.update,setOtherVehicles(fn){others=fn;},update(t,hour,people,railTravellers=[]){
   clock.value=t;const dt=Math.max(0,Math.min(.8,t-lastT));lastT=t;
   const walkers=(people||[]).filter(p=>p.object.visible!==false).map(p=>residentPedestrian(p.actor,p.walkPace));
   traffic.update(dt,hour,[...walkers,...railTravellers],others());

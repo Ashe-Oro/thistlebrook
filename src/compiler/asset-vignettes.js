@@ -3,6 +3,7 @@ import {sceneData,overlap} from '../catalog/library/index.js';
 import {riverZ} from './astra.js';
 import {inLake} from '../astra/outskirts-layout.js';
 import {boxInRiver} from './water.js';
+import {indexBoxes} from './box-index.js';
 import {districtFurniture} from '../astra/registry/district-furniture.js';
 import {supplementalPlacements} from '../astra/registry/placements.js';
 import landmarks from '../astra/registry/district-landmarks.json' with {type:'json'};
@@ -16,6 +17,10 @@ const zones={
 };
 export const pathBox=(a,b,pad)=>({min:[Math.min(a[0],b[0])-pad,Math.min(a[1],b[1])-pad],max:[Math.max(a[0],b[0])+pad,Math.max(a[1],b[1])+pad]});
 const movedBox=(box,p)=>({min:box.min.map((v,k)=>v+p[k]),max:box.max.map((v,k)=>v+p[k])});
+const overlaps=boxes=>{
+ const near=indexBoxes(boxes);
+ return (box,pad=0)=>near(box,pad,other=>overlap(other,box,pad));
+};
 const corners=b=>[b.min,b.max,[b.min[0],b.max[1]],[b.max[0],b.min[1]]];
 export function vignetteObstacles(town,catalog){
  const kit=[...town.props,...town.trees,...supplementalPlacements(town)].flatMap(p=>{
@@ -36,9 +41,9 @@ export function compileAssetVignettes(town,catalog,pointInWorld,reservations=[])
  for(const spec of [...sceneData.vignettes].sort((a,b)=>area(b)-area(a))){
   const zone=zones[spec.district],district=town.districts.find(d=>d.id===spec.district);
   const templates=[0,1,2,3].map(n=>compileScene(spec.recipe,[0,0],n*Math.PI/2,spec.id));
-  const occupied=obstacles.concat(town.catalogScenes.map(s=>s.box));
-  const roads=town.roads.map(r=>pathBox(r.a,r.b,r.width/2+.25));
-  const carriageways=town.roads.filter(r=>r.kind==='avenue'||!r.owner&&r.kind!=='pedestrian'&&r.width>=2.4&&Math.min(r.a[1],r.b[1])<4.01).map(r=>pathBox([r.a[0],r.kind==='avenue'?r.a[1]:Math.min(4,r.a[1])],[r.b[0],r.kind==='avenue'?r.b[1]:Math.min(4,r.b[1])],r.width/2));
+  const occupied=overlaps(obstacles.concat(town.catalogScenes.map(s=>s.box)));
+  const roads=overlaps(town.roads.map(r=>pathBox(r.a,r.b,r.width/2+.25)));
+  const carriageways=overlaps(town.roads.filter(r=>r.kind==='avenue'||!r.owner&&r.kind!=='pedestrian'&&r.width>=2.4&&Math.min(r.a[1],r.b[1])<4.01).map(r=>pathBox([r.a[0],r.kind==='avenue'?r.a[1]:Math.min(4,r.a[1])],[r.b[0],r.kind==='avenue'?r.b[1]:Math.min(4,r.b[1])],r.width/2)));
   const candidates=[];
   for(const road of town.roads.filter(r=>!r.owner?.startsWith('catalog')&&r.kind!=='world-link')){
    const dx=road.b[0]-road.a[0],dz=road.b[1]-road.a[1],length=Math.hypot(dx,dz);
@@ -48,13 +53,16 @@ export function compileAssetVignettes(town,catalog,pointInWorld,reservations=[])
     const center=street.map((v,k)=>v+normal[k]*setback);
     if(center[0]<zone[0]||center[0]>zone[2]||center[1]<zone[1]||center[1]>zone[3])continue;
     const yaw=Math.round(Math.atan2(-normal[0],-normal[1])/(Math.PI/2)),template=templates[(yaw+4)%4],box=movedBox(template.box,center);
+    if(occupied(box,.35))continue;
     if(corners(box).some(p=>!pointInWorld(p,town)||Math.abs(p[1]-riverZ(p[0]))<3.4||spec.district==='outskirts'&&inLake(p,3))||boxInRiver(box,.8))continue;
-    if(occupied.some(b=>overlap(b,box,.35)))continue;
-    if(template.members.some(m=>roads.some(b=>overlap(b,movedBox(m.box,center)))))continue;
-    if(template.slots.some(s=>roads.some(b=>overlap(b,pathBox([s.position[0]+center[0],s.position[2]+center[1]],[s.position[0]+center[0],s.position[2]+center[1]],.38)))))continue;
+    if(template.members.some(m=>roads(movedBox(m.box,center))))continue;
+    if(template.slots.some(s=>{
+     const point=[s.position[0]+center[0],s.position[2]+center[1]];
+     return roads(pathBox(point,point,.38));
+    }))continue;
     const aisle=template.aisle.map(p=>p.map((v,k)=>v+center[k]));
     // The exterior aisle is a footpath: it must sit beside the road, not on it.
-    if(carriageways.some(b=>overlap(b,pathBox(aisle[0],aisle.at(-1),.45))))continue;
+    if(carriageways(pathBox(aisle[0],aisle.at(-1),.45)))continue;
     const entry=aisle.reduce((a,b)=>Math.hypot(a[0]-street[0],a[1]-street[1])<Math.hypot(b[0]-street[0],b[1]-street[1])?a:b);
     // Leave the road across its width before turning to meet the aisle.
     const join=Math.abs(dz)>Math.abs(dx)?[entry[0],street[1]]:[street[0],entry[1]];
@@ -64,7 +72,7 @@ export function compileAssetVignettes(town,catalog,pointInWorld,reservations=[])
      for(let n=0;n<=steps;n++){const p=a.map((v,k)=>v+(b[k]-v)*n/steps);if(!pointInWorld(p,town)||Math.abs(p[1]-riverZ(p[0]))<3.4||spec.district==='outskirts'&&inLake(p,.3))return true;}
      return false;
     }))continue;
-    if(segments.some(([a,b])=>occupied.some(o=>overlap(o,pathBox(a,b,.45)))||template.members.some(m=>overlap(movedBox(m.box,center),pathBox(a,b,.45)))))continue;
+    if(segments.some(([a,b])=>occupied(pathBox(a,b,.45))||template.members.some(m=>overlap(movedBox(m.box,center),pathBox(a,b,.45)))))continue;
     candidates.push({center,yaw:template.yaw,street,segments,score:Math.hypot(center[0]-district.center[0],center[1]-district.center[1])+setback*.4});
    }
   }

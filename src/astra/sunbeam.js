@@ -1,3 +1,5 @@
+import {createRigidBatches} from './rigid-batches.js';
+import {batchStaticLines,batchStaticMeshes} from './static-batches.js';
 import * as THREE from 'three';
 import { lampPosts, SUNBEAM_LAMPS, LAMP_LOOK } from './lamp-posts.js';
 import { buildLampGlow } from './lamp-glow.js';
@@ -124,12 +126,12 @@ export async function buildSunbeam(scene, town) {
   const localSpots=[['elder',-63.2,-55,.97],['merchant',-62,-54.8,1],['child',-66,-49,.95],['farmhand',-69,-54.8,1],['innkeeper',-74.5,-55.9,1],['child',-64.7,-48.1,.85]];
   localSpots.forEach(([role,x,z,scale],n)=>jobs.push(place('townsfolk-'+role,{x,z,scale}).then(o=>{o.position.y=.22;moving.add(o);neighbours.push({o,n,x,z});})));
   // Repeated geometry is instanced, including the private kit's toon outlines.
-  await Promise.all(jobs);root.updateMatrixWorld(true);const batches=new Map();
-  root.traverse(o=>{if(!o.isMesh)return;const key=o.geometry.uuid+o.material.uuid;if(!batches.has(key))batches.set(key,{o,matrices:[]});batches.get(key).matrices.push(o.matrixWorld.clone());});
-  for(const {o,matrices}of batches.values()){const m=new THREE.InstancedMesh(o.geometry,o.material,matrices.length);matrices.forEach((matrix,i)=>m.setMatrixAt(i,matrix));m.castShadow=o.castShadow;m.receiveShadow=o.receiveShadow;scene.add(m);}
-  root.traverse(o=>{if(o.isLine){const copy=o.clone();copy.applyMatrix4(o.parent.matrixWorld);scene.add(copy);}});
+  await Promise.all(jobs);root.name='Sunbeam scenery';
+  batchStaticMeshes(root,scene);
+  batchStaticLines(root,scene);
   // streetlights: the courtyard lamps lit the ground but had no lantern head.
   scene.add(buildLampGlow(lampPosts(town).filter(p=>p.source==='sunbeam'),{name:'Sunbeam lamps',offset:DISTRICT_OFFSETS.sunbeam}).group);
+  const rigid=createRigidBatches(moving);
   neighbours.sort((a,b)=>a.n-b.n);
   return {selectables,stats:{homes:18,buildings:9,shops:2,courtyardNeighbours:6},
     audit:()=>({neighbours:neighbours.map(({o})=>({position:o.position.toArray(),rotation:o.rotation.y,visible:o.visible})),washing:washing.map(m=>m.rotation.x),pinwheel:pinwheel.rotation.z}),
@@ -143,5 +145,6 @@ export async function buildSunbeam(scene, town) {
         o.rotation.y=n<2?(n===0?Math.PI/2:-Math.PI/2):n===3?Math.PI:n===4?-Math.PI/2:Math.cos(phase)>0?0:Math.PI;
         o.rotation.z=Math.sin(t*(hopping?4:1.5)+n)*.035;
       });
+      rigid.update();
     }};
 }

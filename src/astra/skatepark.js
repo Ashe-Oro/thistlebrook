@@ -1,3 +1,5 @@
+import {createRigidBatches} from './rigid-batches.js';
+import {batchStaticMeshes} from './static-batches.js';
 import {tagDistrictModels} from './registry/district-models.js';
 import * as THREE from 'three';
 import { place } from '../catalog/loader.js';
@@ -153,9 +155,9 @@ export async function buildSkatepark(scene, town) {
  ];
  await Promise.all(loads);tagDistrictModels(fixed,town,'skatepark',venue.pos);
  // Batch the furniture, fences and surfaces; keep articulated riders separate.
- fixed.updateMatrixWorld(true);const batches=new Map();
- fixed.traverse(o=>{if(!o.isMesh)return;const key=o.geometry.uuid+o.material.uuid;if(!batches.has(key))batches.set(key,{source:o,matrices:[],ids:[]});batches.get(key).matrices.push(o.matrixWorld.clone());batches.get(key).ids.push(o.userData.registryId);});
- for(const {source,matrices,ids} of batches.values()){const m=new THREE.InstancedMesh(source.geometry,source.material,matrices.length);matrices.forEach((matrix,i)=>m.setMatrixAt(i,matrix));m.userData.registryIds=ids;m.castShadow=source.castShadow;m.receiveShadow=source.receiveShadow;root.add(m);}
+ fixed.name='Skatepark scenery';
+ batchStaticMeshes(fixed,root);
+ const rigid=createRigidBatches(moving);
  let lastT=0;
  return {
   root, actors, stats:{skaters:3,bikers:2,spectators:6},
@@ -173,6 +175,7 @@ export async function buildSkatepark(scene, town) {
    });
    spectators.forEach(({o,n})=>{o.rotation.y=(n<3?Math.PI/2:-Math.PI/2)+Math.sin(t*.6+n)*.16;o.position.y=.22+Math.max(0,Math.sin(t*2+n)-.8)*.1;});
    lamps.forEach(l=>l.intensity=night*22);
+   rigid.update();
   },
   audit(){return {time:lastT,open:moving.visible,riders:actors.map(a=>({name:a.name,kind:a.kind,state:a.state,position:a.o.position.toArray()})),spectators:spectators.length};},
  };

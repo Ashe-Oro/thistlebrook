@@ -24,6 +24,7 @@ import { createMapCamera, cameraBounds, readCameraHash } from './camera.js';
 import { districtPlaceholder } from './district-placeholder.js';
 import { configureGLTFTextures } from '../gltf-loader.js';
 import { createDistrictStream } from './district-stream.js';
+import { configureRigidBatches, createRigidBatches } from './rigid-batches.js';
 import { createModelDetail, setModelDetail } from './model-detail.js';
 import { createCameraUI } from './camera-ui.js';
 import { createSelection } from './selection.js';
@@ -39,11 +40,41 @@ const q=new URLSearchParams(location.search);
 const loading=document.createElement('div');loading.className='loading';loading.innerHTML='<div class="sprout">❧</div><h1>A little world awaits.</h1><p>Opening the shutters, putting the kettle on…</p>';document.body.append(loading);
 const viewsFor=(town,rotation=0)=>({...WORLD_VIEWS,home:townOpening(town,innerWidth,innerHeight),railway:{...WORLD_VIEWS.railway,zoom:Math.min(.94,innerWidth/1200)},sunbeam:{...SUNBEAM_VIEW,zoom:innerWidth<600?4.4:SUNBEAM_VIEW.zoom},...WORK_VIEWS,works:{...WORK_VIEWS.works,zoom:innerWidth<600?2.7:WORK_VIEWS.works.zoom},civic:{...CIVIC_VIEW,zoom:innerWidth<600?3.4:CIVIC_VIEW.zoom},village:overview(town,innerWidth,innerHeight,Math.PI/4+rotation*Math.PI/2),downtown:{x:-57,z:-6,zoom:innerWidth<600?3.5:3.1},campus:{x:8,z:-70,zoom:1.8},stadium:{x:30,z:-84,zoom:2.8},baseball:{x:-22,z:-84,zoom:3.8},neighbourhood:{x:-3,z:-9,zoom:2.4},common:{x:8,z:-66,zoom:1.8},quay:{x:53,z:-1,zoom:2.3},market:{x:1,z:0,zoom:2.5},orchard:{x:-8,z:23,zoom:2.4},harvest:{x:-48,z:26.5,zoom:3.8},camp:{x:-68,z:26.5,zoom:3.8},tea:{x:55,z:-43,zoom:3.8}});
 start().catch(error=>{console.error(error);loading.innerHTML='<h1>The village is taking a moment.</h1><p>Could not load the village. Check that the private asset library is available.</p>';window.__astraError=String(error);});
+async function planTown(seed, inWorker, capture) {
+ if(inWorker){
+  let worker;
+  try {
+   worker=new Worker(new URL('./world-plan.worker.js',import.meta.url),{type:'module'});
+   return await new Promise((resolve,reject)=>{
+    worker.addEventListener('message',event=>resolve(event.data),{once:true});
+    worker.addEventListener('error',reject,{once:true});
+    worker.addEventListener('messageerror',reject,{once:true});
+    worker.postMessage(seed);
+   });
+  } catch (error) {
+   console.warn('Town planner worker unavailable',error);
+  } finally {
+   worker?.terminate();
+  }
+ }
+ return compileWorld(RESOLVED,seed,{capture});
+}
 async function start(){
- const seed=Number(q.get('seed')??831);const town=compileWorld(RESOLVED,Number.isFinite(seed)?seed:831,{capture:q.has('registryCapture')});
- town.captureRegistry=q.has('registryCapture');const scene=new THREE.Scene();scene.background=new THREE.Color('#e8ede3');
- const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,preserveDrawingBuffer:q.has('capture'),powerPreference:'high-performance'});renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));renderer.setSize(innerWidth,innerHeight);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.NoToneMapping;document.querySelector('#app').append(renderer.domElement);
+ const phone=matchMedia('(pointer: coarse)').matches&&Math.min(innerWidth,innerHeight)<=600;
+ const captureRegistry=q.has('registryCapture');
+ const enabled=window.__districtStreaming&&!captureRegistry;
+ const seed=Number(q.get('seed')??831);
+ performance.mark('town:plan-start');
+ const planning=planTown(Number.isFinite(seed)?seed:831,phone&&enabled,captureRegistry);
+ const scene=new THREE.Scene();scene.background=new THREE.Color('#e8ede3');
+ const pixelRatio=Math.min(devicePixelRatio,1.75);
+ const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,preserveDrawingBuffer:q.has('capture'),powerPreference:'high-performance'});renderer.setPixelRatio(pixelRatio);renderer.setSize(innerWidth,innerHeight);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.NoToneMapping;document.querySelector('#app').append(renderer.domElement);
+ configureRigidBatches(renderer.extensions.has('WEBGL_multi_draw'));
  configureGLTFTextures(renderer);
+ const town=await planning;
+ town.captureRegistry=captureRegistry;
+ performance.mark('town:plan-end');
+ performance.mark('town:scene-start');
  const camera=new THREE.OrthographicCamera(-60,60,40,-40,.1,3000);camera.position.set(90,90,110);camera.lookAt(0,0,0);
  let hour=Number(q.get('hour')??10.4),paused=false,speed=1,elapsed=0,following=null,selected=null,last=performance.now(),night=0;
  if(!Number.isFinite(hour))hour=10.4;hour=((hour%24)+24)%24;
@@ -59,12 +90,13 @@ async function start(){
  // Home readiness. Linked views still warm the area around their destination.
  const openingRadius=opensAtHome?24:initialCamera.zoom>1?85:innerWidth<=600?16:24;
  const isOpening=bounds=>Math.hypot(Math.max(bounds.minX-initial.x,0,initial.x-bounds.maxX),Math.max(bounds.minZ-initial.z,0,initial.z-bounds.maxZ))<=openingRadius;
- let lighting,skins;
- const enabled=window.__districtStreaming && !q.has('registryCapture');
+ let lighting,skins,shadowDirty=true,wideBatches;
  const stream=enabled?createDistrictStream({initial,onAttach(result){
   for(const object of Array.isArray(result)?result:[result.root])if(object)lighting?.register(object);
   if(result.root)skins?.refresh();
+  shadowDirty=true;
  }}):null;
+ let streamSettled=!stream;
  const detail=enabled?createModelDetail(initialCamera,{deferFull:opensAtHome}):null;
  setModelDetail(detail);
  const hy3dModels={then(resolve,reject){return loadHy3dModels().then(resolve,reject);}};
@@ -118,11 +150,56 @@ async function start(){
   onInteract(kind){if(kind!=='rotate')activeView=null;following=null;ui?.view('');ui?.tooltip(null);},
   onTap:inspectPoint,
   onHover(point){const hit=point&&!window.__astra?.school?.active?pick(point.x,point.y):null;ui?.tooltip(hit?.name,point?.x,point?.y);renderer.domElement.style.cursor=hit?'pointer':'grab';},
-  onChange(state){cameraUI?.update(state);detail?.update(state);const focus=controls.destination()||state;if(focus.zoom>1)stream?.prioritize(focus,80);}
+  onChange(state){
+   cameraUI?.update(state);
+   if(controls.panning())return;
+   detail?.update(state);
+   const focus=controls.destination()||state;
+   if(focus.zoom>1)stream?.prioritize(focus,80);
+  }
  });
  const setView=(v,immediate=false)=>{following=null;selected=null;selection.select(null);if(ui){ui.root.querySelector('.card').classList.remove('open');cameraUI?.activity(null,false);}activeView=typeof v==='string'?v:null;const dest=typeof v==='string'?viewsFor(town,controls.state().rotation)[v]:v;if(dest?.zoom>1){stream?.prioritize(dest,100);detail?.preload(dest);}controls.view(dest,immediate);ui?.view(typeof v==='string'?v:'');};
  const weather=createWeather({scene,town,world,residents,renderer});
  lighting=createAstraLighting({scene,camera,controls,renderer,town});
+ const sun=lighting.key, shadow=sun.shadow;
+ const actorView=new THREE.Frustum(), shadowView=new THREE.Frustum(), viewProjection=new THREE.Matrix4();
+ world.expansions.setViewVolume(actorView,sun);
+ const shadowAnchor=new THREE.Vector3(), followPoint=new THREE.Vector3();
+ let shadowAt=-Infinity,shadowSpan=0,wasPanning=false;
+ shadow.autoUpdate=false;
+ function prepareDraw(dt,panning){
+  detail?.setInteractive(panning&&phone);
+  const ratio=panning&&phone?Math.min(pixelRatio,1):pixelRatio;
+  if(renderer.getPixelRatio()!==ratio)renderer.setPixelRatio(ratio);
+  // Reuse the existing light-space map during a drag while its coverage still
+  // contains the viewport. Refresh as soon as a drag ends.
+  const now=performance.now(),span=lighting.state.shadowSpan;
+  const moved=shadowAnchor.distanceToSquared(controls.target);
+  const refresh=!phone||dt===0||!shadow.map||span!==shadowSpan||moved>(span*.37)**2||
+   (!panning&&(wasPanning||shadowDirty||now-shadowAt>180));
+  wasPanning=panning;
+  let shadowFrustum;
+  if(refresh){
+   shadow.needsUpdate=true;
+   shadowAt=now;
+   shadowSpan=span;
+   shadowAnchor.copy(controls.target);
+   shadowDirty=false;
+   sun.updateMatrixWorld();
+   sun.target.updateMatrixWorld();
+   shadow.updateMatrices(sun);
+   shadowFrustum=shadowView.setFromProjectionMatrix(viewProjection.multiplyMatrices(shadow.camera.projectionMatrix,shadow.camera.matrixWorldInverse));
+  }
+  world.landscape.cullScenery(actorView,shadowFrustum);
+  traffic.cullFurniture(actorView,shadowFrustum);
+  const wide=streamSettled&&camera.zoom<=.4;
+  if(wide&&!wideBatches){
+   wideBatches=createRigidBatches(scene,{includeInstances:true});
+   for(const mesh of wideBatches.newMeshes)lighting.register(mesh);
+  }
+  wideBatches?.setActive(wide);
+  if(wide)wideBatches.update();
+ }
  skins=createSkinRuntime({renderer,scene,camera,world,lighting,quality:q.get('quality')||'med',initial:skinFromQuery(q)});
  const setHour=h=>{if(Number.isFinite(h)){hour=((h%24)+24)%24;residents.setHour(hour);}};
  const zoom=factor=>controls.zoom(factor);
@@ -163,21 +240,45 @@ async function start(){
   const simDt=paused?0:dt*speed;
   if(!paused){elapsed+=simDt;hour=(hour+simDt/90)%24;}
   railway?.update(hour,simDt);
-  if(!paused)residents.update(simDt,elapsed,hour);
+  const followed=following;
+  if(followed){
+   residents.update(simDt,elapsed,hour,actorView);
+   controls.target.lerp(followed.object.getWorldPosition(followPoint).setY(0),1-Math.exp(-dt*5));
+  }
+  controls.update(dt);
+  const panning=controls.panning();
+  actorView.setFromProjectionMatrix(viewProjection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
+  if(!followed)residents.update(simDt,elapsed,hour,actorView);
   schoolDay.update(hour,weekday(),simDt,clearRoad,railway?.clear);
-  if(!paused)traffic.update(simDt,hour);
-  if(following)controls.target.lerp(following.object.getWorldPosition(new THREE.Vector3()).setY(0),1-Math.exp(-dt*5));
- controls.update(dt);detailTick+=dt;if(detailTick>.3){detail?.update(controls.state());detailTick=0;}selection.update();cameraUI.activity(selected,following===selected);lifePanel.update(selected,elapsed);
- ui.root.classList.toggle('exploring',activeView!=='village'||camera.zoom>1.4);const type=residents.life.weather;night=lighting.update(hour,type);if(tesla)tesla.update(elapsed,night);world.update(elapsed,night,hour,residents.people,weekday(),type);weather.update(type,elapsed,night,camera,controls.target);school.update(dt*(paused?0:speed),hour,weekday());workUI.update(world.works,controls,hour,camera.zoom);ui.clock(hour,weekday());lightControls.update(hour);if(render&&school.drawing)school.render();else
-  if(render)skins.render(night,elapsed,hour);}
+  if(paused)traffic.syncView(actorView);
+  else traffic.update(simDt,hour,actorView);
+  detailTick+=dt;
+  if(detailTick>.3&&!panning){detail?.update(controls.state());detailTick=0;}
+  selection.update();cameraUI.activity(selected,following===selected);lifePanel.update(selected,elapsed);
+  ui.root.classList.toggle('exploring',activeView!=='village'||camera.zoom>1.4);
+  const type=residents.life.weather;
+  night=lighting.update(hour,type);
+  if(tesla)tesla.update(elapsed,night);
+  world.update(elapsed,night,hour,residents.people,weekday(),type);
+  weather.update(type,elapsed,night,camera,controls.target);
+  school.update(dt*(paused?0:speed),hour,weekday());
+  workUI.update(world.works,controls,hour,camera.zoom);
+  ui.clock(hour,weekday());lightControls.update(hour);
+  if(!render)return;
+  if(school.drawing)school.render();
+  else {prepareDraw(dt,panning);skins.render(night,elapsed,hour);}
+ }
  window.__astra={get streamed(){return streamed;},stream,detail,viewReady(){const state=controls.state();return Promise.resolve(stream?.nearby(state,state.zoom>1?100:0)).then(()=>detail?.settled());},school,setWeather,get weather(){return residents.life.weather;},skin:skins,setSkin:id=>skins.setSkin(id).id,get tesla(){return tesla;},registry:createWorldRegistry(town),town,scene,camera,renderer,controls,residents,world,traffic,lighting,selection,get hour(){return hour;},get paused(){return paused;},get elapsed(){return elapsed;},get following(){return following?.name;},get speed(){return speed;},setHour,step,view:(v)=>setView(v,true),selectPerson:showPerson,pick,setPaused(v){paused=v;ui.paused(v);},audit(){return {landscape:world.landscape.audit(),report:town.report,renderRegistryErrors:renderCoverage(scene,town),tesla:tesla?.audit(),expansions:world.expansions.audit(),people:residents.people.length,cityActivities:world.districts.stats,civicActivities:world.civicQuarter.stats,works:world.works.audit(),sunbeam:world.sunbeam.stats,mapleHollow:world.mapleHollow?.audit(),life:residents.life.audit(),traffic:traffic.audit(),catalog:world.catalogActivities.audit(),lighting:{...lighting.state},weather:{type:residents.life.weather,...weather.audit()},drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,positions:residents.people.map(p=>[p.name,p.object.position.x,p.object.position.z,p.activity]),hour,paused,zoom:camera.zoom,camera:controls.state()};}};
  await opening;
  if(q.get('classroom')==='1')await school.enter(hour,weekday());
  let streamed;
+ performance.mark('town:scene-end');
+ performance.mark('town:first-render-start');
  step(0);
+ performance.mark('town:first-render-end');
  loading.classList.add('done');window.__readyAt=performance.now();window.__ready=true;
  if(stream)streamed=new Promise(resolve=>setTimeout(()=>{
-  resolve(stream.start());
+  resolve(stream.start().then(()=>{streamSettled=true;}));
   detail.start();
  },250));
  function frame(now){const dt=(now-last)/1000;last=now;step(dt);requestAnimationFrame(frame);}requestAnimationFrame(frame);

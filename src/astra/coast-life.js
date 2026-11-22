@@ -6,7 +6,8 @@ import {COAST_BLOCKS,COAST_UMBRELLAS,COAST_COURTS,shoreX} from './coast-plan.js'
 import {weatherPlan} from './weather-plan.js';
 import {createCoastWalkers} from './coast-life-plan.js';
 
-export async function createCoastLife(root,town){
+export async function createCoastLife(parent,town){
+  const root=new THREE.Group();root.name='Coral Coast crowd';parent.add(root);
   const walking=createCoastWalkers(),batches=[],transform=new THREE.Object3D(),matrix=new THREE.Matrix4();
   const roles=['merchant','herbalist','shopkeeper','child'];
   const templates=await Promise.all(roles.map(role=>place('townsfolk-'+role)));
@@ -42,10 +43,9 @@ export async function createCoastLife(root,town){
   const balls=COAST_COURTS.map(z=>{const ball=new THREE.Mesh(new THREE.IcosahedronGeometry(.23,1),toonMaterial('#fff3cf'));root.add(ball);return{ball,z};});
   const ripples=[];for(const p of beach.filter(p=>p.type==='swim')){const m=new THREE.Mesh(new THREE.RingGeometry(.45,.5,16),new THREE.MeshBasicMaterial({color:'#e4fff3',side:THREE.DoubleSide,transparent:true,opacity:.5,depthWrite:false}));m.rotation.x=-Math.PI/2;root.add(m);ripples.push({m,p});}
   let last=0,hour=10;
-  return {walking,beach,update(t,h,weather){
+  return {walking,beach,update(t,h,weather,draw=true){
     const dt=Math.max(0,Math.min(t-last,.8));last=t;hour=h;if(dt>0)walking.update(dt*weatherPlan(weather).pace,t,h);
-    for(const p of walking.people){const [x,y,z]=p.position,offset=p.walking?.19:0;transform.position.set(x+Math.cos(p.yaw)*offset,y+(p.walking?Math.abs(Math.sin(t*8+p.id))*.045:0),z-Math.sin(p.yaw)*offset);transform.rotation.set(0,p.yaw,p.walking?Math.sin(t*8+p.id)*.025:0);transform.scale.setScalar(.95);transform.updateMatrix();p.matrix??=new THREE.Matrix4();p.matrix.copy(transform.matrix);}
-    for(const {mesh,members,local}of batches){members.forEach((p,i)=>mesh.setMatrixAt(i,matrix.multiplyMatrices(p.matrix,local)));mesh.instanceMatrix.needsUpdate=true;}
+    root.visible=draw;
     const day=h>=7&&h<19, attendance=weatherPlan(weather).beachAttendance;
     for(const p of beach){
       let x=p.x,y=p.y||.15,z=p.z,rx=0,ry=0,rz=0,visible=true;
@@ -58,8 +58,12 @@ export async function createCoastLife(root,town){
         if (p.type==='volley') visible=weather==='snow'&&p.court===COAST_COURTS[0];
         if (p.type==='dine') visible=!p.roof&&p.index%10<attendance*10;
       }
-      transform.position.set(x,y,z);transform.rotation.set(rx,ry,rz);transform.scale.setScalar(visible?1:0);transform.updateMatrix();p.matrix??=new THREE.Matrix4();p.matrix.copy(transform.matrix);p.position=[x,y,z];p.visible=visible;
+      p.position=[x,y,z];p.visible=visible;
+      if(draw){transform.position.set(x,y,z);transform.rotation.set(rx,ry,rz);transform.scale.setScalar(visible?1:0);transform.updateMatrix();p.matrix??=new THREE.Matrix4();p.matrix.copy(transform.matrix);}
     }
+    if(!draw)return;
+    for(const p of walking.people){const [x,y,z]=p.position,offset=p.walking?.19:0;transform.position.set(x+Math.cos(p.yaw)*offset,y+(p.walking?Math.abs(Math.sin(t*8+p.id))*.045:0),z-Math.sin(p.yaw)*offset);transform.rotation.set(0,p.yaw,p.walking?Math.sin(t*8+p.id)*.025:0);transform.scale.setScalar(.95);transform.updateMatrix();p.matrix??=new THREE.Matrix4();p.matrix.copy(transform.matrix);}
+    for(const {mesh,members,local}of batches){members.forEach((p,i)=>mesh.setMatrixAt(i,matrix.multiplyMatrices(p.matrix,local)));mesh.instanceMatrix.needsUpdate=true;}
     for(const {mesh,members,pose}of parts){members.forEach((p,i)=>{const v=pose(p,t);transform.position.set(...v.pos);transform.rotation.set(v.rx||0,0,v.rz||0);transform.scale.set(...v.scale);transform.updateMatrix();mesh.setMatrixAt(i,matrix.multiplyMatrices(p.matrix,transform.matrix));});mesh.instanceMatrix.needsUpdate=true;}
     for(const {ball,z}of balls){const u=(t*.26)%1,s=u<.5?u*2:(1-u)*2;ball.position.set(123+Math.sin(t*.5)*2,1.4+Math.sin(s*Math.PI)*3.6,z-4+s*8);ball.rotation.set(t,t*.6,0);ball.visible=beach.some(p=>p.type==='volley'&&p.court===z&&p.visible);}
     for(const {m,p}of ripples){m.visible=p.visible;m.position.set(p.position[0],.08,p.position[2]+.6);m.scale.setScalar(1+Math.sin(t*2+p.index)*.15);}

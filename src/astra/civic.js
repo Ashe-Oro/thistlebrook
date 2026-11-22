@@ -1,8 +1,10 @@
+import {createRigidBatches} from './rigid-batches.js';
+import {batchStaticLines,batchStaticMeshes} from './static-batches.js';
 import {packVehicle} from './vehicle-models.js';
 import {vehicleModel} from './traffic-fleet.js';
 import {CIVIC_PARKED} from './civic-quarter-life.js';
 import { CAFE_COUNTER } from './life/animation-places.js';
-import { tagObject, tagComponents, tagBatch } from './registry/render-tags.js';
+import { tagObject, tagComponents } from './registry/render-tags.js';
 import * as THREE from 'three';
 import { place } from '../catalog/loader.js';
 import { toonMaterial } from '../toon.js';
@@ -109,10 +111,15 @@ export async function buildCivic(scene,town){
  }
  for(let n=0;n<8;n++)jobs.push(player(['elder','merchant','herbalist','child','innkeeper','shopkeeper','farmhand','carpenter'][n],-57,-6,1.02).then(o=>gatherers.push({o,n})));
  // All static furnishing, private models included, is batched by geometry.
- await Promise.all(jobs);tagComponents(root,town,'civic.js');tagComponents(dynamic,town,'civic.js');root.updateMatrixWorld(true);const batches=new Map();root.traverse(o=>{if(!o.isMesh)return;const k=o.geometry.uuid+o.material.uuid;if(!batches.has(k))batches.set(k,{o,matrices:[],ids:[]});batches.get(k).matrices.push(o.matrixWorld.clone());batches.get(k).ids.push(o.userData.registryId);});for(const {o,matrices,ids}of batches.values()){const m=new THREE.InstancedMesh(o.geometry,o.material,matrices.length);tagBatch(m,ids);matrices.forEach((v,i)=>m.setMatrixAt(i,v));m.castShadow=o.castShadow;m.receiveShadow=o.receiveShadow;scene.add(m);}root.traverse(o=>{if(o.isLine){const c=o.clone();c.applyMatrix4(o.parent.matrixWorld);scene.add(c);}});
+ await Promise.all(jobs);tagComponents(root,town,'civic.js');tagComponents(dynamic,town,'civic.js');root.name='Civic scenery';batchStaticMeshes(root,scene);batchStaticLines(root,scene);
+ const rigid=createRigidBatches(dynamic);
  let baseballManaged=false,lastGame=null,lastSchool=null,lastT=null;
  const fieldLights=[new THREE.PointLight('#ffe5b5',0,45,1.3),new THREE.PointLight('#d5edf1',0,35,1.3)];fieldLights[0].position.set(30,10,-84);fieldLights[1].position.set(-57,5,-6);fieldLights.forEach(l=>scene.add(l));
- return {setActivityOwner(type,managed){if(type==='baseball')baseballManaged=managed;},school:{plan:schoolPlan,graph:schoolGraph,update:schoolDay.update,get state(){return schoolDay.state;},get pedestrians(){return schoolWalkers(schoolDay.state);}},audit:()=>({students:students.filter(a=>a.o.visible).map(a=>a.o.position.toArray()),school:lastSchool&&{session:lastSchool.session.id,occupancy:lastSchool.occupancy},football:football.map(a=>a.o.position.toArray()),baseball:baseballBall.position.toArray(),ballgame:lastGame&&{phase:lastGame.phase,kids:lastGame.kids.filter(k=>k.visible).map(k=>({role:k.role,position:[k.pos[0],k.y,k.pos[1]],activity:k.activity}))},fountain:drops.map(d=>d.m.position.toArray())}),stats:{students:schoolPlan.students.length,baseballPlayers:ROSTER.length,footballPlayers:10,stadiumSpectators:12,fountainNeighbours:8},update(t,hour,night,weekday=4,weather='clear'){
+ return {setActivityOwner(type,managed){if(type==='baseball')baseballManaged=managed;},
+ appendPedestrians(list){
+  for(const kid of lastGame?.kids||[])if(kid.visible)list.push({x:kid.pos[0],z:kid.pos[1]});
+ },
+ school:{plan:schoolPlan,graph:schoolGraph,update:schoolDay.update,get state(){return schoolDay.state;},get pedestrians(){return schoolWalkers(schoolDay.state);}},audit:()=>({students:students.filter(a=>a.o.visible).map(a=>a.o.position.toArray()),school:lastSchool&&{session:lastSchool.session.id,occupancy:lastSchool.occupancy},football:football.map(a=>a.o.position.toArray()),baseball:baseballBall.position.toArray(),ballgame:lastGame&&{phase:lastGame.phase,kids:lastGame.kids.filter(k=>k.visible).map(k=>({role:k.role,position:[k.pos[0],k.y,k.pos[1]],activity:k.activity}))},fountain:drops.map(d=>d.m.position.toArray())}),stats:{students:schoolPlan.students.length,baseballPlayers:ROSTER.length,footballPlayers:10,stadiumSpectators:12,fountainNeighbours:8},update(t,hour,night,weekday=4,weather='clear'){
   fieldLights[0].intensity=night*55;fieldLights[1].intensity=night*9;
   for(const {m,a,phase}of drops){const u=(t*.5+phase)%1;m.position.set(-57+Math.cos(a)*u*1.9,2+Math.sin(u*Math.PI)*.7-u*1.4,-6+Math.sin(a)*u*1.9);}
   const school=schoolDay.update(hour,weekday);lastSchool=school;const dt=Math.max(0,Math.min(.1,t-(lastT??t)));lastT=t;
@@ -125,5 +132,6 @@ export async function buildCivic(scene,town){
   baseball.forEach(({o,n,bat})=>{const k=game.kids[n];o.visible=k.visible;if(!k.visible)return;o.position.set(k.pos[0],k.y,k.pos[1]);o.rotation.y=k.heading;if(bat)bat.rotation.set(0,0,.6+k.swing*1.9);});
   baseballBall.visible=game.ball.visible;baseballBall.position.set(...game.ball.pos);
   gatherers.forEach(({o,n})=>{o.visible=hour>=6&&hour<23&&(weather!=='rain')&&(weather!=='snow'||n%2===0);const a=n/8*Math.PI*2+Math.sin(t*.15+n)*.08,r=3.7+(n%2)*.6;o.position.set(-57+Math.sin(a)*r,.18+Math.sin(t*2+n)*.015,-6+Math.cos(a)*r);o.rotation.y=a+Math.PI+Math.sin(t+n)*.12;});
+  rigid.update();
  }};
 }
