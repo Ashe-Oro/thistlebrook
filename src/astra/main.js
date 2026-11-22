@@ -90,12 +90,19 @@ async function start(){
  // Home readiness. Linked views still warm the area around their destination.
  const openingRadius=opensAtHome?24:initialCamera.zoom>1?85:innerWidth<=600?16:24;
  const isOpening=bounds=>Math.hypot(Math.max(bounds.minX-initial.x,0,initial.x-bounds.maxX),Math.max(bounds.minZ-initial.z,0,initial.z-bounds.maxZ))<=openingRadius;
- let lighting,skins,shadowDirty=true,wideBatches;
- const stream=enabled?createDistrictStream({initial,onAttach(result){
-  for(const object of Array.isArray(result)?result:[result.root])if(object)lighting?.register(object);
-  if(result.root)skins?.refresh();
-  shadowDirty=true;
- }}):null;
+ let lighting,skins,shadowDirty=true,wideBatches,hasShadowView=false;
+ const stream=enabled?createDistrictStream({initial,pace:true,
+  async onPrepare(result){
+   const objects=(Array.isArray(result)?result:[result?.root]).filter(Boolean);
+   if(!objects.length||!lighting)return;
+   for(const object of objects)lighting.register(object);
+   if(renderer.compileAsync&&renderer.extensions.has('KHR_parallel_shader_compile'))for(const object of objects)await renderer.compileAsync(object,camera,scene);
+  },
+  onAttach(result){
+   for(const object of Array.isArray(result)?result:[result.root])if(object)lighting?.register(object);
+   if(result.root)skins?.refresh();
+   shadowDirty=true;
+  }}):null;
  let streamSettled=!stream;
  const detail=enabled?createModelDetail(initialCamera,{deferFull:opensAtHome}):null;
  setModelDetail(detail);
@@ -178,7 +185,6 @@ async function start(){
   const refresh=!phone||dt===0||!shadow.map||span!==shadowSpan||moved>(span*.37)**2||
    (!panning&&(wasPanning||shadowDirty||now-shadowAt>180));
   wasPanning=panning;
-  let shadowFrustum;
   if(refresh){
    shadow.needsUpdate=true;
    shadowAt=now;
@@ -188,8 +194,10 @@ async function start(){
    sun.updateMatrixWorld();
    sun.target.updateMatrixWorld();
    shadow.updateMatrices(sun);
-   shadowFrustum=shadowView.setFromProjectionMatrix(viewProjection.multiplyMatrices(shadow.camera.projectionMatrix,shadow.camera.matrixWorldInverse));
+   shadowView.setFromProjectionMatrix(viewProjection.multiplyMatrices(shadow.camera.projectionMatrix,shadow.camera.matrixWorldInverse));
+   hasShadowView=true;
   }
+  const shadowFrustum=hasShadowView?shadowView:undefined;
   world.landscape.cullScenery(actorView,shadowFrustum);
   traffic.cullFurniture(actorView,shadowFrustum);
   const wide=streamSettled&&camera.zoom<=.4;
@@ -236,39 +244,55 @@ async function start(){
  document.addEventListener('keydown',e=>{if(e.code==='Escape'&&school.leave()){ui.view('campus');activeView='campus';return;}if(e.code==='Escape'){closeDetails();return;}if(e.ctrlKey||e.metaKey||e.altKey||e.target.closest('input, textarea, select, button, a, [contenteditable="true"]'))return;if(e.code==='Space'){e.preventDefault();togglePause();}if(e.code==='KeyH'||e.code==='Home'){e.preventDefault();setView('home');}});
  let detailTick=0;
  function step(dt,render=true){
-  dt=Math.max(0,Math.min(dt,.1));
-  const simDt=paused?0:dt*speed;
-  if(!paused){elapsed+=simDt;hour=(hour+simDt/90)%24;}
-  railway?.update(hour,simDt);
+  const rawDt=Math.max(0,dt),camDt=Math.min(rawDt,.1);
+  let simLeft=paused?0:Math.min(rawDt,4)*speed;
   const followed=following;
-  if(followed){
-   residents.update(simDt,elapsed,hour,actorView);
-   controls.target.lerp(followed.object.getWorldPosition(followPoint).setY(0),1-Math.exp(-dt*5));
+  if(!followed){
+   controls.update(camDt);
+   actorView.setFromProjectionMatrix(viewProjection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
   }
-  controls.update(dt);
+  const stepSim=(simDt,sync)=>{
+   if(!paused){elapsed+=simDt;hour=(hour+simDt/90)%24;}
+   railway?.update(hour,simDt);
+   if(followed){
+    residents.update(simDt,elapsed,hour,actorView);
+    if(sync){
+     controls.target.lerp(followed.object.getWorldPosition(followPoint).setY(0),1-Math.exp(-camDt*5));
+     controls.update(camDt);
+     actorView.setFromProjectionMatrix(viewProjection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
+    }
+   }else residents.update(simDt,elapsed,hour,actorView);
+   schoolDay.update(hour,weekday(),simDt,clearRoad,railway?.clear);
+   if(paused)traffic.syncView(actorView);
+   else traffic.update(simDt,hour,actorView);
+   const type=residents.life.weather;
+   if(sync){
+    night=lighting.update(hour,type);
+    if(tesla)tesla.update(elapsed,night);
+   }
+   world.update(elapsed,night,hour,residents.people,weekday(),type);
+   if(sync)weather.update(type,elapsed,night,camera,controls.target);
+   school.update(simDt,hour,weekday());
+  };
+  if(simLeft>0){
+   while(simLeft>1e-8){
+    const subDt=Math.min(simLeft,.5);
+    simLeft-=subDt;
+    stepSim(subDt,simLeft<=1e-8);
+   }
+  }else stepSim(0,true);
   const panning=controls.panning();
-  actorView.setFromProjectionMatrix(viewProjection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
-  if(!followed)residents.update(simDt,elapsed,hour,actorView);
-  schoolDay.update(hour,weekday(),simDt,clearRoad,railway?.clear);
-  if(paused)traffic.syncView(actorView);
-  else traffic.update(simDt,hour,actorView);
-  detailTick+=dt;
+  detailTick+=camDt;
   if(detailTick>.3&&!panning){detail?.update(controls.state());detailTick=0;}
   selection.update();cameraUI.activity(selected,following===selected);lifePanel.update(selected,elapsed);
   ui.root.classList.toggle('exploring',activeView!=='village'||camera.zoom>1.4);
-  const type=residents.life.weather;
-  night=lighting.update(hour,type);
-  if(tesla)tesla.update(elapsed,night);
-  world.update(elapsed,night,hour,residents.people,weekday(),type);
-  weather.update(type,elapsed,night,camera,controls.target);
-  school.update(dt*(paused?0:speed),hour,weekday());
   workUI.update(world.works,controls,hour,camera.zoom);
   ui.clock(hour,weekday());lightControls.update(hour);
   if(!render)return;
   if(school.drawing)school.render();
-  else {prepareDraw(dt,panning);skins.render(night,elapsed,hour);}
+  else {prepareDraw(camDt,panning);skins.render(night,elapsed,hour);}
  }
- window.__astra={get streamed(){return streamed;},stream,detail,viewReady(){const state=controls.state();return Promise.resolve(stream?.nearby(state,state.zoom>1?100:0)).then(()=>detail?.settled());},school,setWeather,get weather(){return residents.life.weather;},skin:skins,setSkin:id=>skins.setSkin(id).id,get tesla(){return tesla;},registry:createWorldRegistry(town),town,scene,camera,renderer,controls,residents,world,traffic,lighting,selection,get hour(){return hour;},get paused(){return paused;},get elapsed(){return elapsed;},get following(){return following?.name;},get speed(){return speed;},setHour,step,view:(v)=>setView(v,true),selectPerson:showPerson,pick,setPaused(v){paused=v;ui.paused(v);},audit(){return {landscape:world.landscape.audit(),report:town.report,renderRegistryErrors:renderCoverage(scene,town),tesla:tesla?.audit(),expansions:world.expansions.audit(),people:residents.people.length,cityActivities:world.districts.stats,civicActivities:world.civicQuarter.stats,works:world.works.audit(),sunbeam:world.sunbeam.stats,mapleHollow:world.mapleHollow?.audit(),life:residents.life.audit(),traffic:traffic.audit(),catalog:world.catalogActivities.audit(),lighting:{...lighting.state},weather:{type:residents.life.weather,...weather.audit()},drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,positions:residents.people.map(p=>[p.name,p.object.position.x,p.object.position.z,p.activity]),hour,paused,zoom:camera.zoom,camera:controls.state()};}};
+ window.__astra={get streamed(){return streamed;},stream,detail,viewReady(){const state=controls.state();return Promise.resolve(stream?.nearby(state,state.zoom>1?100:0)).then(()=>{detail?.start();return detail?.settled();});},school,setWeather,get weather(){return residents.life.weather;},skin:skins,setSkin:id=>skins.setSkin(id).id,get tesla(){return tesla;},registry:createWorldRegistry(town),town,scene,camera,renderer,controls,residents,world,traffic,lighting,selection,get hour(){return hour;},get paused(){return paused;},get elapsed(){return elapsed;},get following(){return following?.name;},get speed(){return speed;},setHour,step,view:(v)=>setView(v,true),selectPerson:showPerson,pick,setPaused(v){paused=v;ui.paused(v);},audit(){return {landscape:world.landscape.audit(),report:town.report,renderRegistryErrors:renderCoverage(scene,town),tesla:tesla?.audit(),expansions:world.expansions.audit(),people:residents.people.length,cityActivities:world.districts.stats,civicActivities:world.civicQuarter.stats,works:world.works.audit(),sunbeam:world.sunbeam.stats,mapleHollow:world.mapleHollow?.audit(),life:residents.life.audit(),traffic:traffic.audit(),catalog:world.catalogActivities.audit(),lighting:{...lighting.state},weather:{type:residents.life.weather,...weather.audit()},drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,positions:residents.people.map(p=>[p.name,p.object.position.x,p.object.position.z,p.activity]),hour,paused,zoom:camera.zoom,camera:controls.state()};}};
  await opening;
  if(q.get('classroom')==='1')await school.enter(hour,weekday());
  let streamed;
@@ -278,8 +302,7 @@ async function start(){
  performance.mark('town:first-render-end');
  loading.classList.add('done');window.__readyAt=performance.now();window.__ready=true;
  if(stream)streamed=new Promise(resolve=>setTimeout(()=>{
-  resolve(stream.start().then(()=>{streamSettled=true;}));
-  detail.start();
+  resolve(stream.start().then(()=>{streamSettled=true;detail?.start();}));
  },250));
  function frame(now){const dt=(now-last)/1000;last=now;step(dt);requestAnimationFrame(frame);}requestAnimationFrame(frame);
 }

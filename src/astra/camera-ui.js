@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import './camera.css';
+import { ZOOM_LIMITS } from './camera.js';
 
 export function createCameraUI(root, controls, camera) {
   const tools = root.querySelector('.tools');
@@ -21,8 +22,8 @@ export function createCameraUI(root, controls, camera) {
     const north = controls.target.clone().add(new THREE.Vector3(0, 0, -1)).project(camera);
     const angle = Math.atan2((north.x - center.x) * innerWidth, (north.y - center.y) * innerHeight) * 180 / Math.PI;
     root.querySelector('.map-note svg').style.transform = `rotate(${angle}deg)`;
-    root.querySelector('#zoom-in').disabled = state.zoom >= 4.9999;
-    root.querySelector('#zoom-out').disabled = state.zoom <= .1201;
+    root.querySelector('#zoom-in').disabled = state.zoom >= ZOOM_LIMITS.max - .0001;
+    root.querySelector('#zoom-out').disabled = state.zoom <= ZOOM_LIMITS.min + .0001;
   }
   function activity(person, following) {
     if (live.hidden !== !person) live.hidden = !person;

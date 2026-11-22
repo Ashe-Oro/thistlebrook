@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {railPose} from '../compiler/railway.js';
 import {terrainSurface} from '../compiler/terrain.js';
-import {toonMaterial} from '../toon.js';
+import {toonMaterial, ensureNonZeroNormals} from '../toon.js';
 import {inkMesh} from './ink-mesh.js';
 
 const CUT_HALF = 2.18;
@@ -95,7 +95,7 @@ function surfaceGeometry(positions) {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.computeVertexNormals();
-  return geometry;
+  return ensureNonZeroNormals(geometry);
 }
 
 function surface(rows, color) {

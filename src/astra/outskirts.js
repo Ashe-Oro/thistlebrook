@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import {createGLTFLoader} from '../gltf-loader.js';
 import {mergeVertices} from 'three/addons/utils/BufferGeometryUtils.js';
 import {place} from '../catalog/loader.js';
-import {toonMaterial,toonVertexColorMaterial,outlineMaterial} from '../toon.js';
+import {toonMaterial,toonVertexColorMaterial,outlineMaterial,ensureNonZeroNormals} from '../toon.js';
 import {makeRng} from '../compiler/rng.js';
 import {distanceToSegment,pointInTown} from '../compiler/astra.js';
 import {LAKE,inLake} from './outskirts-layout.js';
@@ -21,7 +21,7 @@ function natureModel(path){
  if(!models.has(path))models.set(path,loader.loadAsync(path).then(g=>{
   const meshes=[];g.scene.traverse(m=>{if(m.isMesh)meshes.push(m);});
   for(const m of meshes){m.material=m.geometry.attributes.color?toonVertexColorMaterial():toonMaterial(m.material.color);m.castShadow=m.receiveShadow=true;
-   const hull=new THREE.BufferGeometry();hull.setAttribute('position',m.geometry.attributes.position.clone());if(m.geometry.index)hull.setIndex(m.geometry.index.clone());const smooth=mergeVertices(hull,.001);smooth.computeVertexNormals();const ink=new THREE.Mesh(smooth,outlineMaterial(.018));m.add(ink);
+   const hull=new THREE.BufferGeometry();hull.setAttribute('position',m.geometry.attributes.position.clone());if(m.geometry.index)hull.setIndex(m.geometry.index.clone());const smooth=mergeVertices(hull,.001);smooth.computeVertexNormals();ensureNonZeroNormals(smooth);ensureNonZeroNormals(m.geometry);const ink=new THREE.Mesh(smooth,outlineMaterial(.018));m.add(ink);
   }return g.scene;
  }));
  return models.get(path);

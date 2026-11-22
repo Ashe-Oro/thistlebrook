@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Phone streaming, tree normals, and closer zoom.**
+  - **Tree shading and shadow stability.** Non-indexed or mirrored foliage and outline hulls with zero-length normals no longer produce `NaN` in toon ramp derivatives (`fwidth`) or hull extrusion, the world shadow frustum stays preserved between shadow-map refreshes so shadow-only tree cells do not thrash in and out of `instanceMatrix`, and full-LOD model upgrades wait until background district streaming finishes.
+  - **Paced streaming and real-time simulation.** Background district streaming now serializes and yields between attaches (`pace: true`) and avoids eager synchronous offscreen shader compiles when `KHR_parallel_shader_compile` is absent, while `step()` keeps camera smoothing clamped at `0.1 s` and advances walkers, traffic, trains, and clocks in `<= 0.5 s` substeps up to `4 s` per frame so actors stay at real-time speed during background loading.
+  - **Closer phone zoom.** `ZOOM_LIMITS.max` rises from `5` to `15` (`3x` closer, from `43.2 m` to `14.4 m` ground width on `390x844`), zoom button disable thresholds track `ZOOM_LIMITS`, and the directional shadow frustum minimum span tightens from `46` to `24` for crisp close-up shadows.
+
 - **Phone smoothness.** Thistlebrook plans the phone map in a worker, batches scenery and moving parts, and submits fewer offscreen meshes. The map follows the finger directly and applies inertia after release. Phones use lighter rendering during a drag and restore full detail afterward. [Profile and acceptance results](docs/specs/PHONE-SMOOTH-LOG.md).
 
 - **Village opening view.** Thistlebrook opens at Market Square, with a close portrait view and room for the adjoining streets on desktop. Home returns to the square. The whole island is available in Explore and with the zoom controls. Shared camera links still open at their saved coordinates.

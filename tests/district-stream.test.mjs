@@ -77,3 +77,31 @@ test('a district that times out keeps its silhouette and releases the queue', as
   assert.equal(attached,true);
   assert.equal(warnings.length,1);
 });
+
+test('paced background streaming runs onPrepare before attach and yields turns', async () => {
+  const events = [];
+  let turns = 0;
+  const stream = createDistrictStream({
+    initial: { x: 0, z: 0 },
+    concurrency: 1,
+    pace: true,
+    frameBudgetMs: 0,
+    yieldMs: 1,
+    async onPrepare(result, job) { events.push('prepare:' + job.id + ':' + result); },
+    onAttach(result) { events.push('attach-cb:' + result); },
+  });
+  stream.add('open', bounds(0), { opening: true, load: () => 'o', attach: r => events.push('attach:open:' + r) });
+  stream.add('bg1', bounds(10), { load: () => '1', attach: r => events.push('attach:bg1:' + r) });
+  stream.add('bg2', bounds(20), { load: () => '2', attach: r => events.push('attach:bg2:' + r) });
+  await stream.opening();
+  const done = stream.start();
+  const timer = setInterval(() => { turns++; }, 1);
+  await done;
+  clearInterval(timer);
+  assert.ok(turns >= 1, 'timers ran between paced background attaches');
+  assert.deepEqual(events, [
+    'prepare:open:o', 'attach:open:o', 'attach-cb:o',
+    'prepare:bg1:1', 'attach:bg1:1', 'attach-cb:1',
+    'prepare:bg2:2', 'attach:bg2:2', 'attach-cb:2',
+  ]);
+});

@@ -3,7 +3,7 @@ import {PARK_ORIGIN} from './themepark-plan.js';
 import * as THREE from 'three';
 import { createGLTFLoader } from '../gltf-loader.js';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { RAMP, outlineMaterial } from '../toon.js';
+import { RAMP, outlineMaterial, ensureNonZeroNormals } from '../toon.js';
 
 // Fairground & Amusement Park pack (private, ThreeJS Assets licence). Models
 // are read from the local licensed mapping at runtime and never copied into
@@ -78,7 +78,7 @@ function hull(geometry) {
  g.setAttribute('position', geometry.attributes.position.clone());
  if (geometry.index) g.setIndex(geometry.index.clone());
  const welded = mergeVertices(g, 1e-3); welded.computeVertexNormals();
- return welded;
+ return ensureNonZeroNormals(welded);
 }
 /** One toon mesh and its ink hull. Outline thickness compensates the model's scale. */
 // Hulls are keyed by the geometry object itself. They used to live on
@@ -142,6 +142,7 @@ export function loadFairgroundGeometry(name, mirror = '', variant) {
     parts.push(g.index ? g : indexed(g));
    });
    const geometry = parts.length === 1 ? parts[0] : mergeIndexed(parts);
+   ensureNonZeroNormals(geometry);
    geometry.computeBoundingBox();
    return addGlow(geometry);
   }));
