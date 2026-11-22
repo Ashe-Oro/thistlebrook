@@ -1,7 +1,21 @@
 import { DISTRICT_OFFSETS } from '../compiler/astra-placement.js';
-// Authored local district data. The shared placement transform moves these
-// parcels and their rendered courtyard west of Civic Green.
-export const SUNBEAM_VIEW = { x: -60 + DISTRICT_OFFSETS.sunbeam[0], z: -52, zoom: 3.1 };
+
+export const SUNBEAM_MALL = Object.freeze({
+  axisX: -61,
+  north: -87,
+  south: -36,
+  clearWidth: 6,
+  pavedWidth: 13.5,
+});
+export const SUNBEAM_NAME = 'Sunbeam Mall';
+
+const { axisX, north, south, clearWidth } = SUNBEAM_MALL;
+const centerZ = (north + south) / 2;
+const rowCenters = [-82, -75.2, -68.4, -61.6, -54.8, -48, -41.2];
+
+export const SUNBEAM_VIEW = { x: axisX + DISTRICT_OFFSETS.sunbeam[0], z: centerZ, zoom: 2.6 };
+export const SUNBEAM_PHONE_VIEW = { ...SUNBEAM_VIEW, zoom: 3.7, elevation: 58 };
+
 export const SUNBEAM_RESIDENTS = [
   { name: 'Nell', role: 'Corner grocer', model: 'merchant', home: 0, story: 'Lives above the shop. Keeps a spare key for half the terrace, and always rounds up the cherries.' },
   { name: 'Otis', role: 'Night-shift nurse', model: 'watch', home: 1, story: 'The blue shutters mean he is sleeping. In the afternoon he tends the shared herb beds.' },
@@ -13,22 +27,56 @@ export const SUNBEAM_RESIDENTS = [
   { name: 'Emil', role: 'Music teacher', model: 'shopkeeper', home: 8, story: 'The upstairs piano is a little out of tune. Nobody on the terrace seems to mind.' },
 ];
 
-export function addSunbeamLayout(town) {
-  town.districts.push({ id: 'sunbeam', name: 'Sunbeam Terrace', type: 'neighbourhood', center: [-61,-52] });
-  const road = (a,b,width=2.2,kind='lane',owner=null) => town.roads.push({a,b,width,kind,owner});
-  road([-77,-52],[-40,-52],3);
-  road([-40,-52],[-40,-33]); road([-61,-52],[-61,-33]); road([-61,-33],[-34,-33]);
-  const palette = ['#d7a453','#c88472','#90ac9f','#d8b68b','#99a8bd','#91aaa0','#ddb269','#c48f82','#a7b69b'];
-  const names = ['Nell’s Corner & upstairs flats','No. 2 · The Blue Shutters','No. 3 · Sunflower House','No. 4 · The Mending Room','No. 5 · Skylark House','The Washhouse & upstairs flats','No. 7 · Spoke House','No. 8 · The Drawing Room','No. 9 · Piano House'];
-  const positions = [[-73,-62],[-67,-62],[-61,-62],[-55,-62],[-49,-62],[-73,-42],[-67,-42],[-55,-42],[-49,-42]];
-  positions.forEach(([x,z],i) => {
-    const front = i<5?1:-1, key=`sunbeam-${i}`, door=[x+.95*front,z+3.1*front], approach=[door[0],z+4.5*front], join=[door[0],-52];
-    const shop=i===0?'grocer':i===5?'laundry':null;
-    town.buildings.push({key,id:'sunbeam-rowhouse',custom:true,name:names[i],pos:[x,z],rot:front===1?0:Math.PI,box:{min:[x-2.85,z-3.25],max:[x+2.85,z+3.25]},door,approach,join,kind:'home',district:'sunbeam',color:palette[i],height:8.4+(i%3)*.35,shop,
-      story:shop==='grocer'?'Two homes above Nell’s corner grocer. Fruit crates on the pavement, a striped awning, and a spare key behind the counter.':shop==='laundry'?'Two upstairs homes and a shared washhouse below. Bring a basket; leave with the latest news. On sunny days the whole court smells of clean sheets.':'One of Sunbeam’s narrow, three-storey terrace houses. Two households share a front door, a flower-filled balcony, and the little pedestrian court outside.'});
-    road(door,approach,1.25,'door',key); road(approach,join,1.25,'door',key);
-  });
-  // Reserve the complete furnished court and margins against random foliage.
-  // Building and street checks still use each real footprint above.
-  return {min:[-79,-69],max:[-43,-34]};
+// The first nine entries keep the original resident home IDs.
+const frontages = [
+  { side: -1, row: 0, name: 'Nell’s Corner & upstairs flats', shopName: 'Nell’s Corner', shop: 'grocer', color: '#dbb56f', shopColor: '#547c66', storeys: 3 },
+  { side: -1, row: 1, name: 'No. 2 · The Blue Shutters', shopName: 'Blue Shutter Books', shop: 'books', color: '#9cafcf', shopColor: '#496e89', storeys: 4 },
+  { side: -1, row: 2, name: 'No. 3 · Sunflower House', shopName: 'Sunflower Sweets', shop: 'sweets', color: '#e2c182', shopColor: '#a76062', storeys: 3 },
+  { side: -1, row: 3, name: 'No. 4 · The Mending Room', shopName: 'Linden Café', shop: 'cafe', color: '#da9e9c', shopColor: '#ab5350', storeys: 3 },
+  { side: -1, row: 4, name: 'No. 5 · Skylark House', shopName: 'Skylark Stationery', shop: 'stationery', color: '#9eb4a7', shopColor: '#536e61', storeys: 4 },
+  { side: 1, row: 0, name: 'The Washhouse & upstairs flats', shopName: 'The Washhouse', shop: 'laundry', color: '#95b4bb', shopColor: '#547e91', storeys: 3 },
+  { side: 1, row: 1, name: 'No. 7 · Spoke House', shopName: 'Sol’s Cycle Repair', shop: 'cycles', color: '#e6bc82', shopColor: '#987050', storeys: 3 },
+  { side: 1, row: 2, name: 'No. 8 · The Drawing Room', shopName: 'Golden Crumb Bakery', shop: 'bakery', color: '#cf9496', shopColor: '#985a65', storeys: 4 },
+  { side: 1, row: 3, name: 'No. 9 · Piano House', shopName: 'Piano House Music', shop: 'music', color: '#a7b69b', shopColor: '#537060', storeys: 3 },
+  { side: 1, row: 4, name: 'Salt & Stem Studios', shopName: 'Salt & Stem', shop: 'florist', color: '#b0abd0', shopColor: '#735d84', storeys: 3, upperUse: 'studios' },
+  { side: 1, row: 5, name: 'Hearth House', shopName: 'Hearth Pottery', shop: 'pottery', color: '#e0a985', shopColor: '#9c6046', storeys: 4 },
+  { side: -1, row: 5, name: 'Thimble House', shopName: 'Silver Thimble', shop: 'tailor', color: '#a1b6c9', shopColor: '#55778b', storeys: 5, upperUse: 'offices' },
+  { side: -1, row: 6, name: 'Primrose House', shopName: 'Primrose Records', shop: 'records', color: '#d7a58e', shopColor: '#846849', storeys: 3 },
+  { side: 1, row: 6, name: 'Heron House', shopName: 'Heron Fine Goods', shop: 'goods', color: '#a4b4c8', shopColor: '#586982', storeys: 3, upperUse: 'offices' },
+];
+
+const shopStories = {
+  grocer: 'Nell lives above the corner grocer. Fruit crates sit under the striped awning, and she keeps a spare key for half the terrace.',
+  laundry: 'Cleo lives above the shared washhouse. Bring a basket and leave with the latest news.',
+  cafe: 'Mae lives upstairs. Linden Café serves coffee and cake under the red umbrellas on the promenade.',
+};
+
+export function addSunbeamLayout(town, { northStreet, southStreet }) {
+  town.districts.push({ id: 'sunbeam', name: SUNBEAM_NAME, type: 'neighbourhood', center: [axisX, centerZ] });
+  const road = (a, b, width, kind, owner = null) => town.roads.push({ a, b, width, kind, owner });
+  road([axisX, north], [axisX, south], clearWidth, 'pedestrian');
+  road([axisX, north], [axisX, northStreet], 1.8, 'pedestrian');
+  road([axisX, south], [axisX, southStreet], 1.8, 'pedestrian');
+
+  for (const [i, { side, row, ...frontage }] of frontages.entries()) {
+    const x = axisX + 10 * side;
+    const z = rowCenters[row];
+    const key = 'sunbeam-' + i;
+    const door = [x - 3.1 * side, z + .95 * side];
+    const approach = [x - 4.5 * side, door[1]];
+    const join = [axisX, door[1]];
+    const upperUse = frontage.upperUse ?? 'flats';
+    town.buildings.push({
+      ...frontage, key, id: 'sunbeam-rowhouse', custom: true, pos: [x, z],
+      rot: -side * Math.PI / 2,
+      box: { min: [x - 3.25, z - 2.85], max: [x + 3.25, z + 2.85] },
+      door, approach, join, kind: 'home', district: 'sunbeam',
+      height: frontage.storeys * 2.65 + .5, upperUse,
+      story: shopStories[frontage.shop] ?? `${frontage.shopName} opens onto Sunbeam Mall, with ${upperUse} on the floors above.`,
+    });
+    road(door, approach, 1.25, 'door', key);
+    road(approach, join, 1.25, 'door', key);
+  }
+
+  return { min: [axisX - 14, north], max: [axisX + 14, south] };
 }

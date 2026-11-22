@@ -1,6 +1,6 @@
 import './navigation.css';
 export const VIEW_GROUPS=[
- ['Town life',[['village','The whole world'],['railway','Thistlebrook Northern Loop'],['neighbourhood','Willowbank'],['sunbeam','Sunbeam Terrace'],['maple-hollow','Maple Hollow'],['downtown','Downtown'],['market','Market Square'],['orchard','Clover Fields'],['campus','Thistlebrook High'],['civic','Civic Green'],['works','West Works'],['quay','Lantern Quay']]],
+ ['Town life',[['village','The whole world'],['railway','Thistlebrook Northern Loop'],['neighbourhood','Willowbank'],['sunbeam','Sunbeam Mall'],['maple-hollow','Maple Hollow'],['downtown','Downtown'],['market','Market Square'],['orchard','Clover Fields'],['campus','Thistlebrook High'],['civic','Civic Green'],['works','West Works'],['quay','Lantern Quay']]],
  ['Parks & coast',[['fair','Merrymead Park'],['outskirts','Stillwater countryside'],['lake','Stillwater Lake'],['farmland','Farms & orchards'],['skatepark','Switchyard Skate & Bike'],['harbor','Saltwind Harbor'],['shell-cove','Shell Cove'],['coast','Coral Coast'],['beach','Coral Beach'],['strip','Ocean Drive']]],
  ['Beyond town',[['airport','Municipal Airport'],['themepark','Pinecrest Adventure Park'],['mountainpass','Mountain Pass'],['parkcoasters','Pinecrest coasters'],['roadster','Roadster Proving Ground'],['starbase','Starbase Texas'],['launch','Launch tower'],['recovery','Landing zones'],['offshore','Offshore recovery'],['starfactory','Starfactory']]],
 ];

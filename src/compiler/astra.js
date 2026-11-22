@@ -1,4 +1,4 @@
-import {widenBusStreets} from '../roads/town-roads.js';
+import {WEST_LOOP, widenBusStreets} from '../roads/town-roads.js';
 import {buildRegistry} from '../astra/registry/index.js';
 import { compileTownScenes, checkScene } from './library-scenes.js';
 import { overlap as libraryOverlap } from '../catalog/library/index.js';
@@ -9,7 +9,7 @@ import { planCivicQuarter } from '../astra/civic-quarter-plan.js';
 import { makeRng } from './rng.js';
 import { boxInRiver } from './water.js';
 import { addWorkingDistrict } from './astra-work.js';
-import { addSunbeamLayout } from '../astra/sunbeam-layout.js';
+import { addSunbeamLayout, SUNBEAM_MALL } from '../astra/sunbeam-layout.js';
 export const riverZ = x => 15 + Math.sin(x * .095) * 1.7;
 export const distanceToSegment = (p,a,b) => {
  const dx=b[0]-a[0],dz=b[1]-a[1],t=Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dz)/(dx*dx+dz*dz||1)));
@@ -18,7 +18,8 @@ export const distanceToSegment = (p,a,b) => {
 export function compileAstra(catalog, seed=831) {
  const rng=makeRng(seed),random=()=>rng.float(),pick=a=>a[Math.floor(random()*a.length)];
  const town={version:'astra-4',seed,bounds:{minX:-147,maxX:65,minZ:-174,maxZ:34},riverBounds:{minX:-80,maxX:65},roads:[],buildings:[],props:[],trees:[],gardens:[],nodes:[],edges:[],bridges:[-22,22,46],rejected:0};
- town.outline=[[-118,-174],[-40,-174],[-40,-104],[65,-104],[65,34],[-80,34],[-80,-29],[-147,-29],[-147,-73],[-118,-73]];
+ const {west,north,south,stationAvenue}=WEST_LOOP,terraceNorth=north-4;
+ town.outline=[[-118,-174],[-40,-174],[-40,-104],[65,-104],[65,34],[-80,34],[-80,-29],[-147,-29],[-147,terraceNorth],[-118,terraceNorth]];
  town.civicAprons=[{min:[18,-67],max:[24,-55]}];
  town.districts=[
   {id:'willowbank',name:'Willowbank',type:'neighbourhood',center:[-12,-13]},
@@ -61,8 +62,8 @@ export function compileAstra(catalog, seed=831) {
  // Civic Avenue connects the station approach, services and school without
  // cutting through the sports fields or the fire station forecourt.
  road([-42,-103],[-80,-103],3,'avenue');road([-80,-103],[-80,-77],1.5);
- road([-111,-139],[-115,-139],3,'avenue');road([-115,-139],[-115,-73],3,'avenue');
- road([-115,-73],[-105,-73],3,'avenue');road([-105,-73],[-105,-52],3,'avenue');
+ road([-111,-139],[stationAvenue,-139],3,'avenue');road([stationAvenue,-139],[stationAvenue,north],3,'avenue');
+ road([-105,-77],[-105,-52],3,'avenue');
  for(const v of town.venues)road(v.entry,v.access||(v.type==='music'?[49,26]:[v.pos[0],-35]),1.8,'venue','venue:'+v.id);
  const overlap=(a,b,pad=.0)=>a.min[0]<b.max[0]+pad&&a.max[0]>b.min[0]-pad&&a.min[1]<b.max[1]+pad&&a.max[1]>b.min[1]-pad;
  const box=(id,x,z,rot=0,scale=1)=>{const e=catalog.get(id);if(!e)throw Error(`Missing catalog entry: ${id}`);const pts=[];for(const px of [e.bounds.min[0],e.bounds.max[0]])for(const pz of [e.bounds.min[2],e.bounds.max[2]])pts.push([x+scale*(px*Math.cos(rot)+pz*Math.sin(rot)),z+scale*(-px*Math.sin(rot)+pz*Math.cos(rot))]);return {min:[Math.min(...pts.map(p=>p[0])),Math.min(...pts.map(p=>p[1]))],max:[Math.max(...pts.map(p=>p[0])),Math.max(...pts.map(p=>p[1]))]};};
@@ -99,13 +100,16 @@ export function compileAstra(catalog, seed=831) {
   // Side gardens leave the front and its access corridor completely open.
   if(!downtown&&sz<0 && sx!==0 && sx<40)town.gardens.push({x:b.max[0]+1.3,z,owner:bld.key,width:1.7,depth:4.3});
  }
- const sunbeamRoadStart=roads.length,sunbeamCourt=addSunbeamLayout(town);placeDistrict(town,'sunbeam',sunbeamRoadStart);
- reservations.push(moveBox(sunbeamCourt,DISTRICT_OFFSETS.sunbeam));
- road([-105,-52],[-94,-52],2.4);road([-99,-33],[-80,-33],2.4);
- // A perimeter bus loop serves the west without driving through the terrace court.
+ const sunbeamRoadStart=roads.length,sunbeamParcel=addSunbeamLayout(town,{northStreet:north,southStreet:south});
+ placeDistrict(town,'sunbeam',sunbeamRoadStart);
+ town.sunbeamReservation=moveBox(sunbeamParcel,DISTRICT_OFFSETS.sunbeam);
+ reservations.push(town.sunbeamReservation);
+ road([-105,-52],[-94,-52],2.4);road([-105,-52],[-105,south],2.2);
+ const mallEntry=[SUNBEAM_MALL.axisX+DISTRICT_OFFSETS.sunbeam[0],south];
+ road(mallEntry,[-99,south],2.4);road([-99,south],[-80,south],2.4);
+ // The West Loop serves the ends of the pedestrian mall from the perimeter.
  for(const r of roads){if(r.a[0]===-42&&r.b[0]===-42)r.width=3;if(r.a[1]===-33&&r.b[1]===-33&&Math.min(r.a[0],r.b[0])<=-80)r.width=3;}
- for(const [a,b] of [[[-80,-103],[-105,-103]],[[-105,-103],[-105,-77]],[[-105,-77],[-100,-77]],[[-126,-33],[-144,-33]],[[-144,-33],[-144,-70]],[[-144,-70],[-115,-70]],[[-115,-70],[-115,-73]]])road(a,b,3,'avenue');
- for(const r of roads)if(r.a[1]===-52&&r.b[1]===-52&&Math.min(r.a[0],r.b[0])< -105)r.kind='pedestrian';
+ for(const [a,b] of [[[-80,-103],[-105,-103]],[[-105,-103],[-105,-77]],[[-105,-77],[-100,-77]],[mallEntry,[west,south]],[[west,south],[west,north]],[[west,north],[stationAvenue,north]]])road(a,b,3,'avenue');
  widenBusStreets(roads);
  town.catalogScenes=compileTownScenes(town);reservations.push(...town.catalogScenes.map(s=>s.box));
  town.interactions=town.catalogScenes.flatMap(s=>s.slots);

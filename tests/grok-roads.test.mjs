@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {TOWN_RULE} from '../src/compiler/town-rules.js';
 import {walkBetween} from '../src/roads/pedestrian.js';
+import {WEST_LOOP} from '../src/roads/town-roads.js';
 import {runAudit} from '../tools/audit-roads.mjs';
 
 const open = (r, cats) => r.findings.filter((f) => f.status === 'open' && (!cats || cats.includes(f.category)));
@@ -46,7 +47,8 @@ test('audit fails on a duplicate ribbon', async () => {
 });
 
 test('audit fails on a dead-end stub', async () => {
-  const r = await runAudit({mutate: (town) => town.roads.push({a: [-144, -70], b: [-150, -70], width: 3, kind: 'avenue'})});
+  const {west, north} = WEST_LOOP;
+  const r = await runAudit({mutate: (town) => town.roads.push({a: [west, north], b: [west - 6, north], width: 3, kind: 'avenue'})});
   assert(open(r, ['stub', 'dead-end']).some((f) => f.rule === TOWN_RULE.roads));
 });
 

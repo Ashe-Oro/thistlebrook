@@ -1,150 +1,428 @@
-import {createRigidBatches} from './rigid-batches.js';
-import {batchStaticLines,batchStaticMeshes} from './static-batches.js';
 import * as THREE from 'three';
-import { lampPosts, SUNBEAM_LAMPS, LAMP_LOOK } from './lamp-posts.js';
-import { buildLampGlow } from './lamp-glow.js';
-import { DISTRICT_OFFSETS } from '../compiler/astra-placement.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { place } from '../catalog/loader.js';
+import { DISTRICT_OFFSETS } from '../compiler/astra-placement.js';
 import { toonMaterial } from '../toon.js';
+import { buildLampGlow } from './lamp-glow.js';
+import { lampPosts, SUNBEAM_LAMPS } from './lamp-posts.js';
+import { SUNBEAM_MALL } from './sunbeam-layout.js';
+import { SUNBEAM_AMBIENT, SUNBEAM_FURNISHINGS, SUNBEAM_GLOBE_HEIGHT, SUNBEAM_PAVING_Y, sunbeamDaytime } from './sunbeam-mall-plan.js';
+import { buildMallLife } from './sunbeam-mall-life.js';
+import { tagObject } from './registry/render-tags.js';
+import { batchStaticMeshes } from './static-batches.js';
 
-// Sunbeam's architecture, furnishings and authored courtyard activity stay
-// together here. Its doors and through routes belong to sunbeam-layout.js.
+const trim = '#f3dec0';
+const iron = '#405e59';
+const timber = '#997659';
+const litGlass = new THREE.Color('#ffc981');
+
+function scenery(root) {
+  const cube = new THREE.BoxGeometry(1, 1, 1);
+  const orb = new THREE.IcosahedronGeometry(1, 0);
+  const round = new THREE.CylinderGeometry(.5, .5, 1, 12);
+  const plane = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+  const awning = new THREE.ConeGeometry(1, 1, 8);
+  const ring = new THREE.TorusGeometry(1, .15, 5, 14);
+  const signs = [];
+  const mesh = (geometry, x, y, z, w, h, d, color, parent = root) => {
+    const m = new THREE.Mesh(geometry, typeof color === 'string' ? toonMaterial(color) : color);
+    m.position.set(x, y, z);
+    m.scale.set(w, h, d);
+    m.castShadow = geometry !== plane;
+    m.receiveShadow = true;
+    parent.add(m);
+    return m;
+  };
+  const box = (...args) => mesh(cube, ...args);
+  const ball = (x, y, z, r, color, parent) => mesh(orb, x, y, z, r, r, r, color, parent);
+  const disk = (x, y, z, diameter, height, color, parent) => mesh(round, x, y, z, diameter, height, diameter, color, parent);
+  const tile = (x, y, z, w, d, color) => mesh(plane, x, y, z, w, 1, d, color);
+  const sign = (text, x, y, z, w, h, color, parent, registryId) => {
+    const anchor = new THREE.Object3D();
+    anchor.position.set(x, y, z);
+    parent.add(anchor);
+    signs.push({ text, w, h, color, anchor, registryId });
+  };
+  return { box, ball, disk, tile, sign, signs, mesh, awning, ring };
+}
+
+// The atlas keeps every shop name readable with one textured draw for the mall.
+function signMesh(root, signs) {
+  const columns = 2, cellWidth = 512, cellHeight = 96;
+  const canvas = document.createElement('canvas');
+  canvas.width = columns * cellWidth;
+  canvas.height = THREE.MathUtils.ceilPowerOfTwo(Math.ceil(signs.length / columns) * cellHeight);
+  const ctx = canvas.getContext('2d');
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '700 51px Georgia';
+  root.updateMatrixWorld(true);
+  const planes = signs.map(({ text, w, h, color, anchor }, i) => {
+    const x = (i % columns) * cellWidth, y = Math.floor(i / columns) * cellHeight;
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, cellWidth, cellHeight);
+    ctx.strokeStyle = '#fff0cb';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(x + 8, y + 8, cellWidth - 16, cellHeight - 16);
+    ctx.fillStyle = '#fff3d5';
+    ctx.fillText(text.toUpperCase(), x + cellWidth / 2, y + cellHeight / 2 + 3, cellWidth - 35);
+    const geometry = new THREE.PlaneGeometry(w, h).applyMatrix4(anchor.matrixWorld);
+    const uv = geometry.attributes.uv;
+    for (let j = 0; j < uv.count; j++) {
+      uv.setXY(j, (x + 2 + uv.getX(j) * (cellWidth - 4)) / canvas.width,
+        1 - (y + 2 + (1 - uv.getY(j)) * (cellHeight - 4)) / canvas.height);
+    }
+    return geometry;
+  });
+  const map = new THREE.CanvasTexture(canvas);
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.anisotropy = 4;
+  const mesh = new THREE.Mesh(mergeGeometries(planes), new THREE.MeshBasicMaterial({ map }));
+  mesh.name = 'Sunbeam shop signs';
+  mesh.userData.registryIds = [...new Set(signs.map(s => s.registryId))];
+  return mesh;
+}
+
+function paveMall({box, tile}) {
+  const {axisX, north, south, clearWidth, pavedWidth} = SUNBEAM_MALL;
+  const length = south - north;
+  const centerZ = (north + south) / 2;
+  const paving = SUNBEAM_PAVING_Y;
+  box(axisX, paving - .085, centerZ, pavedWidth, .12, length, '#bda78b');
+  const bandWidth = (pavedWidth - clearWidth) / 2;
+  const rows = Math.ceil(length / 1.75), spacing = length / rows;
+  const stone = ['#e9dfc8', '#e6dac3', '#e3d6c0', '#eadfc9'];
+  const edging = ['#cfbaa3', '#d7c2a8', '#d1bca5', '#dbc7b0'];
+  for (let row = 0; row < rows; row++) {
+    const z = north + (row + .5) * spacing;
+    // Alternate broad central joints to keep the surface one continuous plaza.
+    const widths = row % 2 ? [1, 2, 2, 1] : [2, 2, 2];
+    let x = axisX - clearWidth / 2;
+    widths.forEach((w, column) => {
+      tile(x + w / 2, paving, z, w - .026, spacing - .034, stone[(row + column * 3) % stone.length]);
+      x += w;
+    });
+    for (const side of [-1, 1]) {
+      const edge = axisX + side * (clearWidth / 2 + bandWidth / 2);
+      for (let column = -1; column <= 1; column++) {
+        tile(edge + column * bandWidth / 3, paving, z, bandWidth / 3 - .027, spacing - .035,
+          edging[(row * 3 + column + side + 4) % edging.length]);
+      }
+    }
+  }
+  for (const side of [-1, 1]) {
+    tile(axisX + side * (clearWidth / 2 + .05), paving + .003, centerZ, .10, length, '#a89984');
+    tile(axisX + side * (pavedWidth / 2 - .10), paving + .004, centerZ, .20, length, '#f1ddba');
+    for (let z = north + 2.5; z < south - 1; z += 6.8) {
+      const x = axisX + side * (clearWidth / 2 + .44);
+      tile(x, paving + .005, z, .37, .37, '#a68e7c').rotation.y = Math.PI / 4;
+      tile(x, paving + .006, z, .23, .23, '#e3d6af').rotation.y = Math.PI / 4;
+    }
+  }
+}
+
+function storefront(art, root, building, glass, index) {
+  const { box, ball, mesh, ring, sign } = art;
+  const g = new THREE.Group();
+  g.position.set(building.pos[0], SUNBEAM_PAVING_Y, building.pos[1]);
+  g.rotation.y = building.rot;
+  root.add(g);
+  const { height: h, color, shop, shopName, shopColor, storeys, registryId } = building;
+  const roof = ['#526d71', '#66716c', '#746966', '#596d7d'][index % 4];
+  const exterior = shopColor || '#506f68';
+  const groundHeight = 3.12;
+  const floor = (h - groundHeight) / (storeys - 1);
+  const parapet = index % 5 === 1 || index % 5 === 3;
+
+  box(0, h / 2, 0, 5.52, h, 6, color, g);
+  box(0, .27, 0, 5.62, .54, 6.08, '#ae9d8a', g);
+  box(0, groundHeight, 0, 5.64, .17, 6.13, trim, g);
+  box(0, h - .10, 0, 5.68, .16, 6.17, trim, g);
+  for (const x of [-2.66, 2.66]) box(x, h / 2, 3.04, .13, h, .17, trim, g);
+
+  if (parapet) {
+    box(0, h + .17, 0, 5.62, .32, 6.15, roof, g);
+    for (const z of [-3, 3]) box(0, h + .4, z, 5.72, .20, .27, color, g);
+    for (const x of [-2.74, 2.74]) box(x, h + .4, 0, .24, .20, 5.8, color, g);
+    box(.1, h + .42, -.35, 1.35, .16, 1.62, '#828e87', g);
+    box(.1, h + .52, -.35, 1.10, .09, 1.35, glass, g);
+  } else {
+    for (const side of [-1, 1]) {
+      const slope = box(0, h + .49, side * 1.47, 5.75, .19, 3.28, roof, g);
+      slope.rotation.x = side * .29;
+    }
+    box(0, h + .97, 0, 5.77, .15, .19, '#435c60', g);
+    box(-1.64, h + .73, -1.61, .60, 1.38, .59, '#b98570', g);
+    box(-1.64, h + 1.46, -1.61, .78, .15, .74, trim, g);
+  }
+
+  for (let level = 0; level < storeys - 1; level++) {
+    const y = groundHeight + (level + .51) * floor;
+    if (level > 0) box(0, groundHeight + level * floor, 0, 5.62, .11, 6.10, trim, g);
+    for (const side of [-1, 1]) for (const x of [-1.27, 1.27]) {
+      box(x, y, side * 3.05, 1.60, 1.68, .13, trim, g);
+      box(x, y, side * 3.13, 1.33, 1.43, .06, glass, g);
+      box(x, y, side * 3.17, .055, 1.44, .05, trim, g);
+      box(x, y + .18, side * 3.17, 1.34, .055, .05, trim, g);
+      box(x, y - .89, side * 3.15, 1.79, .12, .29, trim, g);
+      if (index % 3 !== 1) for (const dx of [-.94, .94]) {
+        box(x + dx, y, side * 3.10, .25, 1.49, .095, roof, g);
+      }
+    }
+    for (const side of [-1, 1]) {
+      box(side * 2.78, y, .26, .12, 1.45, 1.29, trim, g);
+      box(side * 2.85, y, .26, .06, 1.24, 1.06, glass, g);
+      box(side * 2.89, y, .26, .045, 1.24, .055, trim, g);
+    }
+  }
+
+  // Every retail level uses the same clear door line, with displays beside it.
+  box(0, 1.46, 3.035, 5.11, 2.83, .12, exterior, g);
+  box(.95, 1.20, 3.13, 1.34, 2.40, .11, trim, g);
+  box(.95, 1.22, 3.20, 1.10, 2.17, .07, exterior, g);
+  box(.95, 1.49, 3.25, .83, 1.51, .034, glass, g);
+  box(1.33, 1.10, 3.28, .066, .16, .04, '#d8b66c', g);
+  box(.95, .047, 3.27, 1.42, .094, .48, '#b5a58a', g);
+  for (const [x, width] of [[-1.15, 2.09], [2.00, .69]]) {
+    box(x, 1.46, 3.13, width + .12, 1.97, .12, trim, g);
+    box(x, 1.46, 3.22, width, 1.76, .075, glass, g);
+    box(x, 1.76, 3.27, width, .05, .045, trim, g);
+    box(x, .49, 3.23, width + .14, .16, .28, exterior, g);
+  }
+  if (index % 2 === 0) box(-1.15, 1.48, 3.27, .055, 1.75, .05, trim, g);
+
+  box(0, 2.85, 3.19, 4.95, .52, .18, exterior, g);
+  sign(shopName, 0, 2.86, 3.292, 4.82, .48, exterior, g, registryId);
+  const striped = index % 5 !== 4;
+  for (let n = 0; n < 10; n++) {
+    const accent = striped && n % 2 ? trim : exterior;
+    const x = (n - 4.5) * .512;
+    box(x, 2.54, 3.63, .513, .092, 1.05, accent, g).rotation.x = .28;
+    box(x, 2.31, 4.13, .513, .22, .071, accent, g);
+  }
+
+  if (shop === 'grocer') {
+    for (const [n, x] of [-2.04, -1.18].entries()) {
+      box(x, .36, 3.46, .74, .55, .62, timber, g);
+      for (let j = 0; j < 5; j++) {
+        ball(x + (j % 3 - 1) * .20, .70, 3.29 + Math.floor(j / 3) * .25, .125,
+          n ? '#e3ab49' : '#ba6652', g);
+      }
+    }
+  } else if (shop === 'laundry') {
+    for (const x of [-1.68, -.65]) mesh(ring, x, 1.10, 3.31, .32, .32, .27, '#ecdfc9', g);
+  } else {
+    box(-1.17, .32, 3.45, 1.46, .32, .52, '#ac785e', g);
+    for (let i = 0; i < 5; i++) {
+      const x = -1.70 + i * .27;
+      ball(x, .55, 3.45, .15, '#739264', g);
+      ball(x, .66, 3.45, .08, i % 2 ? '#e4b762' : '#da8e93', g);
+    }
+  }
+
+  if (index % 3 !== 1) {
+    box(0, groundHeight + .16, 3.38, 4.38, .16, .82, trim, g);
+    box(0, groundHeight + .87, 3.75, 4.43, .07, .085, iron, g);
+    for (let i = 0; i < 11; i++) box((i - 5) * .41, groundHeight + .52, 3.75, .055, .72, .055, iron, g);
+    box(-1.37, groundHeight + .52, 3.76, 1.39, .30, .35, '#ab795d', g);
+    for (let i = 0; i < 5; i++) {
+      const x = -1.91 + i * .27;
+      ball(x, groundHeight + .72, 3.76, .14, '#739265', g);
+      ball(x, groundHeight + .84, 3.76, .075, i % 2 ? '#ddc36e' : '#d58d92', g);
+    }
+  }
+  box(.95, 1.18, -3.10, 1.2, 2.20, .10, exterior, g);
+  box(.95, 1.65, -3.16, .72, .83, .045, glass, g);
+  box(-1.23, 1.52, -3.10, 1.54, 1.70, .13, trim, g);
+  box(-1.23, 1.52, -3.18, 1.34, 1.46, .06, glass, g);
+  tagObject(g, registryId);
+  return {
+    type: 'building', data: building, bounds: new THREE.Box3(
+      new THREE.Vector3(building.box.min[0], 0, building.box.min[1]),
+      new THREE.Vector3(building.box.max[0], h + 1.7, building.box.max[1])),
+  };
+}
+
+function garden(art, g) {
+  const {box, ball} = art;
+  box(0, .25, 0, 2.08, .50, 1.92, '#a4937a', g);
+  box(0, .49, 0, 2.17, .13, 2.00, '#c5af8b', g);
+  box(0, .56, 0, 1.88, .034, 1.71, '#715f48', g);
+  for (const side of [-1, 1]) for (let i = 0; i < 3; i++) {
+    const x = side * .77, z = (i - 1) * .53;
+    ball(x, .63, z, .17, '#60834e', g);
+    ball(x, .75, z, .095, i % 2 ? '#dcac59' : '#cc7e8d', g);
+  }
+}
+
+const CHESS_TABLE = .83;
+const CHESS_SEAT = .43;
+const CAFE_SEAT = .43;
+
+function chair({box}, g, slot, seatHeight, color) {
+  const [x, z] = slot.offset;
+  const back = Math.sign(z) * .245;
+  box(x, seatHeight - .046, z, .54, .092, .51, color, g);
+  for (const dx of [-.19, .19]) for (const dz of [-.17, .17]) {
+    box(x + dx, .189, z + dz, .064, .377, .064, iron, g);
+  }
+  for (const dx of [-.20, .20]) box(x + dx, .65, z + back, .061, .44, .064, iron, g);
+  box(x, .82, z + back, .54, .11, .092, color, g);
+}
+
+function chessTable(art, g, seats) {
+  const {box, disk} = art;
+  disk(0, .09, 0, .68, .16, iron, g);
+  disk(0, .41, 0, .18, .78, iron, g);
+  box(0, CHESS_TABLE - .072, 0, 1.27, .13, 1.27, '#9b7958', g);
+  box(0, CHESS_TABLE, 0, .99, .034, .99, '#f0dbb0', g);
+  for (let row = 0; row < 8; row++) for (let col = 0; col < 8; col++) {
+    if ((row + col) % 2 === 0) box((col - 3.5) * .12, CHESS_TABLE + .018, (row - 3.5) * .12,
+      .12, .006, .12, '#55736a', g);
+  }
+  seats.forEach(slot => chair(art, g, slot, CHESS_SEAT, '#b09570'));
+}
+
+function cafeTable(art, g, color, seats) {
+  const {box, disk, mesh, awning} = art;
+  disk(0, .77, 0, 1.20, .10, '#ac825f', g);
+  disk(0, 1.14, 0, .069, 2.26, timber, g);
+  disk(0, .087, 0, .54, .15, iron, g);
+  mesh(awning, 0, 2.29, 0, 1.08, .50, 1.08, color, g).rotation.y = Math.PI / 8;
+  disk(0, 2.057, 0, 1.99, .085, trim, g);
+  disk(0, 2.56, 0, .135, .08, timber, g);
+  seats.forEach(slot => chair(art, g, slot, CAFE_SEAT, color));
+  for (const z of [-.29, .29]) {
+    disk(.25, .834, z, .23, .031, trim, g);
+    disk(.25, .892, z, .12, .10, '#f0e3cc', g);
+    box(.31, .89, z, .049, .056, .061, '#f0e3cc', g);
+  }
+}
+
+function kiosk(art, g, districtId) {
+  const {box, sign} = art;
+  const teal = '#567f79';
+  g.rotation.y = -Math.PI / 2;
+  box(0, .54, 0, 2.08, 1.08, 1.72, teal, g);
+  box(0, 1.16, .92, 2.26, .18, .44, '#ba946c', g);
+  for (const x of [-.92, .92]) box(x, 1.66, 0, .13, 1.3, 1.68, teal, g);
+  box(0, 1.66, -.80, 1.75, 1.24, .10, '#c3af91', g);
+  for (const x of [-.62, 0, .62]) {
+    box(x, 1.45, .81, .49, .33, .28, '#a68360', g);
+    box(x, 1.68, .85, .35, .37, .048, x === 0 ? '#dec88c' : '#f0e3c5', g).rotation.x = -.25;
+    box(x, 1.69, .879, .20, .026, .006, teal, g);
+  }
+  box(0, 2.31, 0, 2.56, .23, 2.15, '#ba7058', g);
+  box(0, 2.47, -.10, 2.18, .14, 1.82, '#ce8266', g);
+  box(0, 2.27, 1.09, 2.04, .34, .09, teal, g);
+  sign('Sunbeam News', 0, 2.27, 1.145, 1.99, .32, teal, g, districtId);
+}
+
+function fixtures(art, root, districtId, jobs) {
+  const {box, ball, disk, sign} = art;
+  const paving = SUNBEAM_PAVING_Y;
+  for (const spot of SUNBEAM_FURNISHINGS) {
+    const [x, z] = spot.pos;
+    if (spot.kind === 'lamp') continue;
+    if (spot.kind === 'bench') {
+      jobs.push(place('cv-bench', { x, z, scale: .64, rotY: spot.yaw }).then(o => {
+        o.position.y = paving;
+        root.add(o);
+      }));
+      continue;
+    }
+    const g = new THREE.Group();
+    g.position.set(x, paving, z);
+    root.add(g);
+    switch (spot.kind) {
+      case 'tree-planter':
+        garden(art, g);
+        jobs.push(place('cv-tree-fruit', { scale: .64 }).then(tree => {
+          tree.position.y = .56;
+          g.add(tree);
+        }));
+        break;
+      case 'chess':
+        chessTable(art, g, spot.seats);
+        break;
+      case 'cafe':
+        cafeTable(art, g, spot.color, spot.seats);
+        break;
+      case 'kiosk':
+        kiosk(art, g, districtId);
+        break;
+      case 'performer': {
+        // A low tip case and music board mark the busking pitch.
+        box(-.38, .071, .45, .91, .14, .51, '#526663', g);
+        box(-.38, .146, .45, .79, .023, .39, '#a77859', g);
+        box(-.38, .28, .69, .91, .11, .31, '#526663', g).rotation.x = -.84;
+        for (const [x, z] of [[-.52,.37],[-.25,.42],[-.13,.55]]) disk(x, .164, z, .087, .025, '#e8bd63', g);
+        const board = box(.40, .46, -.76, .66, .77, .09, timber, g);
+        board.rotation.x = .14;
+        sign('Live Music', .40, .55, -.69, .61, .35, '#4d6c66', g, districtId);
+        break;
+      }
+    }
+  }
+  for (const [x, z] of SUNBEAM_LAMPS) {
+    disk(x, paving + .09, z, .44, .18, iron);
+    disk(x, paving + .25, z, .23, .31, iron);
+    disk(x, paving + 1.38, z, .105, 2.44, iron);
+    disk(x, paving + 2.63, z, .35, .14, iron);
+    disk(x, paving + 2.70, z, .40, .075, '#77928a');
+    ball(x, paving + SUNBEAM_GLOBE_HEIGHT, z, .145, '#efe2bd');
+    disk(x, paving + 2.965, z, .11, .065, iron);
+  }
+}
+
 export async function buildSunbeam(scene, town) {
-  const root = new THREE.Group(), moving = new THREE.Group();
-  root.name = 'Sunbeam Terrace'; moving.name = 'Sunbeam courtyard life'; scene.add(moving);
-  const cube = new THREE.BoxGeometry(1,1,1), ball = new THREE.IcosahedronGeometry(1,1);
-  const jobs=[], selectables=[], neighbours=[], washing=[], lights=[];
-  const glass = toonMaterial('#6c9399').clone();
-  const box=(x,y,z,w,h,d,c,parent=root)=>{
-    const m=new THREE.Mesh(cube,typeof c==='string'?toonMaterial(c):c);
-    m.position.set(x,y,z);m.scale.set(w,h,d);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;
+  const root = new THREE.Group();
+  root.name = 'Sunbeam Mall scenery';
+  const art = scenery(root);
+  const dusk = { value: 0 };
+  const glass = toonMaterial('#7399a0').clone();
+  glass.name = 'Sunbeam window glass';
+  // Weather clones the material and preserves its shader hook.
+  glass.onBeforeCompile = shader => {
+    shader.uniforms.uSunbeamDusk = dusk;
+    shader.uniforms.uSunbeamLitGlass = { value: litGlass };
+    shader.fragmentShader = `uniform float uSunbeamDusk;
+uniform vec3 uSunbeamLitGlass;
+` + shader.fragmentShader
+      .replace('#include <color_fragment>', `#include <color_fragment>
+diffuseColor.rgb = mix(diffuseColor.rgb, uSunbeamLitGlass, uSunbeamDusk);`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+totalEmissiveRadiance += uSunbeamLitGlass * uSunbeamDusk * .72;`);
   };
-  const orb=(x,y,z,r,c,parent=root)=>{const m=new THREE.Mesh(ball,toonMaterial(c));m.position.set(x,y,z);m.scale.setScalar(r);m.castShadow=true;parent.add(m);return m;};
-  const line=(points,color='#58645b',parent=root)=>{const m=new THREE.Line(new THREE.BufferGeometry().setFromPoints(points.map(p=>new THREE.Vector3(...p))),new THREE.LineBasicMaterial({color}));parent.add(m);return m;};
-  const label=(text,x,y,z,w,h,color='#486d65',parent=root,flat=false)=>{
-    const canvas=document.createElement('canvas');canvas.width=1024;canvas.height=128;
-    const ctx=canvas.getContext('2d');ctx.fillStyle=color;ctx.fillRect(0,0,1024,128);ctx.fillStyle='#fff0cf';ctx.font='600 78px Georgia';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,512,68,970);
-    const tex=new THREE.CanvasTexture(canvas);tex.colorSpace=THREE.SRGBColorSpace;
-    const mesh=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({map:tex,side:THREE.DoubleSide}));mesh.position.set(x,y,z);if(flat)mesh.rotation.x=-Math.PI/2;parent.add(mesh);return mesh;
+  glass.customProgramCacheKey = () => 'sunbeam-window-light';
+  paveMall(art);
+  const buildings = town.buildings.filter(b => b.district === 'sunbeam');
+  const selectables = buildings.map((b, i) => storefront(art, root, b, glass, i));
+  const districtId = town.districts.find(d => d.id === 'sunbeam').registryId;
+  const jobs = [];
+  fixtures(art, root, districtId, jobs);
+  const life = await buildMallLife(scene, { chessTableHeight: CHESS_TABLE + .03, seatHeight: CHESS_SEAT });
+  await Promise.all(jobs);
+  scene.add(signMesh(root, art.signs));
+  batchStaticMeshes(root, scene, { cellSize: 32 });
+  scene.add(buildLampGlow(lampPosts(town).filter(p=>p.source==='sunbeam'), {
+    name: 'Sunbeam Mall', offset: DISTRICT_OFFSETS.sunbeam,
+  }).group);
+  return {
+    selectables,
+    stats: {
+      buildings: buildings.length, shops: buildings.filter(b => b.shop).length,
+      residentialFrontages: buildings.filter(b => b.upperUse === 'flats').length,
+      chessTables: SUNBEAM_FURNISHINGS.filter(p => p.kind === 'chess').length,
+      cafeTables: SUNBEAM_FURNISHINGS.filter(p => p.kind === 'cafe').length,
+      kiosks: SUNBEAM_FURNISHINGS.filter(p => p.kind === 'kiosk').length,
+      performers: SUNBEAM_AMBIENT.filter(p => p.activity === 'performer').length,
+      seatedPeople: SUNBEAM_AMBIENT.filter(p => p.seated).length, ambientPeople: SUNBEAM_AMBIENT.length,
+    },
+    audit: life.audit,
+    update(t, hour, night) {
+      dusk.value = night;
+      life.update(t, sunbeamDaytime(hour));
+    },
   };
-  const asset=(id,x,z,scale=1,rotY=0,parent=root,y=0)=>jobs.push(place(id,{x,z,scale,rotY}).then(o=>{o.position.y=y;parent.add(o);}));
-  const planter=(x,z,w=1.5,parent=root,y=.35)=>{box(x,y,z,w,.5,.6,'#ad7c61',parent);box(x,y+.27,z,w-.15,.05,.44,'#705947',parent);for(let n=0;n<5;n++){orb(x-w*.38+n*w*.19,y+.45,z,.22,'#70945e',parent);orb(x-w*.38+n*w*.19,y+.66,z,.11,n%2?'#e9bc6e':'#d69398',parent);}};
-  // A brick-paved, car-free court. The two exits join the existing town graph.
-  box(-61,.08,-52,35.7,.12,13.4,'#c0ad93');box(-61,.15,-52,35.2,.06,12.9,'#d6c4a8');
-  for(let n=0;n<36;n++)box(-78.3+n,.185,-52,.028,.01,12.8,'#c4b195');
-  for(let n=0;n<13;n++)box(-61,.19,-58+n,35,.01,.028,'#c4b195');
-  box(-61,.2,-52,35,.025,3,'#e6d5b7');
-  for(const z of [-58.2,-45.8])box(-61,.23,z,35.5,.2,.18,'#f0dfbd');
-
-  for(const [i,b] of town.buildings.filter(b=>b.district==='sunbeam').entries()){
-    const g=new THREE.Group();g.position.set(b.pos[0],0,b.pos[1]);g.rotation.y=b.rot;root.add(g);
-    const h=b.height, trim='#efdbb7', roof='#536d70';
-    box(0,h/2,0,5.5,h,6,b.color,g);
-    box(0,.35,0,5.65,.7,6.15,'#b8aa95',g);
-    for(const y of [2.9,5.6,h-.1])box(0,y,0,5.64,.18,6.14,trim,g);
-    for(const x of [-2.65,2.65])box(x,h/2,3.05,.16,h,.15,trim,g);
-    // Low slate roof with a raised ridge and chimney, varied across the row.
-    for(const side of [-1,1]){const r=box(0,h+.6,side*1.5,5.8,.22,3.4,roof,g);r.rotation.x=side*.34;}
-    box(0,h+1.17,0,5.85,.2,.23,'#405b61',g);
-    box(-1.7,h+.95,-1.7,.65,1.8,.65,'#ba8d72',g);box(-1.7,h+1.9,-1.7,.85,.18,.85,trim,g);
-    // Every elevation gets proper windows, so orbiting reveals homes too.
-    for(const side of [-1,1])for(const y of [4.3,6.9])for(const x of [-1.3,1.3]){
-      box(x,y,side*3.065,1.5,1.85,.14,trim,g);box(x,y,side*3.15,1.23,1.57,.06,glass,g);
-      box(x,y,side*3.2,.07,1.6,.05,trim,g);box(x,y,side*3.2,1.25,.07,.05,trim,g);
-      box(x,y-.98,side*3.17,1.8,.16,.3,trim,g);
-      for(const dx of [-.94,.94])box(x+dx,y,side*3.12,.32,1.7,.12,i%2?'#526f71':'#738879',g);
-    }
-    // Side windows punctuate the exposed ends of the terrace blocks.
-    for(const side of [-1,1])for(const y of [1.6,4.3,6.9]){
-      box(side*2.77,y,0,.1,1.7,1.35,trim,g);box(side*2.84,y,0,.05,1.43,1.08,glass,g);box(side*2.88,y,0,.03,1.43,.06,trim,g);
-    }
-    box(.95,1.35,3.08,1.28,2.35,.18,'#f2dfba',g);box(.95,1.28,3.2,1.04,2.15,.1,i%2?'#496b69':'#805d50',g);
-    box(.95,1.83,3.27,.65,.62,.035,glass,g);orb(1.31,1.1,3.3,.055,'#e1bd76',g);
-    box(.95,.15,3.37,1.7,.25,.52,'#c6b79c',g);
-    label(String(i+1).padStart(2,'0'),1.94,1.9,3.16,.43,.25,'#496760',g);
-    if(b.shop){
-      box(-1.24,1.35,3.1,1.95,2.15,.12,trim,g);box(-1.24,1.35,3.18,1.7,1.9,.08,glass,g);
-      label(b.shop==='grocer'?'NELL’S CORNER':'THE WASHHOUSE',0,2.95,3.25,5.05,.52,b.shop==='grocer'?'#517c65':'#64878f',g);
-      for(let k=0;k<10;k++){const a=box(-2.43+k*.54,2.55,3.75,.54,.13,1.35,k%2?trim:b.shop==='grocer'?'#638976':'#789ba3',g);a.rotation.x=.15;box(-2.43+k*.54,2.38,4.39,.54,.32,.07,k%2?trim:b.shop==='grocer'?'#638976':'#789ba3',g);}
-      if(b.shop==='grocer')for(let j=0;j<2;j++){box(-1.9+j*.9,.47,3.9,.8,.75,.7,'#9a7957',g);for(let k=0;k<6;k++)orb(-2.15+j*.9+k%3*.24,.92,3.7+Math.floor(k/3)*.25,.14,j?'#e9bc59':'#c87d66',g);}
-      else for(const x of [-1.8,-.65]){const rim=new THREE.Mesh(new THREE.TorusGeometry(.38,.075,8,24),toonMaterial('#ede1c3'));rim.position.set(x,1.02,3.25);g.add(rim);}
-    }else{
-      box(-1.25,1.5,3.1,1.65,1.65,.13,trim,g);box(-1.25,1.5,3.19,1.38,1.38,.08,glass,g);box(-1.25,1.5,3.25,.07,1.4,.06,trim,g);
-      planter(-1.3,3.42,1.7,g,.52);
-    }
-    // Rear entrances and pocket gardens give the outward-facing row life too.
-    box(.95,1.3,-3.08,1.2,2.4,.13,trim,g);box(.95,1.25,-3.17,.96,2.2,.07,'#698478',g);
-    box(.95,1.82,-3.23,.64,.65,.04,glass,g);
-    box(-1.25,1.55,-3.08,1.65,1.7,.12,trim,g);box(-1.25,1.55,-3.16,1.4,1.45,.06,glass,g);
-    box(-1.25,1.55,-3.21,.06,1.45,.04,trim,g);
-    if(i>=5){
-      box(0,.12,-4.6,5.5,.16,2.8,'#b9ba88',g);box(.95,.22,-4.5,1.3,.08,2.8,'#d8c6a6',g);
-      for(const x of [-2.65,2.65]){box(x,.52,-4.5,.1,.08,2.8,'#cabb99',g);for(let n=0;n<5;n++)box(x,.38,-3.4-n*.55,.1,.7,.1,'#cabb99',g);}
-      planter(-1.4,-5.5,1.9,g);asset('cv-plant-potted',-1.4,-3.7,.65,0,g,.15);
-    }
-    // A balcony, iron rail and planter gives each household a little outside.
-    box(0,3.2,3.55,4.55,.18,1.15,trim,g);box(0,4,4.05,4.6,.08,.08,'#435a55',g);
-    for(let n=0;n<12;n++)box(-2.2+n*.4,3.6,4.05,.055,.8,.055,'#435a55',g);
-    for(const x of [-2.25,2.25])box(x,4,3.55,.07,.07,1.05,'#435a55',g);
-    planter(-1.4,4.08,1.4,g,3.6);
-    box(1.3,3.55,3.6,.6,.12,.6,'#ab845d',g);box(1.3,3.95,3.35,.6,.7,.08,'#ab845d',g);
-    selectables.push({type:'building',data:b,bounds:new THREE.Box3(new THREE.Vector3(b.box.min[0],0,b.box.min[1]),new THREE.Vector3(b.box.max[0],h+2,b.box.max[1]))});
-  }
-  // Small shared gardens leave the north/south doorstep paths clear.
-  for(const [x,z] of [[-69,-55.8],[-57,-55.8],[-51,-48],[-75.8,-48]]){
-    box(x,.38,z,2,.65,1.25,'#b89973');box(x,.73,z,1.8,.06,1.08,'#756446');
-    for(let n=0;n<5;n++){orb(x-.65+n*.32,1,z,.3,'#719761');orb(x-.65+n*.32,1.25,z,.12,n%2?'#e3bb5b':'#cb8a77');}
-  }
-  for(const [x,z] of [[-77.2,-57],[-44.6,-56],[-44.6,-46],[-76.9,-36.8],[-45,-36.8]])asset('cv-tree-fruit',x,z,.67);
-  for(const [x,z,rot] of [[-64,-55.8,0],[-57,-48,Math.PI]])asset('cv-bench',x,z,.82,rot);
-  asset('cv-flower-cart',-45,-50,.62,Math.PI/2);
-  asset('cv-plant-potted',-59,-37,.8);asset('cv-notice-board',-58.8,-35.1,.8);
-  // Washing occupies the west margin; the doorstep and through routes stay clear.
-  for(const z of [-57.5,-53.8])box(-75.5,1.25,z,.1,2.5,.1,'#887658');
-  line([[-75.5,2.4,-57.5],[-75.5,2.35,-55.6],[-75.5,2.4,-53.8]],'#756952');
-  for(let n=0;n<4;n++){
-    const cloth=box(-75.5,1.91,-57+n*.85,.65,.9,.035,['#f0e3bd','#9aafbc','#dca395','#d9c27e'][n],moving);
-    cloth.rotation.y=Math.PI/2;washing.push(cloth);
-  }
-  // Entry sign, book exchange, bicycle hoops and two residents' parked bikes.
-  for(const x of [-63.5,-58.5])box(x,1.825,-34.6,.14,3.65,.14,'#7f7860');
-  label('SUNBEAM TERRACE',-61,3.25,-34.5,5.8,.65);
-  label('18 HOMES  ·  ONE LITTLE COURT',-61,2.7,-34.5,5.3,.36,'#9d8565');
-  box(-59,1.25,-38.1,1.1,1.1,.6,'#bb8b64');box(-59,1.25,-37.78,.85,.85,.03,'#51665b');
-  for(let n=0;n<6;n++)box(-59.35+n*.14,1.17,-37.73,.1,.5+n%2*.14,.16,['#dcbe77','#b58175','#7d9e99'][n%3]);
-  box(-59,.5,-38.1,.15,1,.15,'#8d795d');box(-59,1.87,-38.1,1.35,.18,.8,'#607c71');label('TAKE A BOOK',-59,1.73,-37.74,1,.19);
-  const bike=(x,z,color)=>{const g=new THREE.Group();g.position.set(x,.12,z);g.rotation.y=.3;root.add(g);
-    for(const wx of [-.65,.65]){const wheel=new THREE.Mesh(new THREE.TorusGeometry(.42,.05,6,24),toonMaterial('#485d57'));wheel.position.set(wx,.48,0);g.add(wheel);}
-    line([[-.65,.48,0],[-.2,1.05,0],[.1,.48,0],[-.65,.48,0],[-.15,1.05,0],[.5,1.05,0],[.1,.48,0]],color,g);
-    line([[.65,.48,0],[.45,1.25,0],[.7,1.3,0]],color,g);box(-.2,1.12,0,.4,.09,.2,'#685e4d',g);
-  };bike(-65,-46.3,'#b37d5f');bike(-47,-57.4,'#789ba3');
-  // Chalk hopscotch and a spinning pinwheel are the court's little landmarks.
-  for(let n=0;n<7;n++){const x=-66+(n===3?-.45:n===4?.45:0),z=-50+n*.56;line([[x-.35,.225,z-.25],[x+.35,.225,z-.25],[x+.35,.225,z+.25],[x-.35,.225,z+.25],[x-.35,.225,z-.25]],'#fff0cb');}
-  const pinwheel=new THREE.Group();pinwheel.position.set(-69,1.9,-55.8);moving.add(pinwheel);box(-69,1,-55.8,.055,2,.055,'#c6ac7a');
-  for(let n=0;n<4;n++){const petal=box(0,.24,0,.26,.5,.035,['#ca8e77','#e5c16c','#7ca29a','#a6b1c1'][n],pinwheel);petal.rotation.z=n*Math.PI/2;petal.position.set(Math.sin(n*Math.PI/2)*.24,Math.cos(n*Math.PI/2)*.24,0);}
-  for(const [x,z]of SUNBEAM_LAMPS){asset('cv-streetlamp',x,z,.9);const glow=new THREE.PointLight('#ffce87',0,10,1.5);glow.position.set(x,2.8,z);scene.add(glow);lights.push(glow);}
-  const localSpots=[['elder',-63.2,-55,.97],['merchant',-62,-54.8,1],['child',-66,-49,.95],['farmhand',-69,-54.8,1],['innkeeper',-74.5,-55.9,1],['child',-64.7,-48.1,.85]];
-  localSpots.forEach(([role,x,z,scale],n)=>jobs.push(place('townsfolk-'+role,{x,z,scale}).then(o=>{o.position.y=.22;moving.add(o);neighbours.push({o,n,x,z});})));
-  // Repeated geometry is instanced, including the private kit's toon outlines.
-  await Promise.all(jobs);root.name='Sunbeam scenery';
-  batchStaticMeshes(root,scene);
-  batchStaticLines(root,scene);
-  // streetlights: the courtyard lamps lit the ground but had no lantern head.
-  scene.add(buildLampGlow(lampPosts(town).filter(p=>p.source==='sunbeam'),{name:'Sunbeam lamps',offset:DISTRICT_OFFSETS.sunbeam}).group);
-  const rigid=createRigidBatches(moving);
-  neighbours.sort((a,b)=>a.n-b.n);
-  return {selectables,stats:{homes:18,buildings:9,shops:2,courtyardNeighbours:6},
-    audit:()=>({neighbours:neighbours.map(({o})=>({position:o.position.toArray(),rotation:o.rotation.y,visible:o.visible})),washing:washing.map(m=>m.rotation.x),pinwheel:pinwheel.rotation.z}),
-    update(t,hour,night){
-      glass.color.set('#6c9399').lerp(new THREE.Color('#f4c477'),night);glass.emissive.set('#e9aa58');glass.emissiveIntensity=night*.65;lights.forEach(l=>l.intensity=night*LAMP_LOOK.sunbeamLight);
-      washing.forEach((m,n)=>{m.rotation.x=Math.sin(t*1.6+n*.7)*.16;m.rotation.z=Math.sin(t+n)*.03;});pinwheel.rotation.z=-t*.75;
-      neighbours.forEach(({o,n,x,z})=>{
-        o.visible=hour>=7&&hour<21;
-        const hopping=n===2||n===5,phase=t*(n===2?.65:.48)+n;
-        o.position.set(x,.22+(hopping?Math.max(0,Math.sin(t*4+n))*.25:Math.sin(t*1.7+n)*.012),hopping?z+Math.sin(phase)*1.15:z);
-        o.rotation.y=n<2?(n===0?Math.PI/2:-Math.PI/2):n===3?Math.PI:n===4?-Math.PI/2:Math.cos(phase)>0?0:Math.PI;
-        o.rotation.z=Math.sin(t*(hopping?4:1.5)+n)*.035;
-      });
-      rigid.update();
-    }};
 }

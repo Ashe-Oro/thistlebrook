@@ -11,6 +11,15 @@ test('camera links round-trip map coordinates, zoom and quarter-turns; retain un
   assert.equal(writeCameraHash(hash, readCameraHash(hash)), hash);
 });
 
+test('a steeper view can be shared and a standard view clears its elevation', () => {
+  const standard = { x: -126, z: -61.5, zoom: 3.7, rotation: 0 };
+  const steep = { ...standard, elevation: 58 };
+  const hash = writeCameraHash('', steep);
+  assert.deepEqual(readCameraHash(hash), steep);
+  assert.deepEqual(readCameraHash(writeCameraHash(hash, standard)), standard);
+  assert.deepEqual(readCameraHash(hash.replace('58', '90')), standard);
+});
+
 test('bad or incomplete links do not put the camera in an invalid state', () => {
   for (const hash of ['', '#hello', '#x=1&y=2', '#x=&y=2&zoom=1', '#x=1&y=NaN&zoom=1', '#x=Infinity&y=2&zoom=1', '#x=1&y=2&zoom=0', '#x=1&y=2&zoom=-1']) assert.equal(readCameraHash(hash), null, hash);
   assert.deepEqual(readCameraHash('#x=-2&y=7&zoom=99&r=-1'), { x: -2, z: 7, zoom: ZOOM_LIMITS.max, rotation: 3 });

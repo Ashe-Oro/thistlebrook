@@ -8,6 +8,7 @@ import {WORLD_OFFSETS} from '../compiler/world-plan.js';
 import {DISTRICT_OFFSETS} from '../compiler/astra-placement.js';
 import {LAMPS as FAIR_LOT_LAMPS} from './fair-lot-plan.js';
 import {FURNITURE_MODELS} from './street-plan.js';
+import {SUNBEAM_FURNISHINGS, SUNBEAM_GLOBE_HEIGHT, SUNBEAM_PAVING_Y} from './sunbeam-mall-plan.js';
 
 export {LAMP_LOOK} from './lamp-look.js';
 
@@ -15,6 +16,7 @@ export {LAMP_LOOK} from './lamp-look.js';
  * pool radius in world units. Arms reach along local +X; yaw turns them. */
 export const LAMP_FIXTURES = Object.freeze({
   'cv-streetlamp': {head: [0, 2.55], pool: 2.6},
+  'sunbeam-globe': {head: [0, SUNBEAM_GLOBE_HEIGHT], pool: 2.7},
   // Street-plan furniture (FURNITURE_MODELS): arms over the carriageway.
   'city-lamp': {head: [1.3, 3.85], pool: 3.2},
   'sub-lamp': {head: [.72, 4.3], pool: 3},
@@ -30,7 +32,7 @@ export const LAMP_FIXTURES = Object.freeze({
 // Hand-placed posts that live in a module rather than in town.props. The
 // coordinates are in each module's own frame (see `frame` below).
 export const WORKS_LAMPS = Object.freeze([-108, -97, -82, -72, -52].map((x) => [x, -71.4]));
-export const SUNBEAM_LAMPS = Object.freeze([[-76, -51], [-46, -53], [-63, -36]]);
+export const SUNBEAM_LAMPS = Object.freeze(SUNBEAM_FURNISHINGS.filter(p => p.kind === 'lamp').map(p => p.pos));
 export const PARK_LAMPS = Object.freeze([[-76, -79], [-43, -79], [-76, -57], [-43, -57], [-43, -37]]);
 export const CIVIC_LAMPS = Object.freeze([[-99, -75], [-83, -79], [-62, -79], [-44, -75], [-76, -61], [-76, -39], [-97, -39]]);
 export const QUAY_LAMPS = Object.freeze([29, 43, 51, 66, 81, 90].map((x) => [x, 44.7]));
@@ -68,7 +70,7 @@ export function lampPosts(town, {streetPlan = null} = {}) {
     add({source, model, pos, yaw: 0, scale: opts.scale ?? 1, head: lampHead(model, pos, {scale: opts.scale ?? 1, y: opts.y ?? 0}), glow: opts.glow ?? 'lamp-glow', heads: opts.heads ?? true, ...(opts.ground != null && {ground: opts.ground})});
   });
   if (town.districts.some((d) => d.id === 'works')) fixed('works', WORKS_LAMPS, frame(DISTRICT_OFFSETS.works), 'cv-streetlamp', {heads: false});
-  if (town.districts.some((d) => d.id === 'sunbeam')) fixed('sunbeam', SUNBEAM_LAMPS, frame(DISTRICT_OFFSETS.sunbeam), 'cv-streetlamp', {scale: .9});
+  if (town.districts.some((d) => d.id === 'sunbeam')) fixed('sunbeam', SUNBEAM_LAMPS, frame(DISTRICT_OFFSETS.sunbeam), 'sunbeam-globe', {y: SUNBEAM_PAVING_Y});
   if (town.districts.some((d) => d.id === 'civic-green')) fixed('civic', CIVIC_LAMPS, (p) => p, 'civic-lamp', {heads: false});
   if (town.fair) fixed('park', PARK_LAMPS, frame(WORLD_OFFSETS.fair), 'cv-streetlamp');
   if (town.harbor) fixed('quay', QUAY_LAMPS, frame(WORLD_OFFSETS.harbor), 'quay-lamp', {glow: 'quay', heads: false});
