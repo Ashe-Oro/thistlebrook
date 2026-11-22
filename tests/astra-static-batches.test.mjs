@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as THREE from 'three';
-import { batchStaticLines, batchStaticMeshes } from '../src/astra/static-batches.js';
+import { batchStaticLines, batchStaticMeshes, INK_VERTEX_REPLACES, patchInkVertexShader } from '../src/astra/static-batches.js';
 import { bindMeshDetail, createModelDetail } from '../src/astra/model-detail.js';
 import { configureRigidBatches, createRigidBatches } from '../src/astra/rigid-batches.js';
 import { sceneryVisibility } from '../src/astra/scenery-visibility.js';
@@ -144,4 +144,47 @@ test('scenery culling keeps visible instance matrices and placement IDs aligned'
   assert.deepEqual(mesh.userData.registryIds, ['one', 'two']);
   mesh.getMatrixAt(0, matrix);
   assert(matrix.equals(first));
+});
+
+
+test('batched ink shader replaces match the outline vertex shader and drop uThickness', () => {
+  const source = outlineMaterial(0).vertexShader;
+  assert(source.includes('safeNormal * uThickness * k'));
+  for (const [from] of INK_VERTEX_REPLACES) {
+    assert(source.includes(from), `outline vertex shader no longer contains ${JSON.stringify(from)}`);
+  }
+  const patched = patchInkVertexShader(source);
+  assert(!patched.includes('uThickness'));
+  assert(patched.includes('attribute vec3 inkOffset'));
+  assert(patched.includes('inkOffset * k'));
+  assert(!patched.includes('safeNormal'));
+  assert(!patched.includes('nLen'));
+});
+
+test('merged ink bakes zero-length normals to a zero offset, not NaN', () => {
+  const source = new THREE.Group(), parent = new THREE.Group();
+  const material = outlineMaterial(0.2);
+  // Distinct geometries so the batcher merges two members (and bakes inkOffset)
+  // instead of instancing a single shared mesh.
+  for (const x of [0, 2]) {
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 1, 0, 0, 0, 1, 0], 3));
+    geometry.setAttribute('normal', new THREE.Float32BufferAttribute([0, 0, 0, 0, 1, 0, 0, 0, 0], 3));
+    const hull = new THREE.Mesh(geometry, material);
+    hull.position.x = x;
+    hull.userData.outline = true;
+    source.add(hull);
+  }
+  const assembly = batchStaticMeshes(source, parent);
+  const ink = assembly.children.find(mesh => mesh.userData.outline).geometry.attributes.inkOffset;
+  assert.equal(ink.count, 6);
+  for (let i = 0; i < ink.count; i++) {
+    assert(Number.isFinite(ink.getX(i)) && Number.isFinite(ink.getY(i)) && Number.isFinite(ink.getZ(i)));
+  }
+  for (const offset of [0, 3]) {
+    assert.deepEqual([ink.getX(offset), ink.getY(offset), ink.getZ(offset)], [0, 0, 0]);
+    assert(Math.abs(ink.getY(offset + 1) - 0.2) < 1e-6);
+    assert.deepEqual([ink.getX(offset + 1), ink.getZ(offset + 1)], [0, 0]);
+    assert.deepEqual([ink.getX(offset + 2), ink.getY(offset + 2), ink.getZ(offset + 2)], [0, 0, 0]);
+  }
 });

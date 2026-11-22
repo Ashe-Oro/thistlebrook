@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Batched outline ink.** Static-batch ink hulls now rewrite the zero-normal outline shader (`safeNormal * uThickness * k` becomes `inkOffset * k`, and the unused `nLen` / `safeNormal` lines are dropped) and bake a zero offset for zero-length normals, so merged ink compiles and draws instead of failing with `uThickness` undeclared. `tests/astra-static-batches.test.mjs` fails if those replaces miss or the patched shader still contains `uThickness`.
+
 - **Phone streaming, tree normals, and closer zoom.**
   - **Tree shading and shadow stability.** Non-indexed or mirrored foliage and outline hulls with zero-length normals no longer produce `NaN` in toon ramp derivatives (`fwidth`) or hull extrusion, the world shadow frustum stays preserved between shadow-map refreshes so shadow-only tree cells do not thrash in and out of `instanceMatrix`, and full-LOD model upgrades wait until background district streaming finishes.
   - **Paced streaming and real-time simulation.** Background district streaming now serializes and yields between attaches (`pace: true`) and avoids eager synchronous offscreen shader compiles when `KHR_parallel_shader_compile` is absent, while `step()` keeps camera smoothing clamped at `0.1 s` and advances walkers, traffic, trains, and clocks in `<= 0.5 s` substeps up to `4 s` per frame so actors stay at real-time speed during background loading.

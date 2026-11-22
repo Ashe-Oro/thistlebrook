@@ -9,13 +9,33 @@ const MAX_REPEATED_VERTICES = 18000;
 const mergeAttributes = new Set(['position', 'normal', 'color', 'uv', 'glow']);
 let mergedInk;
 
+export const INK_VERTEX_REPLACES = [
+  ['uniform float uThickness, uFadeDist, uFadeMin;', 'uniform float uFadeDist, uFadeMin; attribute vec3 inkOffset;'],
+  [
+    'float nLen = length(normal);\n        vec3 safeNormal = nLen > 1e-6 ? normal / nLen : vec3(0.0);\n        vec3 transformed = position + safeNormal * uThickness * k;',
+    'vec3 transformed = position + inkOffset * k;',
+  ],
+];
+
+export function patchInkVertexShader(shader) {
+  let patched = shader;
+  for (const [from, to] of INK_VERTEX_REPLACES) {
+    if (!patched.includes(from)) {
+      throw new Error(`batched ink shader replace missed ${JSON.stringify(from)}`);
+    }
+    patched = patched.replace(from, to);
+  }
+  if (patched.includes('uThickness')) {
+    throw new Error('patched ink shader still contains uThickness');
+  }
+  return patched;
+}
+
 function inkMaterial() {
   if (mergedInk) return mergedInk;
   const source = outlineMaterial(0);
   mergedInk = source.clone();
-  mergedInk.vertexShader = source.vertexShader
-    .replace('uniform float uThickness, uFadeDist, uFadeMin;', 'uniform float uFadeDist, uFadeMin; attribute vec3 inkOffset;')
-    .replace('normalize(normal) * uThickness * k', 'inkOffset * k');
+  mergedInk.vertexShader = patchInkVertexShader(source.vertexShader);
   return mergedInk;
 }
 
@@ -129,7 +149,11 @@ function merge(batches, layout, vertexCount) {
         } else if (name === 'inkOffset') {
           const normalAttr = geometry.attributes.normal, thickness = material.uniforms.uThickness.value;
           for (let i = 0; i < vertices; i++) {
-            normal.fromBufferAttribute(normalAttr, i).normalize().multiplyScalar(thickness).applyMatrix3(linear).toArray(output, (offset + i) * n);
+            normal.fromBufferAttribute(normalAttr, i);
+            const len = normal.length();
+            if (len > 1e-6) normal.multiplyScalar(thickness / len).applyMatrix3(linear);
+            else normal.set(0, 0, 0);
+            normal.toArray(output, (offset + i) * n);
           }
         } else if (name === 'color' && layout.flat) {
           for (let i = 0; i < vertices; i++) material.color.toArray(output, (offset + i) * n);
