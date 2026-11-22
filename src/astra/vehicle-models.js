@@ -7,7 +7,7 @@ import {bindMeshDetail,lodUrl,modelDetail} from './model-detail.js';
 import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createGLTFLoader } from '../gltf-loader.js';
-import { toonVertexColorMaterial, outlineMaterial } from '../toon.js';
+import { toonVertexColorMaterial, outlineMaterial, ensureNonZeroNormals } from '../toon.js';
 import { FLEET_MODELS, LIVERY } from './traffic-fleet.js';
 
 const BASE = import.meta.env?.BASE_URL ?? '/';
@@ -23,6 +23,7 @@ export function loadPackGeometry(path) {
     gltf.scene.traverse((o) => { if (!o.isMesh) return; const g = o.geometry.clone().applyMatrix4(o.matrixWorld); for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'color'].includes(k)) g.deleteAttribute(k); if (!g.attributes.color) { const c = new Float32Array(g.attributes.position.count * 3); const rgb = o.material.color?.toArray() ?? [.8,.8,.8]; for (let i = 0; i < c.length; i += 3) c.set(rgb, i); g.setAttribute('color', new THREE.BufferAttribute(c, 3)); } if (g.attributes.color.itemSize === 4 || g.attributes.color.normalized || !(g.attributes.color.array instanceof Float32Array)) { const src = g.attributes.color, c = new Float32Array(src.count * 3); for (let i = 0; i < src.count; i++) { c[i * 3] = src.getX(i); c[i * 3 + 1] = src.getY(i); c[i * 3 + 2] = src.getZ(i); } g.setAttribute('color', new THREE.BufferAttribute(c, 3)); } parts.push(g.index ? g.toNonIndexed() : g); });
     const geometry = parts.length === 1 ? parts[0] : mergeGeometries(parts);
     if (!geometry.attributes.normal) geometry.computeVertexNormals();
+    ensureNonZeroNormals(geometry);
     geometry.computeBoundingBox();
     return geometry;
   }));
@@ -31,7 +32,7 @@ export function loadPackGeometry(path) {
 function hullOf(geometry) {
   if (hulls.has(geometry)) return hulls.get(geometry);
   const g = new THREE.BufferGeometry(); g.setAttribute('position', geometry.attributes.position.clone());
-  const welded = mergeVertices(g, 1e-3); welded.computeVertexNormals(); hulls.set(geometry, welded); return welded;
+  const welded = mergeVertices(g, 1e-3); welded.computeVertexNormals(); ensureNonZeroNormals(welded); hulls.set(geometry, welded); return welded;
 }
 const hsv = (r, g, b) => { const M = Math.max(r, g, b), m = Math.min(r, g, b), d = M - m; let h = 0; if (d > 1e-6) { if (M === r) h = ((g - b) / d) % 6; else if (M === g) h = (b - r) / d + 2; else h = (r - g) / d + 4; h *= 60; if (h < 0) h += 360; } return [h, M ? d / M : 0, M]; };
 const hueGap = (a, b) => { const d = Math.abs(a - b) % 360; return Math.min(d, 360 - d); };

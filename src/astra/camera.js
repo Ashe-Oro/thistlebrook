@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-export const ZOOM_LIMITS = { min: .12, max: 5 };
+export const ZOOM_LIMITS = { min: .12, max: 15 };
 const quarter = Math.PI / 2;
 const clampZoom = zoom => THREE.MathUtils.clamp(zoom, ZOOM_LIMITS.min, ZOOM_LIMITS.max);
 const snap = value => ((Math.round(value) % 4) + 4) % 4;

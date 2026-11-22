@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import { createGLTFLoader } from '../gltf-loader.js';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { toonMaterial, toonVertexColorMaterial, outlineMaterial } from '../toon.js';
+import { toonMaterial, toonVertexColorMaterial, outlineMaterial, ensureNonZeroNormals } from '../toon.js';
 import { FOLIAGE_CATEGORIES } from '../post/options.js';
 import { BUILDERS } from './builders-registry.js';
 import { resolveAll } from './resolve-all.js';
@@ -54,8 +54,12 @@ function weldFoliage(geo) {
     }
   }
   const N = new Float32Array(pos.count * 3);
+  const srcN = g.attributes.normal;
   for (let i = 0; i < pos.count; i++) {
-    const v = acc.get(key(i)).clone().normalize();
+    const v = acc.get(key(i)).clone();
+    if (v.lengthSq() > 1e-12) v.normalize();
+    else if (srcN && srcN.getX(i) ** 2 + srcN.getY(i) ** 2 + srcN.getZ(i) ** 2 > 1e-12) v.set(srcN.getX(i), srcN.getY(i), srcN.getZ(i)).normalize();
+    else v.set(0, 1, 0);
     N[i * 3] = v.x; N[i * 3 + 1] = v.y; N[i * 3 + 2] = v.z;
   }
   g.setAttribute('normal', new THREE.BufferAttribute(N, 3));
@@ -96,6 +100,7 @@ function hullGeometry(geo, skinned = false) {
   if (skinned) for (const name of ['skinIndex', 'skinWeight']) g.setAttribute(name, geo.attributes[name]);
   const welded = mergeVertices(g, 1e-3);
   welded.computeVertexNormals();
+  ensureNonZeroNormals(welded);
   _hull.set(geo, welded);
   return welded;
 }

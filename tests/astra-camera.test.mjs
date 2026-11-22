@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readCameraHash, writeCameraHash, cameraBounds } from '../src/astra/camera.js';
+import { readCameraHash, writeCameraHash, cameraBounds, ZOOM_LIMITS } from '../src/astra/camera.js';
 import { isTownOpening, mapHalfHeight, townOpening } from '../src/astra/overview.js';
 
 test('camera links round-trip map coordinates, zoom and quarter-turns; retain unrelated hash state', () => {
@@ -13,7 +13,7 @@ test('camera links round-trip map coordinates, zoom and quarter-turns; retain un
 
 test('bad or incomplete links do not put the camera in an invalid state', () => {
   for (const hash of ['', '#hello', '#x=1&y=2', '#x=&y=2&zoom=1', '#x=1&y=NaN&zoom=1', '#x=Infinity&y=2&zoom=1', '#x=1&y=2&zoom=0', '#x=1&y=2&zoom=-1']) assert.equal(readCameraHash(hash), null, hash);
-  assert.deepEqual(readCameraHash('#x=-2&y=7&zoom=99&r=-1'), { x: -2, z: 7, zoom: 5, rotation: 3 });
+  assert.deepEqual(readCameraHash('#x=-2&y=7&zoom=99&r=-1'), { x: -2, z: 7, zoom: ZOOM_LIMITS.max, rotation: 3 });
   assert.deepEqual(readCameraHash('#x=-2&y=7&zoom=.01&r=oops'), { x: -2, z: 7, zoom: .12, rotation: 0 });
 });
 

@@ -48,6 +48,20 @@ export function createAstraLighting({ scene, camera, controls, renderer, town })
      previous.call(material, shader, webgl);
      shader.uniforms.uAstraShade = uniforms.uAstraShade;
      shader.fragmentShader = 'uniform vec3 uAstraShade;\n' + shader.fragmentShader;
+     shader.vertexShader = shader.vertexShader.replace(
+      '#include <normal_vertex>',
+      THREE.ShaderChunk.normal_vertex.replace(
+       'normalize( transformedNormal )',
+       '(dot(transformedNormal, transformedNormal) > 1e-12 ? normalize(transformedNormal) : vec3(0.0, 1.0, 0.0))'
+      )
+     );
+     shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <normal_fragment_begin>',
+      THREE.ShaderChunk.normal_fragment_begin.replace(
+       'normalize( vNormal )',
+       '(dot(vNormal, vNormal) > 1e-12 ? normalize(vNormal) : vec3(0.0, 1.0, 0.0))'
+      )
+     );
      // Analytic three-band ramp: crisp, with only a derivative-wide edge to
      // avoid flickering as normals cross a band. Retain the darker leaf ramp.
      const foliage = material.gradientMap?.image?.data?.[0] < 60;
@@ -163,7 +177,7 @@ export function createAstraLighting({ scene, camera, controls, renderer, town })
 
   // Fit the shadow map to the viewed area instead of spreading 2048 texels
   // over the entire town at close zoom. Snap its anchor to texels when panning.
-  const span = Math.max(46, Math.min(520, Math.max(camera.right-camera.left, camera.top-camera.bottom)/camera.zoom*.65+12));
+  const span = Math.max(24, Math.min(520, Math.max(camera.right-camera.left, camera.top-camera.bottom)/camera.zoom*.65+12));
   const texel = span*2/key.shadow.mapSize.x;
   key.target.position.set(Math.round(controls.target.x/texel)*texel, 0, Math.round(controls.target.z/texel)*texel);
   direction.set(lerp(10), lerp(11), lerp(12)).normalize().multiplyScalar(900);

@@ -114,7 +114,9 @@ export function outlineMaterial(thickness) {
           float depth = -(modelViewMatrix * samplePos).z;
           k = mix(1.0, uFadeMin, clamp((depth - uFadeDist) / uFadeDist, 0.0, 1.0));
         }
-        vec3 transformed = position + normalize(normal) * uThickness * k;
+        float nLen = length(normal);
+        vec3 safeNormal = nLen > 1e-6 ? normal / nLen : vec3(0.0);
+        vec3 transformed = position + safeNormal * uThickness * k;
         #include <skinbase_vertex>
         #include <skinning_vertex>
         vec4 hullPos = vec4(transformed, 1.0);
@@ -170,6 +172,16 @@ export function toon(geometry, color, opts = {}) {
 // Toon material for imported vertex-coloured meshes (e.g. Cozy Village). The
 // glTF base colour is white, so the vertex colours carry the palette.
 const _vcMat = {};
+export function ensureNonZeroNormals(geometry) {
+  const attr = geometry?.attributes?.normal;
+  if (!attr) return geometry;
+  for (let i = 0; i < attr.count; i++) {
+    const x = attr.getX(i), y = attr.getY(i), z = attr.getZ(i);
+    if (x * x + y * y + z * z <= 1e-12) attr.setXYZ(i, 0, 1, 0);
+  }
+  return geometry;
+}
+
 export function toonVertexColorMaterial({ ramp = 'default' } = {}) {
   if (_vcMat[ramp]) return _vcMat[ramp];
   _vcMat[ramp] = new THREE.MeshToonMaterial({ color: 0xffffff, vertexColors: true, gradientMap: RAMPS[ramp] || RAMP });
