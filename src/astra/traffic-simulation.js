@@ -1,4 +1,4 @@
-import {BUS_ROUTES, TOWN_LANE_OFFSET, CIVIC_CYCLE_OFFSET} from '../roads/town-roads.js';
+import {BUS_ROUTES, TOWN_LANE_OFFSET, CIVIC_CYCLE_OFFSET, WEST_LOOP} from '../roads/town-roads.js';
 // Pure road-following simulation. No renderer, assets, timers or global random.
 import { vehicleInZone, sweepBlocker, releaseWaitCycles, footprint, pointInFootprint } from '../roads/collisions.js';
 import { distanceToSegment } from '../compiler/astra.js';
@@ -16,10 +16,10 @@ export const TRAFFIC_STOPS = [
  {id:'market',name:'Market Square',point:[7,-15],side:[0,-1]},
  {id:'town-hall',name:'Town Hall',point:[-57,4],side:[0,-1]},
 ];
-export const WEST_STOPS=[{id:'union-station',name:'Union Station',point:[-88,-139],side:[0,1]},{id:'civic-green',name:'Civic Green',point:[-91.9,-77],side:[0,1]},{id:'sunbeam',name:'Sunbeam Terrace',point:[-126,-33],side:[0,-1]},{id:'market-gardens',name:'Market Gardens',point:[-115,-119],side:[1,0]}];
+export const WEST_STOPS=[{id:'union-station',name:'Union Station',point:[-88,-139],side:[0,1]},{id:'civic-green',name:'Civic Green',point:[-91.9,-77],side:[0,1]},{id:'sunbeam',name:'Sunbeam Mall',point:[-126,WEST_LOOP.south],side:[0,-1]},{id:'market-gardens',name:'Market Gardens',point:[-115,-119],side:[1,0]}];
 // Candidate locations. The walk graph places them only where both curbs connect.
 export const CROSSWALKS = [
- {point:[-96,-77]}, {point:[-132,-33]}, {point:[-100,-139]},
+ {point:[-96,-77]}, {point:[-132,WEST_LOOP.south]}, {point:[-126,WEST_LOOP.north]}, {point:[-100,-139]},
  {point:[-48,-8]},
  {point:[-61,4]}, {point:[-22,-25]},
  {point:[1,-33]}, {point:[28,-33]},
@@ -80,7 +80,7 @@ const civicLaneOffset=(a,b)=>{
 };
 // Only roads wide enough for two small town vehicles, north of the footbridges.
 export const motorRoads = town => town.roads.filter(r=>!r.owner && r.kind!=='pedestrian' && r.width>=2.4 && Math.min(r.a[1],r.b[1])<4.01).map(r=>({...r,a:[r.a[0],Math.min(4,r.a[1])],b:[r.b[0],Math.min(4,r.b[1])]})).filter(r=>length(r.a,r.b)>.01);
-export function makeLane(points,offset=.7,segmentOffset=null,open=false) {
+export function makeLane(points,offset=.7,segmentOffset=null,open=false,cornerRadius=()=>.7) {
  const corners=points.map((p,i)=>{
   if(open&&(i===0||i===points.length-1)){
    const d=i===0?unit(p,points[1]):unit(points[i-1],p);
@@ -116,9 +116,11 @@ export function makeLane(points,offset=.7,segmentOffset=null,open=false) {
    i++;
    continue;
   }
-  const r=Math.min(.7,length(prev,p)*.3,length(p,next)*.3);
+  const requestedRadius=cornerRadius(i),legFraction=requestedRadius>.7?.45:.3;
+  const r=Math.min(requestedRadius,length(prev,p)*legFraction,length(p,next)*legFraction);
   const enter=mix(p,prev,r/length(prev,p)),leave=mix(p,next,r/length(next,p));
-  for(let k=0;k<=8;k++){const t=k/8;samples.push(mix(mix(enter,p,t),mix(p,leave,t),t));}
+  const steps=Math.max(8,Math.ceil(r/.7*8));
+  for(let k=0;k<=steps;k++){const t=k/steps;samples.push(mix(mix(enter,p,t),mix(p,leave,t),t));}
  }
  const cumulative=[0];for(let i=0;i<samples.length;i++)cumulative.push(cumulative.at(-1)+length(samples[i],samples[(i+1)%samples.length]));
  return {points:samples,cumulative,length:cumulative.at(-1)};
@@ -133,9 +135,9 @@ export function sampleLane(path,distance) {
  const a=path.points[i],b=path.points[(i+1)%path.points.length],span=path.cumulative[i+1]-path.cumulative[i];
  return {position:mix(a,b,span?(d-path.cumulative[i])/span:0),direction:unit(a,b)};
 }
-function depotLoop(points) {
+function depotLoop(points,returnRadius=.7) {
  const outward=makeLane(points,TOWN_LANE_OFFSET,civicLaneOffset,true), inward=makeLane([...points].reverse(),TOWN_LANE_OFFSET,civicLaneOffset,true);
- return makeLane([...outward,...inward],0);
+ return makeLane([...outward,...inward],0,null,false,i=>i===outward.length+1?returnRadius:.7);
 }
 function nearestDistance(path,point){let best=Infinity,result=0;for(let d=0;d<path.length;d+=.1){const p=sampleLane(path,d).position,s=length(p,point);if(s<best){best=s;result=d;}}return result;}
 export function createTrafficSimulation(town) {
@@ -151,7 +153,12 @@ export function createTrafficSimulation(town) {
  for(const points of Object.values(loops))for(let i=0;i<points.length;i++){
   const a=points[i],b=points[(i+1)%points.length];for(let d=0;d<=length(a,b);d+=.25){const p=mix(a,b,d/length(a,b));if(!roads.some(r=>distanceToSegment(p,r.a,r.b)<.02))throw Error(`Traffic route leaves the roads at ${p}`);}
  }
- const routes=Object.fromEntries(Object.entries(loops).flatMap(([id,p])=>[[id,makeLane(p,TOWN_LANE_OFFSET,civicLaneOffset)],[id+'-reverse',makeLane([...p].reverse(),TOWN_LANE_OFFSET,civicLaneOffset)]]));
+ const routes=Object.fromEntries(Object.entries(loops).flatMap(([id,p])=>{
+  // The long West Loop bus needs extra turn length to keep its rear corners off both kerbs.
+  const cornerRadius=i=>id==='station'&&p[i][0]===-105&&p[i][1]===-103?9.5:.7;
+  return [[id,makeLane(p,TOWN_LANE_OFFSET,civicLaneOffset,false,cornerRadius)],
+   [id+'-reverse',makeLane([...p].reverse(),TOWN_LANE_OFFSET,civicLaneOffset)]];
+ }));
  // Cyclists use the marked strip where one exists (CYCLE_STRIPS).
  // The strip ends where Civic Avenue narrows (x = -99), so that point joins the cycle's route.
  const cycleLoop=[...loops.station].reverse();cycleLoop.splice(cycleLoop.findIndex(p=>p[0]===-80&&p[1]===-77)+1,0,[-99,-77]);
@@ -167,11 +174,12 @@ export function createTrafficSimulation(town) {
  add('cycle','shops',.32);add('cycle','north',.87);add('cycle','east-reverse',.43);
  for(const [i,f] of assignFleet(vehicles).entries())Object.assign(vehicles[i],vehicleModel(f.model,f.colour));
  const civicRoutes=[
-  {id:'civic-engine',model:'af-fire-tender',points:FIRE_ROUTE,depot:94,stop:16},
+  // The tender's rear corner needs a broader turn on the way back to Civic Avenue.
+  {id:'civic-engine',model:'af-fire-tender',points:FIRE_ROUTE,depot:94,stop:16,returnRadius:2.8},
   {id:'civic-delivery',model:'city-delivery-van',points:DELIVERY_ROUTE,depot:30,stop:8},
  ];
- for(const {id,model,points,depot,stop} of civicRoutes){
-  const path=depotLoop(points), destination=points.at(-1);
+ for(const {id,model,points,depot,stop,returnRadius} of civicRoutes){
+  const path=depotLoop(points,returnRadius), destination=points.at(-1);
   const distance=nearestDistance(path,points[0]), vehicle=vehicleModel(model);
   // Stop the tender on the straight approach so its nose stays off the sidewalk during the assist.
   const stopDistance=nearestDistance(path,destination)-(id==='civic-engine'?vehicle.length/2:0);
@@ -182,6 +190,11 @@ export function createTrafficSimulation(town) {
   Object.assign(v,sampleLane(path,distance));vehicles.push(v);
  }
  const parked=parkedVehicles();
+ const fireTender=vehicles.find(v=>v.id==='civic-engine');
+ // The station driveway crosses the sidewalk before it reaches Civic Avenue.
+ // Leave enough room to wait beside the tender while it sweeps off the street.
+ const clearFireDriveway=point=>distanceToSegment(point,FIRE_ROUTE[0],FIRE_ROUTE[1])>3.3 ||
+   !pointInFootprint(point,footprint(fireTender),.55);
  for(const v of vehicles)v.positionAhead=distance=>sampleLane(v.path,v.distance+distance).position;
  const civicEntrances=[FIRE_ROUTE[1],FIRE_ROUTE[2],DELIVERY_ROUTE[1]];
  const junctionPoints=[...town.nodes.filter(p=>{const arms=new Set();for(const r of roads)if(distanceToSegment(p,r.a,r.b)<.02)for(const end of [r.a,r.b])if(length(p,end)>.02){const u=unit(p,end);arms.add(u.map(v=>Math.round(v)).join(','));}const u=[...arms].map(s=>s.split(',').map(Number));return arms.size>=3||(arms.size===2&&u[0][0]*u[1][0]+u[0][1]*u[1][1]>-.5);}),...civicEntrances]
@@ -259,7 +272,9 @@ export function createTrafficSimulation(town) {
     for(const point of j.points){
      const radius=radii.get(point),dx=point[0]-x,dz=point[1]-z;
      const along=dx*forwardX+dz*forwardZ;
-     if(along<0||along>Math.max(6,radius+v.length/2+1)||Math.abs(dx*forwardZ-dz*forwardX)>1.3)continue;
+     // The West Loop bicycle approaches the Civic Green bend from the offset cycle strip.
+     const approachWidth=v.route==='station-reverse-cycle'&&point[0]===-80&&point[1]===-77?CIVIC_CYCLE_OFFSET+.1:1.3;
+     if(along<0||along>Math.max(6,radius+v.length/2+1)||Math.abs(dx*forwardZ-dz*forwardX)>approachWidth)continue;
      const gap=along-v.length/2-radius; // room for a turning bus to sweep the corner
      if(gap<clearance){clearance=gap;reason='Yielding at junction';v.blockedBy=j.owner;waitingJunction=j;}
     }
@@ -304,7 +319,7 @@ export function createTrafficSimulation(town) {
   }
   releaseWaitCycles(vehicles,junctions,events.deadlocksReleased);
  }
- return {roads,routes,vehicles,parked,junctions,events,stops:[...TRAFFIC_STOPS,...WEST_STOPS],
+ return {roads,routes,vehicles,parked,junctions,events,clearFireDriveway,stops:[...TRAFFIC_STOPS,...WEST_STOPS],
   update(dt,pedestrians=[],others=[],hour=10){if(!Number.isFinite(dt)||dt<=0)return;let left=Math.min(dt,1);while(left>1e-8){const step=Math.min(left,1/30);tick(step,pedestrians,others,hour);left-=step;}},
   audit(){return {time:+time.toFixed(2),vehicles:vehicles.map(({id,kind,position,speed,status,visits,stoppedAt})=>({id,kind,position:[...position],speed,status,visits,stoppedAt})),events:structuredClone(events)};}
  };

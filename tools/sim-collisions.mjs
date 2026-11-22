@@ -108,7 +108,7 @@ export async function simulateDay({root: tree = root, hours = 24, seed = 831, dt
   const clearRoad = (a, b) => crossingClear(a, b, allVehicles());
   life.setCrossingGuard?.(clearRoad);
   railway?.setCrossingGuard?.(clearRoad);
-  life.setLocalWalkGuard?.(lot?.clearWalk);
+  life.setLocalWalkGuard?.((a, b) => (traffic.clearFireDriveway?.(b) ?? true) && (lot?.clearWalk?.(a, b) ?? true));
   // Scheduled vehicles (the Maple Hollow school bus) board and drop riders; riders aren't walkers.
   if (regional.transit) life.setTransit?.(regional.transit);
   const rides = {boarded: 0, alighted: 0, maxAboard: 0};

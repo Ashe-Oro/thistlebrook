@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Sunbeam Mall.** A 51 m north–south walking street replaces the old Sunbeam Terrace court. Fourteen pastel frontages house shops with apartments and offices above. Chess players, café tables, a kiosk, and a street musician occupy the side bays beside a clear 6 m walk. The eight Sunbeam residents keep their homes and town routes. [Stills and measurements](docs/specs/SUNBEAM-MALL-LOG.md).
+
 - **Loading progress.** The opening screen tracks model transfers, decoding, and scene preparation through the first frame. A time-left estimate appears when progress is steady, and a smaller indicator shows scenery loading after the map opens. [Spec and measurements](docs/specs/LOADING-BAR-LOG.md).
 
 - **Batched outline ink.** Static-batch ink hulls now rewrite the zero-normal outline shader (`safeNormal * uThickness * k` becomes `inkOffset * k`, and the unused `nLen` / `safeNormal` lines are dropped) and bake a zero offset for zero-length normals, so merged ink compiles and draws instead of failing with `uThickness` undeclared. `tests/astra-static-batches.test.mjs` fails if those replaces miss or the patched shader still contains `uThickness`.

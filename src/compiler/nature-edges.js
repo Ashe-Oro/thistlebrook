@@ -52,6 +52,7 @@ export function planNatureEdges(town){
  const segs=[];for(const r of town.roads){const line=r.centerline||[r.a,r.b],half=r.centerline?6:(r.width||2)/2;for(let i=1;i<line.length;i++)segs.push({a:line[i-1],b:line[i],half});}
  const trails=(woods?.trails||[]).map(t=>t.points);
  const boxes=[...town.buildings.map(b=>b.box),...town.venues.filter(v=>v.box).map(v=>v.box),...(town.catalogScenes||[]).map(s=>s.box)].filter(Boolean);
+ if(town.sunbeamReservation)boxes.push(town.sunbeamReservation);
  const o=town.outskirts||{clearings:[],fields:[],trees:[]};
  const shore=[...MAINLAND,MAINLAND[0]],shoreDist=p=>Math.min(...shore.slice(1).map((b,i)=>distanceToSegment(p,shore[i],b)));
  const others=()=>[...models.map(m=>({pos:m.pos,r:otherRadius(m),tree:isTree(m.asset)})),...o.trees.map(t=>({pos:t.pos,r:t.radius,tree:true})),...OUTSKIRTS_LOGS.map(pos=>({pos,r:1.3})),

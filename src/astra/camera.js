@@ -4,6 +4,7 @@ export const ZOOM_LIMITS = { min: .12, max: 15 };
 const quarter = Math.PI / 2;
 const clampZoom = zoom => THREE.MathUtils.clamp(zoom, ZOOM_LIMITS.min, ZOOM_LIMITS.max);
 const snap = value => ((Math.round(value) % 4) + 4) % 4;
+const validElevation = value => Number.isFinite(value) && value >= 30 && value <= 70 ? value : undefined;
 
 // URL y is the map's second horizontal coordinate (Three.js z), never altitude.
 export function readCameraHash(hash, defaultZoom) {
@@ -13,15 +14,19 @@ export function readCameraHash(hash, defaultZoom) {
   const zoom = params.has('zoom') ? Number(params.get('zoom')) : defaultZoom;
   if (![x, z, zoom].every(Number.isFinite) || zoom <= 0) return null;
   const rotation = Number(params.get('r') || 0);
-  return { x, z, zoom: clampZoom(zoom), rotation: Number.isFinite(rotation) ? snap(rotation) : 0 };
+  const elevation = validElevation(Number(params.get('elevation')));
+  return { x, z, zoom: clampZoom(zoom), rotation: Number.isFinite(rotation) ? snap(rotation) : 0,
+    ...(elevation === undefined ? {} : { elevation }) };
 }
 
-export function writeCameraHash(hash, { x, z, zoom, rotation }) {
+export function writeCameraHash(hash, { x, z, zoom, rotation, elevation }) {
   const params = new URLSearchParams(hash.replace(/^#/, ''));
   params.set('x', String(Number(x.toFixed(3))));
   params.set('y', String(Number(z.toFixed(3))));
   params.set('zoom', String(Number(zoom.toFixed(4))));
   params.set('r', String(snap(rotation)));
+  if (validElevation(elevation) === undefined) params.delete('elevation');
+  else params.set('elevation', String(elevation));
   return '#' + params.toString();
 }
 
@@ -39,7 +44,7 @@ export function cameraBounds(town) {
   };
 }
 
-/** Fixed-elevation orthographic map controller. No orbit or walking mode. */
+/** Orthographic map controller with quarter-turn rotation and per-view elevation. */
 export function createMapCamera(camera, element, { bounds, hashZoom = () => undefined, onInteract = () => {}, onTap = () => {}, onHover = () => {}, onChange = () => {}, onRotate = () => {} }) {
   const target = new THREE.Vector3();
   const raycaster = new THREE.Raycaster();
@@ -50,8 +55,8 @@ export function createMapCamera(camera, element, { bounds, hashZoom = () => unde
   const pointers = new Map();
   const disposers = [];
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-  let rotation = 0, desiredZoom = camera.zoom, destination = null, anchor = null;
-  let orientedRotation;
+  let rotation = 0, elevation, desiredZoom = camera.zoom, destination = null, anchor = null;
+  let orientedRotation, orientedElevation;
   let gesture = null, hashTimer = null, lastState = '';
   const listen = (node, type, fn, options) => {
     node.addEventListener(type, fn, options);
@@ -61,16 +66,23 @@ export function createMapCamera(camera, element, { bounds, hashZoom = () => unde
     target.y = 0;
     target.x = THREE.MathUtils.clamp(target.x, bounds.minX, bounds.maxX);
     target.z = THREE.MathUtils.clamp(target.z, bounds.minZ, bounds.maxZ);
-    if (orientedRotation === rotation && orientedTarget.equals(target)) return;
+    if (orientedRotation === rotation && orientedElevation === elevation && orientedTarget.equals(target)) return;
     orientedRotation = rotation;
+    orientedElevation = elevation;
     orientedTarget.copy(target);
     const heading = Math.PI / 4 + rotation * quarter;
-    // Equal foreshortening of all three world axes: true isometric elevation.
-    camera.position.set(target.x + Math.sin(heading) * 800, 800 / Math.sqrt(2), target.z + Math.cos(heading) * 800);
+    // Keep the usual isometric position unless a view requests a steeper look.
+    const distance = 800 * Math.sqrt(1.5);
+    const angle = elevation === undefined ? undefined : THREE.MathUtils.degToRad(elevation);
+    const radius = angle === undefined ? 800 : distance * Math.cos(angle);
+    const height = angle === undefined ? 800 / Math.sqrt(2) : distance * Math.sin(angle);
+    camera.position.set(target.x + Math.sin(heading) * radius, height, target.z + Math.cos(heading) * radius);
     camera.lookAt(target);
     camera.updateMatrixWorld();
   }
-  function state() { return { x: target.x, z: target.z, zoom: camera.zoom, rotation }; }
+  function state() {
+    return { x: target.x, z: target.z, zoom: camera.zoom, rotation, ...(elevation === undefined ? {} : { elevation }) };
+  }
   function flushHash() {
     clearTimeout(hashTimer); hashTimer = null;
     const hash = writeCameraHash(location.hash, state());
@@ -78,7 +90,7 @@ export function createMapCamera(camera, element, { bounds, hashZoom = () => unde
     return location.href;
   }
   function changed() {
-    const key = `${target.x.toFixed(3)},${target.z.toFixed(3)},${camera.zoom.toFixed(4)},${rotation}`;
+    const key = `${target.x.toFixed(3)},${target.z.toFixed(3)},${camera.zoom.toFixed(4)},${rotation},${elevation ?? ''}`;
     if (key === lastState) return;
     lastState = key;
     onChange(state());
@@ -126,6 +138,7 @@ export function createMapCamera(camera, element, { bounds, hashZoom = () => unde
     cancel();
     destination = { x: THREE.MathUtils.clamp(dest.x, bounds.minX, bounds.maxX), z: THREE.MathUtils.clamp(dest.z, bounds.minZ, bounds.maxZ), zoom: clampZoom(dest.zoom) };
     if (Number.isFinite(dest.rotation)) rotation = snap(dest.rotation);
+    elevation = validElevation(dest.elevation);
     if (immediate || reducedMotion.matches) {
       target.set(destination.x, 0, destination.z);
       camera.zoom = desiredZoom = destination.zoom;

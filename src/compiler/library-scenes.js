@@ -61,6 +61,7 @@ export function compileTownScenes(town){
  // Parking bays are reserved ground: a rest garden never lays its aisle or seats through a parked car.
  const bays=PARKING_BAYS.map(b=>{const c=Math.abs(Math.cos(b.yaw)),sn=Math.abs(Math.sin(b.yaw)),hx=(b.length*sn+b.width*c)/2+.5,hz=(b.length*c+b.width*sn)/2+.5;return {min:[b.center[0]-hx,b.center[1]-hz],max:[b.center[0]+hx,b.center[1]+hz]};});
  const lots=[...town.buildings,...town.venues].map(p=>p.box).concat(bays);
+ if(town.sunbeamReservation)lots.push(town.sunbeamReservation);
  // Carriageways as traffic sees them (motor streets south of the footbridges).
  const carriageways=town.roads.filter(r=>!r.owner&&r.kind!=='pedestrian'&&r.width>=2.4&&Math.min(r.a[1],r.b[1])<4.01).map(r=>({...r,a:[r.a[0],Math.min(4,r.a[1])],b:[r.b[0],Math.min(4,r.b[1])]}));
  for(const district of town.districts.filter(d=>regions[d.id])){

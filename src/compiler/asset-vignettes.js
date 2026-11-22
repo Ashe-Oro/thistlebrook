@@ -30,7 +30,7 @@ export function vignetteObstacles(town,catalog){
   for(const x of [a.bounds.min[0],a.bounds.max[0]])for(const z of [a.bounds.min[2],a.bounds.max[2]])points.push([p.pos[0]+scale*(x*c+z*s),p.pos[1]+scale*(-x*s+z*c)]);
   return [{min:[0,1].map(k=>Math.min(...points.map(p=>p[k]))),max:[0,1].map(k=>Math.max(...points.map(p=>p[k])))}];
  });
- return [...town.buildings,...town.venues].map(p=>p.box).concat(kit,town.courtyards,
+ return [...town.buildings,...town.venues].map(p=>p.box).concat(kit,town.courtyards,town.sunbeamReservation?[town.sunbeamReservation]:[],
   (town.outskirts?.fields||[]).map(f=>({min:[f.x-f.w/2,f.z-f.d/2],max:[f.x+f.w/2,f.z+f.d/2]})),
   town.gardens.map(g=>({min:[g.x-g.width/2,g.z-g.depth/2],max:[g.x+g.width/2,g.z+g.depth/2]})),
   town.modelPlacements.concat(districtFurniture(town),landmarks).map(p=>({min:[p.pos[0]-p.size[0]/2,p.pos[1]-p.size[2]/2],max:[p.pos[0]+p.size[0]/2,p.pos[1]+p.size[2]/2]})));

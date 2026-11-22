@@ -8,7 +8,7 @@ import {createWorldRegistry} from './registry/index.js';
 import {compileWorld,WORLD_VIEWS} from '../compiler/world-plan.js';
 import { isTownOpening, mapHalfHeight, openingSceneryWindow, overview, townOpening } from './overview.js';
 import { CIVIC_VIEW } from './civic-quarter-plan.js';
-import { SUNBEAM_VIEW } from './sunbeam-layout.js';
+import { SUNBEAM_PHONE_VIEW, SUNBEAM_VIEW } from './sunbeam-layout.js';
 import { WORK_VIEWS, mountWorkUI } from './work-ui.js';
 import { createCalendar } from '../life/calendar.js';
 import { createWeather, mountWeatherControl } from './weather.js';
@@ -41,7 +41,7 @@ const q=new URLSearchParams(location.search);
 const loading=mountLoading();
 const progress=loading.progress;
 setGLTFProgress(url=>progress.model(url));
-const viewsFor=(town,rotation=0)=>({...WORLD_VIEWS,home:townOpening(town,innerWidth,innerHeight),railway:{...WORLD_VIEWS.railway,zoom:Math.min(.94,innerWidth/1200)},sunbeam:{...SUNBEAM_VIEW,zoom:innerWidth<600?4.4:SUNBEAM_VIEW.zoom},...WORK_VIEWS,works:{...WORK_VIEWS.works,zoom:innerWidth<600?2.7:WORK_VIEWS.works.zoom},civic:{...CIVIC_VIEW,zoom:innerWidth<600?3.4:CIVIC_VIEW.zoom},village:overview(town,innerWidth,innerHeight,Math.PI/4+rotation*Math.PI/2),downtown:{x:-57,z:-6,zoom:innerWidth<600?3.5:3.1},campus:{x:8,z:-70,zoom:1.8},stadium:{x:30,z:-84,zoom:2.8},baseball:{x:-22,z:-84,zoom:3.8},neighbourhood:{x:-3,z:-9,zoom:2.4},common:{x:8,z:-66,zoom:1.8},quay:{x:53,z:-1,zoom:2.3},market:{x:1,z:0,zoom:2.5},orchard:{x:-8,z:23,zoom:2.4},harvest:{x:-48,z:26.5,zoom:3.8},camp:{x:-68,z:26.5,zoom:3.8},tea:{x:55,z:-43,zoom:3.8}});
+const viewsFor=(town,rotation=0)=>({...WORLD_VIEWS,home:townOpening(town,innerWidth,innerHeight),railway:{...WORLD_VIEWS.railway,zoom:Math.min(.94,innerWidth/1200)},sunbeam:innerWidth<600?SUNBEAM_PHONE_VIEW:SUNBEAM_VIEW,...WORK_VIEWS,works:{...WORK_VIEWS.works,zoom:innerWidth<600?2.7:WORK_VIEWS.works.zoom},civic:{...CIVIC_VIEW,zoom:innerWidth<600?3.4:CIVIC_VIEW.zoom},village:overview(town,innerWidth,innerHeight,Math.PI/4+rotation*Math.PI/2),downtown:{x:-57,z:-6,zoom:innerWidth<600?3.5:3.1},campus:{x:8,z:-70,zoom:1.8},stadium:{x:30,z:-84,zoom:2.8},baseball:{x:-22,z:-84,zoom:3.8},neighbourhood:{x:-3,z:-9,zoom:2.4},common:{x:8,z:-66,zoom:1.8},quay:{x:53,z:-1,zoom:2.3},market:{x:1,z:0,zoom:2.5},orchard:{x:-8,z:23,zoom:2.4},harvest:{x:-48,z:26.5,zoom:3.8},camp:{x:-68,z:26.5,zoom:3.8},tea:{x:55,z:-43,zoom:3.8}});
 start().catch(error=>{console.error(error);loading.fail();window.__astraError=String(error);});
 async function planTown(seed, inWorker, capture, onPlan) {
  if(inWorker){
@@ -137,7 +137,7 @@ async function start(){
  world.expansions.fairlot.setOtherVehicles(()=>[...townVehicles(),...world.landscape.traffic.vehicles]);
  const clearRoad=(a,b)=>crossingClear(a,b,[...townVehicles(),...world.landscape.traffic.vehicles,...lotVehicles()]);
  residents.life.setCrossingGuard(clearRoad);
- residents.life.setLocalWalkGuard(world.expansions.fairlot.sim.clearWalk);
+ residents.life.setLocalWalkGuard((a,b)=>traffic.simulation.clearFireDriveway(b)&&world.expansions.fairlot.sim.clearWalk(a,b));
  world.landscape?.setOtherVehicles?.(()=>[...townVehicles(),...lotVehicles()]);
  // railway-loop: residents wait at a level crossing while its barriers are down.
  const railway=world.railway?.service;

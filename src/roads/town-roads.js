@@ -8,9 +8,11 @@ import {vehicleModel} from '../astra/traffic-fleet.js';
 const key = (p) => `${p[0].toFixed(2)},${p[1].toFixed(2)}`;
 export const isTownCarriageway = (r) => r.kind === 'avenue' || (!r.owner && !r.external && r.kind === 'lane' && r.width >= 2.4);
 
+export const WEST_LOOP = Object.freeze({west: -144, north: -90, south: -33, stationAvenue: -115});
 export const BUS_ROUTES = {
   town:[[-66,-16],[-36,-16],[-36,-15],[-22,-15],[-22,-33],[46,-33],[46,4],[22,4],[22,-15],[-22,-15],[-22,4],[-66,4]],
-  station:[[-115,-139],[-42,-139],[-42,-103],[-105,-103],[-105,-77],[-80,-77],[-80,-33],[-144,-33],[-144,-70],[-115,-70]],
+  station:[[WEST_LOOP.stationAvenue,-139],[-42,-139],[-42,-103],[-105,-103],[-105,-77],[-80,-77],[-80,WEST_LOOP.south],
+    [WEST_LOOP.west,WEST_LOOP.south],[WEST_LOOP.west,WEST_LOOP.north],[WEST_LOOP.stationAvenue,WEST_LOOP.north]],
 };
 export const TOWN_LANE_OFFSET = .89;
 export const CIVIC_CYCLE_OFFSET = 1.72;

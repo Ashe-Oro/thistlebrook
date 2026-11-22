@@ -6,7 +6,7 @@ import { resolveAll } from '../src/catalog/resolve-all.js';
 const catalog=resolveAll(JSON.parse(readFileSync(new URL('../src/catalog/bounds.json',import.meta.url))));
 test('100 seeded maps have clear parcels and one connected street network',()=>{
  for(let seed=0;seed<100;seed++){
-  const town=compileAstra(catalog,seed);assert(town.report.ok);assert.equal(town.districts.length,9);assert.equal(town.venues.length,17);assert.equal(town.buildings.length,35);
+  const town=compileAstra(catalog,seed);assert(town.report.ok);assert.equal(town.districts.length,9);assert.equal(town.venues.length,17);assert.equal(town.buildings.length,40);
   for(const v of town.venues)for(const p of [v.box.min,v.box.max])assert(pointInTown(p,town),v.name+' stays on land');
   for(const r of town.roads)for(let k=0;k<=4;k++)assert(pointInTown([r.a[0]+(r.b[0]-r.a[0])*k/4,r.a[1]+(r.b[1]-r.a[1])*k/4],town),'Road stays on land');
   assert(town.trees.length>=15,'Tree reservations leave a leafy border');
