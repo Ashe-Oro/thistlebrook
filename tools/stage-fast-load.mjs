@@ -15,7 +15,7 @@ function files(dir) {
   });
 }
 
-export async function stageFastLoad(dist,licensedRoot) {
+export async function stageFastLoad(dist,licensedRoot,{cachePublish=true}={}) {
   const publish = join(licensedRoot,'fast-load/publish');
   const modelDir = join(dist,'models');
   mkdirSync(modelDir,{recursive:true});
@@ -29,9 +29,9 @@ export async function stageFastLoad(dist,licensedRoot) {
   const {results,files:lods} = await buildModelLods(dist);
   for (const [name,file] of Object.entries(lods)) addFile(name,readFileSync(file));
   for (const [url,{name}] of Object.entries(results)) variants[url] = '/models/'+name;
-  rmSync(publish,{recursive:true,force:true});
+  if (cachePublish) rmSync(publish,{recursive:true,force:true});
   for (const sub of ['licensed','owned-assets']) {
-    cpSync(join(dist,sub),join(publish,sub),{recursive:true,dereference:true});
+    if (cachePublish) cpSync(join(dist,sub),join(publish,sub),{recursive:true,dereference:true});
     for (const file of files(join(dist,sub)).filter(file=>file.endsWith('.glb')).sort()) {
       const path=relative(dist,file), url='/'+path.split('/').map(encodeURIComponent).join('/');
       const source=readFileSync(file);
@@ -59,7 +59,9 @@ export async function stageFastLoad(dist,licensedRoot) {
     writeFileSync(file,html.replace('<head>','<head>\n    '+script));
   }
 
-  cpSync(modelDir,join(publish,'models'),{recursive:true});
-  writeFileSync(join(publish,'routes.json'),JSON.stringify(runtime));
+  if (cachePublish) {
+    cpSync(modelDir,join(publish,'models'),{recursive:true,dereference:true});
+    writeFileSync(join(publish,'routes.json'),JSON.stringify(runtime));
+  }
   return {original,artifacts};
 }

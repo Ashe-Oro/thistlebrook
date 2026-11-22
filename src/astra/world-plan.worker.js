@@ -3,5 +3,6 @@ import {resolveAll} from '../catalog/resolve-all.js';
 import bounds from '../catalog/bounds.json';
 
 self.addEventListener('message', ({data:seed}) => {
- self.postMessage(compileWorld(resolveAll(bounds),seed));
+ const town=compileWorld(resolveAll(bounds),seed,{onPlan:plan=>self.postMessage({plan})});
+ self.postMessage({town});
 });
