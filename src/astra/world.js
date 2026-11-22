@@ -20,7 +20,7 @@ import { buildRailway } from './railway.js';
 import { makeRng } from '../compiler/rng.js';
 import { LAMP_LOOK } from './lamp-look.js';
 import { setLampNight } from './lamp-glow.js';
-export async function buildAstra(scene,town,{hy3dModels,stream,isOpening,detail,sceneryInFrame}={}){
+export async function buildAstra(scene,town,{hy3dModels,stream,isOpening,detail,sceneryInFrame,onAssembly=()=>{},beforeBatch}={}){
  const rng=makeRng(town.seed+100),random=()=>rng.float();
  const nightUniform={value:0},windowMaterials=new Map();
  const glowCanvas=document.createElement('canvas');glowCanvas.width=64;glowCanvas.height=64;const gc=glowCanvas.getContext('2d'),gradient=gc.createRadialGradient(32,32,0,32,32,32);gradient.addColorStop(0,'rgba(255,220,130,.8)');gradient.addColorStop(.4,'rgba(255,215,120,.35)');gradient.addColorStop(1,'rgba(255,215,120,0)');gc.fillStyle=gradient;gc.fillRect(0,0,64,64);const glowTexture=new THREE.CanvasTexture(glowCanvas);
@@ -59,15 +59,19 @@ export async function buildAstra(scene,town,{hy3dModels,stream,isOpening,detail,
  // Sparse small cobbles leave the broad paving calm at overview scale.
  for(let i=0;i<100;i++){const x=-6.5+random()*15,z=-1.2+random()*9.5;box(x,.17,z,.25+random()*.23,.025,.18+random()*.17,i%2?'#c9bea1':'#ece1c4');}
  for(const [bridgeIndex,x] of town.bridges.entries()){assembly=`built:bridge-${bridgeIndex}`;const z=riverZ(x);box(x,.24,z,3.3,.3,7.4,'#bca681');for(let k=0;k<18;k++)box(x,.43,z-3.5+k*.4,3.1,.09,.34,'#cbb592');for(const side of [-1,1]){for(let k=0;k<5;k++)box(x+side*1.48,1,z-3.4+k*1.7,.16,1.4,.16,'#a18b6e');box(x+side*1.48,1.54,z,.14,.17,7.3,'#bba17b');box(x+side*1.48,.91,z,.1,.12,7.3,'#bba17b');}}
+ onAssembly(0.12);
  const buildOuter=parent=>buildExpansions(parent,town,{hy3dModels,stream,isOpening,detail,
   onDistrict(result){selectables.push(...(result.selectables||[]));}
  });
  const [landscape,woods,expansions]=stream
   ?await Promise.all([buildLandscape(scene,town,{detail,stream,sceneryInFrame}),buildWoods(scene,town),buildOuter(scene)])
   :[await buildLandscape(scene,town),await buildWoods(scene,town),await buildOuter(scene)];
+ onAssembly(0.31);
  selectables.push(...expansions.selectables);
  const civicQuarter=await buildAssembly(buildCivicQuarter,scene,town,'civic-green');selectables.push(...civicQuarter.venueRecords);
+ onAssembly(0.4);
  const districts=await buildAssembly(buildDistricts,scene,town,'common');selectables.push(...districts.venueRecords.filter(v=>!['civic-green','works','themepark','coral-coast'].includes(v.data.district)));
+ onAssembly(0.54);
  const works=await buildPlacedDistrict(buildWorkDistrict,scene,town,'works');selectables.push(...works.records);
  const railway=town.railway?await buildRailway(scene,town,{landscape}):null;if(railway){
   tagAssembly(railway.root,town.districts.find(d=>d.id==='works').registryId);
@@ -77,9 +81,12 @@ export async function buildAstra(scene,town,{hy3dModels,stream,isOpening,detail,
    selectables.push({type:'venue',data,bounds});
   }
  }
+ onAssembly(0.64);
  const sunbeam=await buildPlacedDistrict(buildSunbeam,scene,town,'sunbeam');selectables.push(...sunbeam.selectables);
  const mapleHollow=await buildMapleHollow(scene,town,{traffic:landscape.traffic});selectables.push(...mapleHollow.selectables);
+ onAssembly(0.74);
  const catalogActivities=await buildCatalogScenes(scene,town,{residentsOwnSlots:true,stream,isOpening,detail});
+ onAssembly(0.81);
  const loads=[];
  for(const b of town.buildings.filter(b=>!b.custom)){loads.push(asset(b.id,...b.pos,b.rot,1,statics,b.registryId).then(o=>{o.traverse(m=>{if(!m.isMesh||m.userData.outline||!m.material.vertexColors)return;const original=m.material;if(!windowMaterials.has(original)){const material=original.clone();material.onBeforeCompile=shader=>{shader.uniforms.uAstraNight=nightUniform;shader.fragmentShader='uniform float uAstraNight;\n'+shader.fragmentShader;shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\n#ifdef USE_COLOR\nif(vColor.b>vColor.r*1.08 && vColor.g>vColor.r*1.08 && vColor.b>.25){totalEmissiveRadiance+=vec3(1.0,.48,.09)*uAstraNight*.9;diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.8,.4,.1),uAstraNight); }\n#endif');};material.customProgramCacheKey=()=> 'astra-windows';windowMaterials.set(original,material);}m.material=windowMaterials.get(original);});o.updateMatrixWorld(true);const bounds=new THREE.Box3().setFromObject(o);selectables.push({type:'building',data:b,bounds,object:o});}));}
  for(const p of [...town.props,...town.trees])loads.push(asset(p.id,...p.pos,p.rot,p.scale,statics,p.registryId));
@@ -112,6 +119,8 @@ export async function buildAstra(scene,town,{hy3dModels,stream,isOpening,detail,
  // Owned animals remain individually animated.
  for(const p of town.supplemental.filter(p=>/^(duck|chicken)-/.test(p.key))){const kind=p.asset==='farm-duck'?'duck':'chicken',n=Number(p.key.split('-').at(-1));loads.push(asset(p.asset,...p.pos,p.rot,p.scale,scene,p.registryId).then(o=>animations.animals.push({o,kind,n})));}
  await Promise.all(loads);
+ onAssembly(0.82);
+ if(beforeBatch)await beforeBatch();
  // Instance reused kit meshes, including their toon hulls. These are private
  // models fetched at runtime; neither this module nor builds embed the assets.
  tagComponents(statics,town,'world');tagComponents(scene,town,'world');
@@ -122,5 +131,6 @@ export async function buildAstra(scene,town,{hy3dModels,stream,isOpening,detail,
  batchStaticMeshes(statics,scene,{preserveOutlineGeometry:true,preserveIds:weatherIds});
  // Lines aren't mesh instances.
  statics.traverse(o=>{if(o.isLine){const line=o.clone();line.applyMatrix4(o.parent.matrixWorld);scene.add(line);}});
+ onAssembly(1);
  return {landscape,woods,water,selectables,animations,expansions,districts,civicQuarter,works,railway,sunbeam,mapleHollow,catalogActivities,update(t,night,hour=10,people=[],day=4,weather='clear'){railway?.update(t,hour,night);const travellers=railway?.service.pedestrians??[];landscape.update(t,hour,people,[...travellers,...districts.civic.school.pedestrians]);woods.update(t,hour,day);mapleHollow.update(t,hour,night,people);water.update(t);expansions.update(t,hour,night,day,travellers.length?[...people,...travellers]:people,weather);catalogActivities.update(t);sunbeam.update(t,hour,night);works.update(t,hour,night,people);civicQuarter.update(t,hour,night);districts.update(t,hour,night,day,weather);nightUniform.value=night;setLampNight(night);for(const rotor of animations.mills)rotor.rotation.z=-t*.18;for(const s of animations.smoke){const phase=(t*.12+s.phase)%1;s.m.position.set(s.x+phase*1.8,s.y+phase*4,s.z+phase*.5);s.m.scale.setScalar(.15+phase*.72);s.m.material.opacity=(1-phase)*.23;}for(const r of animations.water){r.m.position.x=r.x+Math.sin(t*.4+r.phase)*.4;r.m.scale.x=r.width*(.8+Math.sin(t+r.phase)*.25);}shimmer.update();animations.flags.forEach((m,n)=>m.rotation.y=Math.sin(t*1.8+n)*.15);flagBatches.forEach(batch=>batch.update());for(const a of animations.animals){if(a.kind==='duck'){const x=-13+Math.sin(t*.08)*13-a.n*.85;a.o.position.set(x,.05+Math.sin(t*2+a.n)*.025,riverZ(x)+Math.sin(t*.3-a.n*.3)*.4);a.o.rotation.y=Math.cos(t*.08)>0?Math.PI/2:-Math.PI/2;}else{const p=t*.3+a.n*2;a.o.position.set(18+Math.sin(p)*1.5,.05+Math.abs(Math.sin(t*5+a.n))*.04,29+Math.cos(p*.7));a.o.rotation.y=Math.atan2(Math.cos(p),-.7*Math.sin(p*.7));}}for(const m of animations.lamps){if(m.geometry.type==='CircleGeometry'){m.material.opacity=night*LAMP_LOOK.pool;m.visible=m.material.opacity>0;}else m.visible=night>.2;}}};
 }

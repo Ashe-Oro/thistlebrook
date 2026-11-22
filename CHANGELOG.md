@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Loading progress.** The opening screen tracks model transfers, decoding, and scene preparation through the first frame. A time-left estimate appears when progress is steady, and a smaller indicator shows scenery loading after the map opens. [Spec and measurements](docs/specs/LOADING-BAR-LOG.md).
+
 - **Batched outline ink.** Static-batch ink hulls now rewrite the zero-normal outline shader (`safeNormal * uThickness * k` becomes `inkOffset * k`, and the unused `nLen` / `safeNormal` lines are dropped) and bake a zero offset for zero-length normals, so merged ink compiles and draws instead of failing with `uThickness` undeclared. `tests/astra-static-batches.test.mjs` fails if those replaces miss or the patched shader still contains `uThickness`.
 
 - **Phone streaming, tree normals, and closer zoom.**

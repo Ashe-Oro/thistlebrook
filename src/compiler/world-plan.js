@@ -101,8 +101,9 @@ export function adoptExtension(town,id,layout,{offset=[0,0],bounds,links=[],path
  return region;
 }
 export const WORLD_VIEWS={railway:{x:-105,z:-216,zoom:.94,rotation:1},...Object.fromEntries(Object.entries(STARBASE_VIEWS).map(([id,v])=>[id,{...v,x:v.x+80,z:v.z+230}])),roadster:{x:-205,z:-172,zoom:2.65},...Object.fromEntries(Object.entries(COAST_VIEWS).map(([id,v])=>[id,{...v,x:v.x+160,z:v.z+150} ])),...THEMEPARK_VIEWS,skatepark:{...SKATEPARK_VIEW,x:87,z:-109},airport:{x:104,z:-188,zoom:1.55},...OUTSKIRTS_VIEWS,fair:{...FAIR_VIEW,x:FAIR_VIEW.x-140},...Object.fromEntries(Object.entries(HARBOR_VIEWS).map(([id,v])=>[id==='beach'?'shell-cove':id,{...v,x:v.x+100}])),'maple-hollow':{...MAPLE_HOLLOW_VIEW}};
-export function compileWorld(catalog,seed=831,{capture=false}={}){
+export function compileWorld(catalog,seed=831,{capture=false,onPlan=()=>{}}={}){
  const town=compileAstra(catalog,seed);unifyStraightRuns(town);town.regions=[];town.expansionLocal={};
+ onPlan(.32);
  // The harbor approach squeezes between the bandstand and the farm fence, so it
  // stays a town lane there; the regional road starts once it has room.
  adoptExtension(town,'harbor',addHarbor,{offset:WORLD_OFFSETS.harbor,bounds:[16,27,111,91],links:[[[66,34],[100,34],[112,30],[146,30]]],lanes:[[[46,30],[46,34]],[[46,34],[66,34]]]});
@@ -129,12 +130,15 @@ export function compileWorld(catalog,seed=831,{capture=false}={}){
  const sg=[[-99,-20],[-99,-12],[-77,-12],[-66,0],[-46,0],[-46,32],[-42,39]].map(p=>move(move(p,STARBASE_ORIGIN),WORLD_OFFSETS.starbase));
  for(let i=1;i<sg.length;i++)town.roads.push({a:sg[i-1],b:sg[i],width:2,kind:'visitor-walk',owner:'starbase',external:'starbase'});
  const sn=rebuildWorldGraph(town)(sg.at(-1));town.venues.push({id:'starbase-garden',name:'Starbase Visitor Garden',district:'starbase',type:'spaceport',pos:sg.at(-1),entry:sg.at(-1),node:sn,height:5,box:{min:[171,312],max:[195,326]},story:'A public viewing garden beside Highway 4. Watch the launch tower, returning boosters and offshore recovery ship from outside the working range.'});
+ onPlan(.52);
  town.modelPlacements=expansionModels(town,catalog);
  const stops=capture?[]:compileExpansionScenes(town,pointInWorld);
  // Maple is deterministic and needs to be present for the platform reservations.
  addMapleHollow(town);
  if(!capture)stops.push(...compileAssetVignettes(town,catalog,pointInWorld,railwayAccessReservations()));
+ onPlan(.71);
  rebuildWorldGraph(town);planRegionalRoads(town);flagMapleHollowRoads(town,planRegionalLines);planLandscape(town);town.water=planWater(town);planWoods(town);planNatureEdges(town);addRailway(town,catalog);
+ onPlan(.88);
  const market=town.venues.find(v=>v.id==='work-station');
  Object.assign(market,{name:'West Works Market Hall',type:'market',story:'The old station hall now serves the West Works market and its workshops.'});
  const stopNode=rebuildWorldGraph(town);finishMapleHollow(town,stopNode);

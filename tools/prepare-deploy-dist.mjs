@@ -21,6 +21,7 @@ import hy3d from '../src/astra/hy3d/models.json' with {type: 'json'};
 import {compressDir} from './compress-dist-glbs.mjs';
 import {AIRFIELD_MODELS,airfieldPath} from '../src/astra/airport/airfield-plan.js';
 import {stageFastLoad} from './stage-fast-load.mjs';
+import {SIZE_MANIFEST,writeAssetSizes} from './asset-size-manifest.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const distDir = join(root, 'dist');
@@ -317,7 +318,7 @@ function startStaticServer() {
   });
 }
 
-async function verify() {
+async function verify(profile = 'desktop', {openingOnly = false} = {}) {
   const {server, port} = await startStaticServer();
   const origin = `http://127.0.0.1:${port}`;
   const requests = [];
@@ -326,12 +327,27 @@ async function verify() {
   try {
     browser = await chromium.launch({
       executablePath: '/usr/bin/google-chrome',
-      args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
+      args: ['--no-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--disable-gpu-watchdog', '--enable-unsafe-swiftshader'],
     });
-    const page = await browser.newPage({viewport: {width: 1000, height: 750}});
+    const page = await browser.newPage(profile==='phone'
+      ? {viewport:{width:390,height:844},deviceScaleFactor:3,isMobile:true,hasTouch:true}
+      : {viewport:{width:1440,height:900}});
+    page.on('pageerror',error=>console.warn('Headless page error:',error.message));
     await page.addInitScript(() => {
       const schedule = window.requestAnimationFrame.bind(window);
       window.requestAnimationFrame = callback => window.__ready ? 0 : schedule(callback);
+      let ready;
+      Object.defineProperty(window,'__ready',{get:()=>ready,set(value){
+        ready = value;
+        if (!value) return;
+        window.__openingInventory = {
+          requests:performance.getEntriesByType('resource')
+            .map(entry=>new URL(entry.name))
+            .filter(url=>url.origin===location.origin)
+            .map(url=>url.pathname),
+          models:window.__loadProgress?.openingModels || [],
+        };
+      }});
     });
     page.on('response', (response) => {
       const url = response.url();
@@ -351,10 +367,14 @@ async function verify() {
     const outcome = await page.waitForFunction(() => window.__ready || window.__astraError, null, {timeout: 180000, polling: 200});
     const error = await page.evaluate(() => window.__astraError || null);
     const ready = await page.evaluate(() => !!window.__ready);
-    await page.evaluate(() => window.__astra?.streamed);
-    await page.waitForLoadState('networkidle');
-    const districts = await page.evaluate(() => window.__astra?.stream?.audit());
-    return {origin, ready, error, requests, missing, districts, outcome: !!outcome};
+    const opening = await page.evaluate(() => window.__openingInventory);
+    let districts;
+    if (!openingOnly) {
+      await page.evaluate(() => window.__astra?.streamed);
+      await page.waitForLoadState('networkidle');
+      districts = await page.evaluate(() => window.__astra?.stream?.audit());
+    }
+    return {origin, ready, error, requests, missing, districts, opening, outcome: !!outcome};
   } finally {
     await browser?.close();
     await new Promise((r) => server.close(r));
@@ -412,6 +432,7 @@ const catalog = resolveAll(JSON.parse(readFileSync(join(root, 'src/catalog/bound
 if (!skipBuild) runBuild();
 if (!existsSync(join(distDir, 'index.html'))) throw new Error('dist/index.html missing; run without --skip-build');
 rmSync(join(distDir,'models'),{force:true,recursive:true});
+rmSync(join(distDir,SIZE_MANIFEST),{force:true});
 
 const collected = collectUrls(catalog);
 const copiedResult = copyUrls(collected.urls);
@@ -427,6 +448,7 @@ async function compressAndAlias() {
   writeAliases();
 }
 await compressAndAlias();
+writeAssetSizes(distDir);
 let stats = distStats();
 console.log(`Collected ${collected.urls.size} asset URLs from seed ${Number.isFinite(seed) ? seed : 831}; copied ${copied.length} files.`);
 console.log(`dist: ${formatMb(stats.bytes)} / ${stats.files} files / ${stats.glbs} glb|gltf (unique content ${formatMb(stats.uniqueBytes)})`);
@@ -473,8 +495,9 @@ if (!skipVerify) {
 
 let fastLoad = null;
 if (!legacy && !skipCompress) {
-  fastLoad = await stageFastLoad(distDir,licensedRoot);
+  fastLoad = await stageFastLoad(distDir,licensedRoot,{cachePublish:!args.has('--no-publish-cache')});
   copyFileSync(join(root,'vercel.json'),join(distDir,'vercel.json'));
+  writeAssetSizes(distDir);
   stats = distStats();
   if (!skipVerify) {
     const final = await verify();
@@ -484,6 +507,20 @@ if (!legacy && !skipCompress) {
     verification = final;
   }
 }
+const opening = {};
+if (verification) {
+  opening.desktop = verification.opening;
+  const phone = await verify('phone',{openingOnly:true});
+  const failed = phone.missing.filter(request=>!hy3dUrls.has(request.path));
+  if (!phone.ready || phone.error || failed.length) {
+    throw new Error('Phone opening verification failed: '+JSON.stringify({error:phone.error,failed}));
+  }
+  opening.phone = phone.opening;
+}
+const streamed = verification?.requests.filter(request=>request.status===200).map(request=>request.path);
+writeAssetSizes(distDir,opening,streamed);
+stats = distStats();
+console.log(`Asset sizes: dist/${SIZE_MANIFEST}`);
 const manifest = writeManifest({
   seed: Number.isFinite(seed) ? seed : 831,
   urls: [...collected.urls].sort(),

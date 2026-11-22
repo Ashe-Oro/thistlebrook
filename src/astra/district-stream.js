@@ -7,6 +7,7 @@ export function createDistrictStream({
   frameBudgetMs = 8,
   yieldMs = 24,
   onPrepare = null,
+  onWork = null,
   onAttach = () => {},
   onError = console.warn,
 }) {
@@ -55,6 +56,7 @@ export function createDistrictStream({
       const job = pending.shift();
       job.state = 'loading';
       running++;
+      const finishWork = onWork?.();
       let timer;
       const deadline = new Promise((_,reject) => {
         timer = setTimeout(()=>reject(new Error('District timed out')),timeout);
@@ -88,6 +90,7 @@ export function createDistrictStream({
         onError('Could not load ' + job.id, error);
       }).finally(() => {
         running--;
+        finishWork?.();
         job.finish();
         if (pace && !job.opening) schedulePump(attachedThisTurn ? yieldMs : 0);
         else pump();

@@ -22,7 +22,7 @@ import { createTraffic } from './traffic.js';
 import * as THREE from 'three';
 import { createMapCamera, cameraBounds, readCameraHash } from './camera.js';
 import { districtPlaceholder } from './district-placeholder.js';
-import { configureGLTFTextures } from '../gltf-loader.js';
+import { configureGLTFTextures, setGLTFProgress } from '../gltf-loader.js';
 import { createDistrictStream } from './district-stream.js';
 import { configureRigidBatches, createRigidBatches } from './rigid-batches.js';
 import { createModelDetail, setModelDetail } from './model-detail.js';
@@ -36,17 +36,23 @@ import { createUI, icon } from './ui.js';
 import {crossingClear} from '../roads/collisions.js';
 import { createSchoolEntry } from './school-interior.js';
 import { weekdayOf } from './school-plan.js';
+import { mountLoading } from './loading-ui.js';
 const q=new URLSearchParams(location.search);
-const loading=document.createElement('div');loading.className='loading';loading.innerHTML='<div class="sprout">❧</div><h1>A little world awaits.</h1><p>Opening the shutters, putting the kettle on…</p>';document.body.append(loading);
+const loading=mountLoading();
+const progress=loading.progress;
+setGLTFProgress(url=>progress.model(url));
 const viewsFor=(town,rotation=0)=>({...WORLD_VIEWS,home:townOpening(town,innerWidth,innerHeight),railway:{...WORLD_VIEWS.railway,zoom:Math.min(.94,innerWidth/1200)},sunbeam:{...SUNBEAM_VIEW,zoom:innerWidth<600?4.4:SUNBEAM_VIEW.zoom},...WORK_VIEWS,works:{...WORK_VIEWS.works,zoom:innerWidth<600?2.7:WORK_VIEWS.works.zoom},civic:{...CIVIC_VIEW,zoom:innerWidth<600?3.4:CIVIC_VIEW.zoom},village:overview(town,innerWidth,innerHeight,Math.PI/4+rotation*Math.PI/2),downtown:{x:-57,z:-6,zoom:innerWidth<600?3.5:3.1},campus:{x:8,z:-70,zoom:1.8},stadium:{x:30,z:-84,zoom:2.8},baseball:{x:-22,z:-84,zoom:3.8},neighbourhood:{x:-3,z:-9,zoom:2.4},common:{x:8,z:-66,zoom:1.8},quay:{x:53,z:-1,zoom:2.3},market:{x:1,z:0,zoom:2.5},orchard:{x:-8,z:23,zoom:2.4},harvest:{x:-48,z:26.5,zoom:3.8},camp:{x:-68,z:26.5,zoom:3.8},tea:{x:55,z:-43,zoom:3.8}});
-start().catch(error=>{console.error(error);loading.innerHTML='<h1>The village is taking a moment.</h1><p>Could not load the village. Check that the private asset library is available.</p>';window.__astraError=String(error);});
-async function planTown(seed, inWorker, capture) {
+start().catch(error=>{console.error(error);loading.fail();window.__astraError=String(error);});
+async function planTown(seed, inWorker, capture, onPlan) {
  if(inWorker){
   let worker;
   try {
    worker=new Worker(new URL('./world-plan.worker.js',import.meta.url),{type:'module'});
    return await new Promise((resolve,reject)=>{
-    worker.addEventListener('message',event=>resolve(event.data),{once:true});
+    worker.addEventListener('message',({data})=>{
+     if(data.town)resolve(data.town);
+     else onPlan(data.plan);
+    });
     worker.addEventListener('error',reject,{once:true});
     worker.addEventListener('messageerror',reject,{once:true});
     worker.postMessage(seed);
@@ -57,7 +63,7 @@ async function planTown(seed, inWorker, capture) {
    worker?.terminate();
   }
  }
- return compileWorld(RESOLVED,seed,{capture});
+ return compileWorld(RESOLVED,seed,{capture,onPlan});
 }
 async function start(){
  const phone=matchMedia('(pointer: coarse)').matches&&Math.min(innerWidth,innerHeight)<=600;
@@ -65,7 +71,7 @@ async function start(){
  const enabled=window.__districtStreaming&&!captureRegistry;
  const seed=Number(q.get('seed')??831);
  performance.mark('town:plan-start');
- const planning=planTown(Number.isFinite(seed)?seed:831,phone&&enabled,captureRegistry);
+ const planning=planTown(Number.isFinite(seed)?seed:831,enabled,captureRegistry,fraction=>progress.step('plan',fraction));
  const scene=new THREE.Scene();scene.background=new THREE.Color('#e8ede3');
  const pixelRatio=Math.min(devicePixelRatio,1.75);
  const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,preserveDrawingBuffer:q.has('capture'),powerPreference:'high-performance'});renderer.setPixelRatio(pixelRatio);renderer.setSize(innerWidth,innerHeight);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.NoToneMapping;document.querySelector('#app').append(renderer.domElement);
@@ -74,6 +80,7 @@ async function start(){
  const town=await planning;
  town.captureRegistry=captureRegistry;
  performance.mark('town:plan-end');
+ progress.step('plan',1);
  performance.mark('town:scene-start');
  const camera=new THREE.OrthographicCamera(-60,60,40,-40,.1,3000);camera.position.set(90,90,110);camera.lookAt(0,0,0);
  let hour=Number(q.get('hour')??10.4),paused=false,speed=1,elapsed=0,following=null,selected=null,last=performance.now(),night=0;
@@ -91,12 +98,15 @@ async function start(){
  const openingRadius=opensAtHome?24:initialCamera.zoom>1?85:innerWidth<=600?16:24;
  const isOpening=bounds=>Math.hypot(Math.max(bounds.minX-initial.x,0,initial.x-bounds.maxX),Math.max(bounds.minZ-initial.z,0,initial.z-bounds.maxZ))<=openingRadius;
  let lighting,skins,shadowDirty=true,wideBatches,hasShadowView=false;
- const stream=enabled?createDistrictStream({initial,pace:true,
+ const stream=enabled?createDistrictStream({initial,pace:true,onWork:()=>progress.district(),
   async onPrepare(result){
    const objects=(Array.isArray(result)?result:[result?.root]).filter(Boolean);
    if(!objects.length||!lighting)return;
    for(const object of objects)lighting.register(object);
-   if(renderer.compileAsync&&renderer.extensions.has('KHR_parallel_shader_compile'))for(const object of objects)await renderer.compileAsync(object,camera,scene);
+   if(renderer.compileAsync&&renderer.extensions.has('KHR_parallel_shader_compile')){
+    const compiled=progress.compile(objects.length);
+    for(const object of objects){await renderer.compileAsync(object,camera,scene);compiled();}
+   }
   },
   onAttach(result){
    for(const object of Array.isArray(result)?result:[result.root])if(object)lighting?.register(object);
@@ -108,7 +118,7 @@ async function start(){
  setModelDetail(detail);
  const hy3dModels={then(resolve,reject){return loadHy3dModels().then(resolve,reject);}};
  const sceneryInFrame=opensAtHome?openingSceneryWindow(initialCamera,innerWidth/innerHeight):null;
- const buildWorld=()=>buildAstra(scene,town,{hy3dModels,stream,isOpening,detail,sceneryInFrame});
+ const buildWorld=()=>buildAstra(scene,town,{hy3dModels,stream,isOpening,detail,sceneryInFrame,onAssembly:fraction=>progress.step('assemble',fraction*(phone ? .80 : .66)),beforeBatch:loading.paint});
  const buildResidents=parent=>createResidents(parent,town,{hour,day:initialDay,weather:calendar.weather});
  // Keep resident meshes out of the world's registry traversal until it
  // finishes tagging the static assembly.
@@ -119,6 +129,7 @@ async function start(){
  scene.add(residentRoot);
  world.districts.civic.setActivityOwner?.('baseball',true);
  const traffic=await createTraffic(scene,town,residents,world);tagAssembly(traffic.root,'market');
+ progress.step('assemble',.90);
  // grok-roads: residents look both ways before a crossing; regional cars also
  // see town traffic. Both read the same pure simulations the tests use.
  const townVehicles=()=>[...traffic.simulation.vehicles,...traffic.simulation.parked];
@@ -295,14 +306,18 @@ async function start(){
  window.__astra={get streamed(){return streamed;},stream,detail,viewReady(){const state=controls.state();return Promise.resolve(stream?.nearby(state,state.zoom>1?100:0)).then(()=>{detail?.start();return detail?.settled();});},school,setWeather,get weather(){return residents.life.weather;},skin:skins,setSkin:id=>skins.setSkin(id).id,get tesla(){return tesla;},registry:createWorldRegistry(town),town,scene,camera,renderer,controls,residents,world,traffic,lighting,selection,get hour(){return hour;},get paused(){return paused;},get elapsed(){return elapsed;},get following(){return following?.name;},get speed(){return speed;},setHour,step,view:(v)=>setView(v,true),selectPerson:showPerson,pick,setPaused(v){paused=v;ui.paused(v);},audit(){return {landscape:world.landscape.audit(),report:town.report,renderRegistryErrors:renderCoverage(scene,town),tesla:tesla?.audit(),expansions:world.expansions.audit(),people:residents.people.length,cityActivities:world.districts.stats,civicActivities:world.civicQuarter.stats,works:world.works.audit(),sunbeam:world.sunbeam.stats,mapleHollow:world.mapleHollow?.audit(),life:residents.life.audit(),traffic:traffic.audit(),catalog:world.catalogActivities.audit(),lighting:{...lighting.state},weather:{type:residents.life.weather,...weather.audit()},drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,positions:residents.people.map(p=>[p.name,p.object.position.x,p.object.position.z,p.activity]),hour,paused,zoom:camera.zoom,camera:controls.state()};}};
  await opening;
  if(q.get('classroom')==='1')await school.enter(hour,weekday());
+ progress.prepareBoot();
+ await loading.paint();
  let streamed;
  performance.mark('town:scene-end');
  performance.mark('town:first-render-start');
  step(0);
  performance.mark('town:first-render-end');
- loading.classList.add('done');window.__readyAt=performance.now();window.__ready=true;
+ window.__readyAt=performance.now();window.__ready=true;loading.ready();
  if(stream)streamed=new Promise(resolve=>setTimeout(()=>{
-  resolve(stream.start().then(()=>{streamSettled=true;detail?.start();}));
+  const pending=Object.values(stream.audit()).filter(state=>state==='queued'||state==='loading').length;
+  const finish=progress.stream(pending);
+  resolve(stream.start().then(()=>{streamSettled=true;detail?.start();}).finally(finish));
  },250));
  function frame(now){const dt=(now-last)/1000;last=now;step(dt);requestAnimationFrame(frame);}requestAnimationFrame(frame);
 }

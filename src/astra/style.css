@@ -107,3 +107,12 @@
  .astra-ui .tools button{width:40px;height:40px;border-radius:20px}
  .astra-ui.in-classroom .top-bar{grid-template-columns:1fr;left:auto}
 }
+
+.loading .load-card{width:min(280px,calc(100vw - 64px));margin:24px auto 0;padding:13px 16px 10px}
+.loading h1{font-size:clamp(32px,10vw,45px);padding-inline:16px}
+.load-meter{height:6px;background:#e4e9dc;border-radius:10px;overflow:hidden}
+.load-fill{height:100%;background:#6d886a;border-radius:inherit;transform:scaleX(0);transform-origin:left}
+.load-meta{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:6px;min-height:16px;font-size:11px;color:#566c55;font-variant-numeric:tabular-nums}
+.load-slim{position:fixed;z-index:4;left:40px;bottom:28px;width:170px;padding:8px 11px 5px;pointer-events:none}
+.load-slim .load-meter{height:4px}.load-slim .load-meta{margin-top:3px}
+@media(max-width:900px){.load-slim{left:20px;bottom:calc(133px + env(safe-area-inset-bottom,0px))}}

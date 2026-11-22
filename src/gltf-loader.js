@@ -5,7 +5,9 @@ import {KTX2Loader} from 'three/addons/loaders/KTX2Loader.js';
 import {DRACOLoader} from 'three/addons/loaders/DRACOLoader.js';
 import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
 
-let draco, manager, basis;
+let draco, manager, basis, modelProgress;
+
+export function setGLTFProgress(progress) { modelProgress = progress; }
 const textureLoaders = new Set();
 const BASE = import.meta.env?.BASE_URL ?? '/';
 
@@ -45,9 +47,28 @@ function unpackAttributes(scene) {
   });
 }
 
+class TownGLTFLoader extends GLTFLoader {
+  load(url,onLoad,onProgress,onError) {
+    if (!modelProgress) return super.load(url,onLoad,onProgress,onError);
+    const resolved = this.manager.resolveURL((this.path || '')+url);
+    const address = new URL(resolved,location.href);
+    const task = modelProgress(address.origin===location.origin?address.pathname:address.href);
+    return super.load(url,gltf=>{
+      try { onLoad(gltf); } finally { task.finish(); }
+    },event=>{
+      task.transfer(event.loaded,event.total);
+      onProgress?.(event);
+    },error=>{
+      task.finish();
+      if (onError) onError(error);
+      else console.error(error);
+    });
+  }
+}
+
 export function createGLTFLoader() {
   draco ??= new DRACOLoader().setDecoderPath(BASE+'draco/').setWorkerLimit(2);
-  const loader = new GLTFLoader(sharedManager()).setDRACOLoader(draco).setMeshoptDecoder(MeshoptDecoder);
+  const loader = new TownGLTFLoader(sharedManager()).setDRACOLoader(draco).setMeshoptDecoder(MeshoptDecoder);
   loader.register(() => ({name:'town_float_attributes',afterRoot(result){result.scenes.forEach(unpackAttributes);}}));
   if (typeof window !== 'undefined' && window.__basisTextures) {
     loader.setResourcePath(location.origin+'/');
