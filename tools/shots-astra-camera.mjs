@@ -1,6 +1,7 @@
 import { chromium } from 'playwright-core';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
+import { STREET_ZOOM_MAX, ZOOM_LIMITS } from '../src/astra/camera.js';
 
 const dir = new URL('../shots/astra-camera/', import.meta.url).pathname;
 mkdirSync(dir, { recursive: true });
@@ -151,10 +152,12 @@ try {
   assert.deepEqual(await state(), saved);
   check('district and zoom buttons, copy URL, reload within hash precision, hash navigation and Back without history spam');
 
-  await page.evaluate(() => { __astra.controls.view({ x: 0, z: 0, zoom: 5 }, true); __astra.controls.zoom(100); }); await settle();
-  near((await state()).zoom, 5); assert(await page.getByRole('button', { name: 'Zoom in', exact: true }).isDisabled());
+  await page.evaluate(zoom => __astra.controls.view({ x: 0, z: 0, zoom }, true), ZOOM_LIMITS.max);
+  assert(await page.getByRole('button', { name: 'Zoom in', exact: true }).isEnabled());
+  await page.evaluate(() => __astra.controls.zoom(100)); await settle();
+  near((await state()).zoom, STREET_ZOOM_MAX); assert(await page.getByRole('button', { name: 'Zoom in', exact: true }).isDisabled());
   await page.evaluate(() => __astra.controls.zoom(.0001)); await settle();
-  near((await state()).zoom, .7); assert(await page.getByRole('button', { name: 'Zoom out', exact: true }).isDisabled());
+  near((await state()).zoom, ZOOM_LIMITS.min); assert(await page.getByRole('button', { name: 'Zoom out', exact: true }).isDisabled());
   await page.evaluate(() => location.hash = '#x=NaN&y=0&zoom=2'); await page.waitForTimeout(80);
   assert(Number.isFinite((await state()).x));
   await page.reload(); await ready(); assert.equal((await state()).x, -57);

@@ -21,6 +21,9 @@ import { createLifePanel } from './life/panel.js';
 import { createTraffic } from './traffic.js';
 import * as THREE from 'three';
 import { createMapCamera, cameraBounds, readCameraHash } from './camera.js';
+import { mapCameraRay } from './street-camera.js';
+import { landscapeHills, parkPeaks } from '../compiler/terrain.js';
+import { terrainY } from '../compiler/woods.js';
 import { districtPlaceholder } from './district-placeholder.js';
 import { configureGLTFTextures, setGLTFProgress } from '../gltf-loader.js';
 import { createDistrictStream } from './district-stream.js';
@@ -163,7 +166,13 @@ async function start(){
  const raycaster=new THREE.Raycaster();
  let ui, cameraUI,activeView=null;
  const selection=createSelection(scene);
- const controls=createMapCamera(camera,renderer.domElement,{bounds:cameraBounds(town),hashZoom:()=>townOpening(town,innerWidth,innerHeight).zoom,
+ const controls=createMapCamera(camera,renderer.domElement,{bounds:cameraBounds(town),town,
+  catalogHeight:entry=>RESOLVED.get(entry.id)?.bounds.max[1],
+  streetTerrain:()=>({
+   terrain:[...landscapeHills(town),...(town.regions?.some(region=>region.id==='themepark')?parkPeaks():[])],
+   groundHeight:town.woods?terrainY:undefined
+  }),
+  hashZoom:()=>townOpening(town,innerWidth,innerHeight).zoom,
   onRotate(){if(activeView==='home'||activeView==='village')setView(activeView,true);},
   onInteract(kind){if(kind!=='rotate')activeView=null;following=null;ui?.view('');ui?.tooltip(null);},
   onTap:inspectPoint,
@@ -246,8 +255,8 @@ async function start(){
  const school=createSchoolEntry({renderer,controls,root:ui.root,plan:schoolDay.plan,liveState:()=>schoolDay.state});
  const weekday=()=>weekdayOf(residents.life.day);
  // Resizing clears the drawing buffer; redraw even when capture has stopped RAF.
- const resize=(redraw=true)=>{renderer.setSize(innerWidth,innerHeight);world.landscape.resizeOcean(innerWidth<=600);school?.resize();const aspect=innerWidth/innerHeight,half=mapHalfHeight(aspect);camera.left=-half*aspect;camera.right=half*aspect;camera.top=half;camera.bottom=-half;camera.updateProjectionMatrix();if(activeView==='home'||activeView==='village')setView(activeView,true);if(redraw)step(0);};window.addEventListener('resize',()=>resize());resize(false);if(controls.restore())ui.view('');else setView(startView,true);
- function pick(x,y){raycaster.setFromCamera(new THREE.Vector2(x/innerWidth*2-1,1-y/innerHeight*2),camera);let person=residents.pick(raycaster.ray);let personDistance=person?raycaster.ray.origin.distanceTo(person.object.getWorldPosition(new THREE.Vector3())):Infinity;for(const p of world.expansions.people){if(!p.object?.visible)continue;const center=p.object.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0,.8,0)),hit=raycaster.ray.intersectSphere(new THREE.Sphere(center,.8),new THREE.Vector3());if(hit&&hit.distanceTo(raycaster.ray.origin)<personDistance){person=p;personDistance=hit.distanceTo(raycaster.ray.origin);}}let best=null,distance=Infinity;for(const b of world.selectables){const hit=raycaster.ray.intersectBox(b.bounds,new THREE.Vector3());if(hit&&raycaster.ray.origin.distanceTo(hit)<distance){best=b;distance=raycaster.ray.origin.distanceTo(hit);}}
+ const resize=(redraw=true)=>{renderer.setSize(innerWidth,innerHeight);world.landscape.resizeOcean(innerWidth<=600);school?.resize();const aspect=innerWidth/innerHeight,half=mapHalfHeight(aspect);camera.left=-half*aspect;camera.right=half*aspect;camera.top=half;camera.bottom=-half;controls.resize();if(activeView==='home'||activeView==='village')setView(activeView,true);if(redraw)step(0);};window.addEventListener('resize',()=>resize());resize(false);if(controls.restore())ui.view('');else setView(startView,true);
+ function pick(x,y){mapCameraRay(raycaster,new THREE.Vector2(x/innerWidth*2-1,1-y/innerHeight*2),camera);let person=residents.pick(raycaster.ray);let personDistance=person?raycaster.ray.origin.distanceTo(person.object.getWorldPosition(new THREE.Vector3())):Infinity;for(const p of world.expansions.people){if(!p.object?.visible)continue;const center=p.object.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0,.8,0)),hit=raycaster.ray.intersectSphere(new THREE.Sphere(center,.8),new THREE.Vector3());if(hit&&hit.distanceTo(raycaster.ray.origin)<personDistance){person=p;personDistance=hit.distanceTo(raycaster.ray.origin);}}let best=null,distance=Infinity;for(const b of world.selectables){const hit=raycaster.ray.intersectBox(b.bounds,new THREE.Vector3());if(hit&&raycaster.ray.origin.distanceTo(hit)<distance){best=b;distance=raycaster.ray.origin.distanceTo(hit);}}
   const vehicle=traffic.pick(raycaster.ray);if(vehicle&&vehicle.distance<distance){best=vehicle;distance=vehicle.distance;}
   if(person){const d=raycaster.ray.origin.distanceTo(person.object.getWorldPosition(new THREE.Vector3()));if(!best||d<distance+1.8)return {type:'person',person,name:person.name};}return best?{...best,name:best.data.name}:null;
  }
