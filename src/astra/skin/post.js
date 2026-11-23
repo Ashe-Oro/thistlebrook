@@ -71,7 +71,7 @@ export function createSkinPost(renderer, quality = 'med') {
   P = post;
   if (!luts.has(post.lut)) luts.set(post.lut, buildLutTexture(post.lut));
   U.lut.value = luts.get(post.lut);
-  U.focusY.value = post.tilt.focusY; U.band.value = post.tilt.band; U.softW.value = post.tilt.soft; U.tiltMax.value = post.tilt.max;
+  U.focusY.value = post.tilt.focusY; U.band.value = post.tilt.band; U.softW.value = post.tilt.soft;
   U.bloomT.value = post.bloom.threshold; U.bloomK.value = post.bloom.gain; U.bloomN.value = post.bloom.night ?? 0; U.bloomLift.value = post.bloom.nightLift ?? 0;
   U.hazeStart.value = post.haze.start; U.hazeDay.value.set(post.haze.dayColor); U.hazeNight.value.set(post.haze.nightColor);
   const r = post.reflections; U.reflK.value = r ? r.gain : 0;
@@ -98,6 +98,7 @@ export function createSkinPost(renderer, quality = 'med') {
   const lb = lutBlend(P.lut, hour); U.lutA.value = lb.a; U.lutB.value = lb.b; U.lutT.value = lb.t;
   U.sharp.value = scene.texture; U.soft.value = a.texture; U.night.value = night; U.time.value = time % 97;
   U.haze.value = THREE.MathUtils.lerp(P.haze.day, P.haze.night, night);
+  U.tiltMax.value = P.tilt.max * (1 - (camera.userData.streetTilt ?? 0));
   run(composite, null);
  }
  const draws = 2 * Q.blurIters + 1;

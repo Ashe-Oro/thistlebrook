@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readCameraHash, writeCameraHash, cameraBounds, ZOOM_LIMITS } from '../src/astra/camera.js';
+import { readCameraHash, writeCameraHash, cameraBounds, STREET_ZOOM_MAX, ZOOM_LIMITS } from '../src/astra/camera.js';
 import { isTownOpening, mapHalfHeight, townOpening } from '../src/astra/overview.js';
 
 test('camera links round-trip map coordinates, zoom and quarter-turns; retain unrelated hash state', () => {
@@ -22,8 +22,9 @@ test('a steeper view can be shared and a standard view clears its elevation', ()
 
 test('bad or incomplete links do not put the camera in an invalid state', () => {
   for (const hash of ['', '#hello', '#x=1&y=2', '#x=&y=2&zoom=1', '#x=1&y=NaN&zoom=1', '#x=Infinity&y=2&zoom=1', '#x=1&y=2&zoom=0', '#x=1&y=2&zoom=-1']) assert.equal(readCameraHash(hash), null, hash);
-  assert.deepEqual(readCameraHash('#x=-2&y=7&zoom=99&r=-1'), { x: -2, z: 7, zoom: ZOOM_LIMITS.max, rotation: 3 });
-  assert.deepEqual(readCameraHash('#x=-2&y=7&zoom=.01&r=oops'), { x: -2, z: 7, zoom: .12, rotation: 0 });
+  assert.deepEqual(readCameraHash('#x=-2&y=7&zoom=99&r=-1'), { x: -2, z: 7, zoom: STREET_ZOOM_MAX, rotation: 3 });
+  assert.deepEqual(readCameraHash('#x=-2&y=7&zoom=.01&r=oops'), { x: -2, z: 7, zoom: ZOOM_LIMITS.min, rotation: 0 });
+  assert.deepEqual(readCameraHash('#x=-2&y=7&zoom=15&yaw=2&pitch=1'), { x: -2, z: 7, zoom: ZOOM_LIMITS.max, rotation: 0 });
 });
 
 test('new district parcels and navigation nodes extend camera bounds automatically', () => {

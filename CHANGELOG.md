@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Street-level camera.** Keep pinching or scrolling in past the closest map view to descend to eye height. Drag or use the arrow keys to walk. Right-drag on a computer or drag with two fingers on a phone to look around. Zoom out to return to the map. Shared street views remember where you were looking. [Stills and measurements](docs/specs/STREET-CAMERA-LOG.md).
+
 - **Sunbeam Mall.** A 51 m north–south walking street replaces the old Sunbeam Terrace court. Fourteen pastel frontages house shops with apartments and offices above. Chess players, café tables, a kiosk, and a street musician occupy the side bays beside a clear 6 m walk. The eight Sunbeam residents keep their homes and town routes. [Stills and measurements](docs/specs/SUNBEAM-MALL-LOG.md).
 
 - **Loading progress.** The opening screen tracks model transfers, decoding, and scene preparation through the first frame. A time-left estimate appears when progress is steady, and a smaller indicator shows scenery loading after the map opens. [Spec and measurements](docs/specs/LOADING-BAR-LOG.md).
